@@ -1,0 +1,9 @@
+temp/
+build/
+bin/
+samples/
+
+*cmake_cache
+*.cache
+
+*.ast
