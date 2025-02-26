@@ -11,11 +11,17 @@ class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
 public:
 	CountNodesVisitor(clang::ASTContext *C);
 
+	std::string getStmtParentFuncName(const clang::Stmt &S);
+
+	std::string getDeclParentFuncName(const clang::Decl &D);
+
 	bool VisitDecl(clang::Decl *D);
 
 	bool VisitVarDecl(clang::VarDecl *VD);
 
 	bool VisitFunctionDecl(clang::FunctionDecl *FD);
+
+	bool VisitDeclRefExpr(clang::DeclRefExpr *D);
 
 	bool VisitStmt(clang::Stmt *S);
 
@@ -39,7 +45,7 @@ public:
 
 	bool VisitType(clang::Type *T);
 
-	std::map<std::string, int> report();
+	std::map<std::string, std::map<std::string, int>> report();
 
 	/*void PrintReport(std::unordered_map<std::string, int> report);*/
 	void PrintReport();
