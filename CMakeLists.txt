@@ -7,11 +7,11 @@ project(
 )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "../bin")
-# set(CMAKE_C_STANDARD 20)
-# set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(HEADERS_DOWNLOAD
   src/download/include
@@ -67,21 +67,22 @@ find_package(LLVM REQUIRED)
 find_package(Clang REQUIRED)
 find_package(libgit2 REQUIRED)
 
-include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local include)
+include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local)
 
 add_executable(download src/download/main.cpp ${SOURCE_DOWNLOAD})
 add_executable(filter src/filter/main.cpp ${SOURCE_FILTER})
 add_executable(transform src/transform/main.cpp ${SOURCE_TRANSFORM})
 add_executable(experiment ${SOURCE_EXPERIMENT})
 
-target_include_directories(transform PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 include/transform)
-target_include_directories(experiment PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 ${HEADERS_TRANSFORM})
 target_include_directories(download PRIVATE ${HEADERS_DOWNLOAD} ${libgit2_INC})
+target_include_directories(experiment PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 ${HEADERS_TRANSFORM})
+target_include_directories(filter PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 include/transform)
+target_include_directories(transform PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 include/transform)
 
 target_link_libraries(download PRIVATE fmt::fmt git2 rapidcsv)
+target_link_libraries(experiment PRIVATE fmt::fmt LLVMSupport clang-cpp clang LLVM)
 target_link_libraries(filter PRIVATE LLVM LLVMSupport clang-cpp clang)
 target_link_libraries(transform PRIVATE LLVMSupport clang-cpp clang LLVM)
-target_link_libraries(experiment PRIVATE fmt::fmt LLVMSupport clang-cpp clang LLVM)
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -W4")

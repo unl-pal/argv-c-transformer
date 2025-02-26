@@ -1,11 +1,11 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <string>
-#include <unordered_map>
 
 class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
 public:
@@ -15,6 +15,8 @@ public:
 
 	bool VisitVarDecl(clang::VarDecl *VD);
 
+	bool VisitFunctionDecl(clang::FunctionDecl *FD);
+
 	bool VisitStmt(clang::Stmt *S);
 
 	bool VisitIfStmt(clang::IfStmt *If);
@@ -23,9 +25,21 @@ public:
 
 	bool VisitWhileStmt(clang::WhileStmt *W);
 
+	bool VisitUnaryOperator(clang::UnaryOperator *O);
+
+	bool VisitBinaryOperator(clang::BinaryOperator *O);
+
+	bool VisitConditionalOperator(clang::ConditionalOperator *O);
+
+	bool VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O);
+
+	/*bool VisitCompoundAssignOperator(clang::CompoundAssignOperator *O);*/
+
+	/*bool VisitIncrementDecrementOperator(clang::Incr *O);*/
+
 	bool VisitType(clang::Type *T);
 
-	std::unordered_map<std::string, int> report();
+	std::map<std::string, int> report();
 
 	/*void PrintReport(std::unordered_map<std::string, int> report);*/
 	void PrintReport();
@@ -33,9 +47,7 @@ public:
 private:
 	clang::ASTContext *_C;
 	clang::SourceManager *_mgr;
-	int _numIfStmt;
-	int _numInts;
-	int _numLoops;
-	int _numOperations;
-	int _numPointers;
+	std::map<std::string, int> _values;
+	std::map<std::string, std::map<std::string, int>> _allFunctions;
+	std::string _currentFunc;
 };

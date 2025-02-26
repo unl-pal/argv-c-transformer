@@ -7,3 +7,5 @@ samples/
 *.cache
 
 *.ast
+
+*.zig*
