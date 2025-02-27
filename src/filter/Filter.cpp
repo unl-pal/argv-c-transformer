@@ -9,42 +9,71 @@
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/AST/ParentMapContext.h>
+#include <clang/Basic/Specifiers.h>
 #include <clang/Basic/TypeTraits.h>
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 #include <string>
 #include <utility>
 
+// TODO remove _values
 CountNodesVisitor::CountNodesVisitor(clang::ASTContext *C) :
   _C(C),
   _mgr(&(C->getSourceManager())),
-	_values(),
-  _allFunctions(),
-  _currentFunc("noFunction") {
-  _values["numBinaryOp"] = 0;
-  _values["numBinConditionOp"] = 0;
-  _values["numCompareBool"] = 0;
-  _values["numCompareFloat"] = 0;
-  _values["numCompareInt"] = 0;
-  _values["numCompareObject"] = 0;
-  _values["numCompareString"] = 0;
-  _values["numConditionOp"] = 0;
-  _values["numFloats"] = 0;
-  _values["numForLoops"] = 0;
-  _values["numFunctionCalls"] = 0;
-  _values["numFunctions"] = 0;
-  _values["numIfStmt"] = 0;
-  _values["numIfStmtInt"] = 0;
-  _values["numInts"] = 0;
-  _values["numOperations"] = 0;
-  _values["numPointers"] = 0;
-  _values["numStrings"] = 0;
-  _values["numStructs"] = 0;
-  _values["numUnaryOp"] = 0;
-  _values["numWhileLoops"] = 0;
-    for (auto& entry : _values) {
-      _allFunctions[_currentFunc][entry.first] = entry.second;
+	/*_values(),*/
+  _allFunctions() { //,
+  /*_currentFunc("noFunction") {*/
+  /*_values["numArray"] = 0;*/
+  /*_values["numBinaryOp"] = 0;*/
+  /*_values["numBinConditionOp"] = 0;*/
+  /*_values["numCompareBool"] = 0;*/
+  /*_values["numCompareFloat"] = 0;*/
+  /*_values["numCompareInt"] = 0;*/
+  /*_values["numCompareObject"] = 0;*/
+  /*_values["numCompareString"] = 0;*/
+  /*_values["numConditionOp"] = 0;*/
+  /*_values["numFloats"] = 0;*/
+  /*_values["numForLoops"] = 0;*/
+  /*_values["numFunctionCalls"] = 0;*/
+  /*_values["numFunctions"] = 0;*/
+  /*_values["numIfInt"] = 0;*/
+  /*_values["numIfStmt"] = 0;*/
+  /*_values["numIfStmtInt"] = 0;*/
+  /*_values["numInts"] = 0;*/
+  /*_values["numOperations"] = 0;*/
+  /*_values["numPointers"] = 0;*/
+  /*_values["numStrings"] = 0;*/
+  /*_values["numStructs"] = 0;*/
+  /*_values["numUnaryOp"] = 0;*/
+  /*_values["numWhileLoops"] = 0;*/
+  _allFunctions["noFunction"] = std::map<std::string, int>();
+}
+
+void CountNodesVisitor::incrementCount(std::string currentFunc, std::string count) {
+      if (_allFunctions[currentFunc][count]) {
+	_allFunctions[currentFunc][count]++;
+      } else {
+	  _allFunctions[currentFunc][count] = 1;
+      }
+}
+
+bool CountNodesVisitor::partOfBinCompOp(const clang::Stmt &S) {
+  clang::DynTypedNodeList parents = _C->getParents(S);
+  if (parents.size()) {
+    const clang::DynTypedNode *parent = parents.begin();
+    if (const clang::ImplicitCastExpr *imp =
+            parent->get<clang::ImplicitCastExpr>()) {
+      clang::DynTypedNodeList grandParents = _C->getParents(*imp);
+      if (grandParents.size()) {
+          if (const clang::BinaryOperator *gp = grandParents.begin()->get<clang::BinaryOperator>()) {
+	  return gp->isComparisonOp();
+	}
+      }
+    } else if (const clang::BinaryOperator *gp = parent->get<clang::BinaryOperator>()) {
+      return gp->isComparisonOp();
     }
+  }
+  return false;
 }
 
 std::string CountNodesVisitor::getDeclParentFuncName(const clang::Decl &D) {
@@ -89,12 +118,14 @@ bool CountNodesVisitor::VisitDecl(clang::Decl *D) {
 bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
   if (!VD) return false;
   if (_mgr->isInMainFile(VD->getLocation())) {
-    _currentFunc = getDeclParentFuncName(*VD);
-    if (VD->getType()->isIntegerType()) _allFunctions[_currentFunc]["numInts"]++;
-    if (VD->getType()->isFloatingType()) _allFunctions[_currentFunc]["numFloats"]++;
-    /*if (VD->getType()->isFunctionType()) _allFunctions[_currentFunc]["numFunctions"]++;*/
-    if (VD->getType()->isPointerType()) _allFunctions[_currentFunc]["numPointers"]++;
-    if (VD->getType()->isStructureType()) _allFunctions[_currentFunc]["numStructs"]++;
+    std::string currentFunc = getDeclParentFuncName(*VD);
+    if (VD->getType()->isIntegerType()) {
+      incrementCount(currentFunc, "numInteger");
+    }
+    if (VD->getType()->isFloatingType()) incrementCount(currentFunc, "numFloats");
+    /*if (VD->getType()->isFunctionType()) incrementCount("numFunctions")++;*/
+    if (VD->getType()->isPointerType()) incrementCount(currentFunc, "numPointers");
+    if (VD->getType()->isStructureType()) incrementCount(currentFunc, "numStructs");
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitVarDecl(VD);
 }
@@ -102,35 +133,72 @@ bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
 bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   if (!FD) return false;
   if (_mgr->isInMainFile(FD->getLocation())) {
+    _allFunctions[FD->getNameAsString()] = std::map<std::string, int>();
     _allFunctions[getDeclParentFuncName(*FD)]["numFunctions"]++;
-    std::string name = FD->getName().str();
-    if (_allFunctions.find(name) == _allFunctions.end()) _allFunctions[name] = _values;
+    /*std::string name = FD->getName().str();*/
+    /*if (_allFunctions.find(name) == _allFunctions.end()) _allFunctions[name] = _values;*/
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitFunctionDecl(FD);
+}
+
+bool CountNodesVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
+  if (_mgr->isInMainFile(D->getLocation())) {
+    const clang::QualType &d = D->getType();
+    std::string currentFunc = getStmtParentFuncName(*D);
+    if (d->isIntegerType()) {
+      incrementCount(currentFunc, "numIntDeclRef");
+      D->dumpColor();
+      if (partOfBinCompOp(*D))
+        incrementCount(currentFunc, "numIntCompare");
+    } else if (d->isArrayType()) {
+      incrementCount(currentFunc, "numArray");
+      D->dumpColor();
+    } else if (d->isStructureType())
+      incrementCount(currentFunc, "numStructRef");
+    /*if (d->isCharType()) return false;*/
+    /*if (d->isDoubleType()) return false;*/
+    /*if (d->isFloatingType()) return false;*/
+    /*if (d->isBooleanType()) return false;*/
+    /*if (d->isStructureType()) return false;*/
+  }
+  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitDeclRefExpr(D);
 }
 
 bool CountNodesVisitor::VisitStmt(clang::Stmt *S) {
   if (!S) return false;
   if (_mgr->isInMainFile(S->getBeginLoc())) {
-    _currentFunc = CountNodesVisitor::getStmtParentFuncName(*S);
+    std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*S);
     clang::Stmt::StmtClass className = S->getStmtClass();
-    if (className == clang::Stmt::CallExprClass) _allFunctions[_currentFunc]["numFunctionCalls"]++;
-    else if (className == clang::Stmt::UnaryOperatorClass) _allFunctions[_currentFunc]["numOperations"]++;
+    if (className == clang::Stmt::CallExprClass) {
+      incrementCount(currentFunc, "numFunctionCalls");
+    } else if (className == clang::Stmt::UnaryOperatorClass) {
+      incrementCount(currentFunc, "numOperations");
+    }
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitStmt(S);
+}
+
+bool CountNodesVisitor::VisitIntegerLiteral(clang::IntegerLiteral *S) {
+  if (!S) return false;
+  if (_mgr->isInMainFile(S->getLocation())) {
+    if (partOfBinCompOp(*S)) {
+      incrementCount(getStmtParentFuncName(*S), "numIntCompare");
+    }
+  }
+  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitIntegerLiteral(S);
 }
 
 bool CountNodesVisitor::VisitIfStmt(clang::IfStmt *If) {
   if (!If) return false;
   if (_mgr->isInMainFile(If->getIfLoc())) {
-    _currentFunc = CountNodesVisitor::getStmtParentFuncName(*If);
-    _allFunctions[_currentFunc]["numIfStmt"]++;
+    std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*If);
+    incrementCount(currentFunc, "numIfStmt");
     If->dumpColor();
     if (If->getCond()->getExprStmt()->getType()->isIntegerType()) {
       // TODO this is almost always true due to being the result of the if
       // not the types being compared
       // which in c is a int not a bool
-      _allFunctions[_currentFunc]["numIfStmtInt"]++;
+      incrementCount(currentFunc, "numIfStmtInt");
     }
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitIfStmt(If);
@@ -139,8 +207,8 @@ bool CountNodesVisitor::VisitIfStmt(clang::IfStmt *If) {
 bool CountNodesVisitor::VisitForStmt(clang::ForStmt *F) {
   if (!F) return false;
   if (_mgr->isInMainFile(F->getForLoc())) {
-    _currentFunc = CountNodesVisitor::getStmtParentFuncName(*F);
-    _allFunctions[_currentFunc]["numForLoops"]++;
+    std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*F);
+    incrementCount(currentFunc, "numForLoops");
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitForStmt(F);
 }
@@ -148,8 +216,8 @@ bool CountNodesVisitor::VisitForStmt(clang::ForStmt *F) {
 bool CountNodesVisitor::VisitWhileStmt(clang::WhileStmt *W) {
   if (!W) return false;
   if (_mgr->isInMainFile(W->getWhileLoc())) {
-    _currentFunc = CountNodesVisitor::getStmtParentFuncName(*W);
-    _allFunctions[_currentFunc]["numWhileLoops"]++;
+    std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*W);
+    incrementCount(currentFunc, "numWhileLoops");
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitWhileStmt(W);
 }
@@ -157,36 +225,51 @@ bool CountNodesVisitor::VisitWhileStmt(clang::WhileStmt *W) {
 bool CountNodesVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getOperatorLoc())) {
-    _currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
-    _allFunctions[_currentFunc]["numUnaryOp"]++;
+    std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
+    incrementCount(currentFunc, "numUnaryOp");
+    O->isPrefix();
+    O->isPostfix();
+    O->isDecrementOp();
+    O->isIncrementOp();
+    O->isArithmeticOp();
+    O->isKnownToHaveBooleanValue();
+    O->isLValue();
+    O->isPRValue();
+    /*O->isNullPointerConstant(*_C, NPC);*/
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitUnaryOperator(O);
 }
 
 bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
-  if (_mgr->isInMainFile(O->getOperatorLoc())) {
-    _currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
-    _allFunctions[_currentFunc]["numBinaryOp"]++;
-  }
   if (!O) return false;
+  if (_mgr->isInMainFile(O->getOperatorLoc())) {
+    std::string currentFunc = getStmtParentFuncName(*O);
+    incrementCount(currentFunc, "numBinaryOp");
+    if (O->isComparisonOp()) {
+      incrementCount(currentFunc, "numBinaryCompareOp");
+    }
+    if (O->isEqualityOp()) {
+      incrementCount(currentFunc, "numEqualityOp");
+    }
+  }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryOperator(O);
 }
 
 bool CountNodesVisitor::VisitConditionalOperator(clang::ConditionalOperator *O) {
-  if (_mgr->isInMainFile(O->getExprLoc())) {
-    _currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
-    _allFunctions[_currentFunc]["numConditionOp"]++;
-  }
   if (!O) return false;
+  if (_mgr->isInMainFile(O->getExprLoc())) {
+    std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
+    incrementCount(currentFunc, "numConditionOp");
+  }
     return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitConditionalOperator(O);
 }
 
 bool CountNodesVisitor::VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O) {
-  if (_mgr->isInMainFile(O->getExprLoc())) {
-    _currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
-    _allFunctions[_currentFunc]["numBinConditionOp"]++;
-  }
   if (!O) return false;
+  if (_mgr->isInMainFile(O->getExprLoc())) {
+    std::string currentFunc = getStmtParentFuncName(*O);
+    incrementCount(currentFunc, "numBinConditionOp");
+  }
     return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryConditionalOperator(O);
 }
 

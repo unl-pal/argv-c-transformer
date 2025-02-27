@@ -11,6 +11,10 @@ class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
 public:
 	CountNodesVisitor(clang::ASTContext *C);
 
+	void incrementCount(std::string currentFunc, std::string count);
+
+	bool partOfBinCompOp(const clang::Stmt &S);
+
 	std::string getStmtParentFuncName(const clang::Stmt &S);
 
 	std::string getDeclParentFuncName(const clang::Decl &D);
@@ -24,6 +28,8 @@ public:
 	bool VisitDeclRefExpr(clang::DeclRefExpr *D);
 
 	bool VisitStmt(clang::Stmt *S);
+
+	bool VisitIntegerLiteral(clang::IntegerLiteral *S);
 
 	bool VisitIfStmt(clang::IfStmt *If);
 
@@ -55,5 +61,5 @@ private:
 	clang::SourceManager *_mgr;
 	std::map<std::string, int> _values;
 	std::map<std::string, std::map<std::string, int>> _allFunctions;
-	std::string _currentFunc;
+	/*std::string _currentFunc;*/
 };
