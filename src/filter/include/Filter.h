@@ -1,3 +1,5 @@
+#include <boost/json/object.hpp>
+#include <boost/json/src.hpp>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/Expr.h>

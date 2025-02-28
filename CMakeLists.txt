@@ -9,7 +9,7 @@ project(
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "../bin")
+# set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "../bin")
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
@@ -62,6 +62,7 @@ include(${CPM_DOWNLOAD_LOCATION})
 
 CPMAddPackage("gh:fmtlib/fmt#11.1.3")
 CPMAddPackage("gh:d99kris/rapidcsv#v8.84")
+# CPMAddPackage("gh:boostorg/boost#boost-1.87.0")
 
 find_package(LLVM REQUIRED)
 find_package(Clang REQUIRED)

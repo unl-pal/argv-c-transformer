@@ -1,7 +1,9 @@
 # Dependencies
+IS THIS GETTING OUT OF HAND?!?!
 openssl-devel
 llvm-devel
 clang-devel
+boost
 
 test/Index/binop.cpp
 61:// CHECK: BinaryOperator=.* BinOp=.* 1

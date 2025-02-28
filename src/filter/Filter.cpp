@@ -1,4 +1,5 @@
 #include "include/Filter.h"
+
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
@@ -84,8 +85,9 @@ std::string CountNodesVisitor::getDeclParentFuncName(const clang::Decl &D) {
       if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>()) {
 	parent.dump(llvm::outs(), *_C);
 	return fd->getNameAsString();
-      }
-      else if (const clang::Decl *d = parent.get<clang::Decl>()) {
+      } else if (const clang::Stmt *s = parent.get<clang::Stmt>()) {
+	return getStmtParentFuncName(*s);
+      } else if (const clang::Decl *d = parent.get<clang::Decl>()) {
 	return getDeclParentFuncName(*d);
       }
     }
@@ -100,9 +102,10 @@ std::string CountNodesVisitor::getStmtParentFuncName(const clang::Stmt &S) {
     for (const clang::DynTypedNode& parent : parents) {
       if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>()) {
 	return fd->getNameAsString();
-      }
-      else if (const clang::Stmt *s = parent.get<clang::Stmt>()) {
+      } else if (const clang::Stmt *s = parent.get<clang::Stmt>()) {
 	return getStmtParentFuncName(*s);
+      } else if (const clang::Decl *d = parent.get<clang::Decl>()) {
+	return getDeclParentFuncName(*d);
       }
     }
   }
@@ -121,12 +124,17 @@ bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
     std::string currentFunc = getDeclParentFuncName(*VD);
     if (VD->getType()->isIntegerType()) {
       incrementCount(currentFunc, "numInteger");
+    } else if (VD->getType()->isFloatingType()) {
+      incrementCount(currentFunc, "numFloats");
+    } else if (VD->getType()->isPointerType()) {
+      incrementCount(currentFunc, "numPointers");
+      /*VD->dumpColor();*/
+      std::cout << currentFunc << std::endl;
+    } else if (VD->getType()->isStructureType()) {
+      incrementCount(currentFunc, "numStructs");
     }
-    if (VD->getType()->isFloatingType()) incrementCount(currentFunc, "numFloats");
-    /*if (VD->getType()->isFunctionType()) incrementCount("numFunctions")++;*/
-    if (VD->getType()->isPointerType()) incrementCount(currentFunc, "numPointers");
-    if (VD->getType()->isStructureType()) incrementCount(currentFunc, "numStructs");
   }
+  /*if (VD->getType()->isFunctionType()) incrementCount("numFunctions")++;*/
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitVarDecl(VD);
 }
 
@@ -135,6 +143,8 @@ bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   if (_mgr->isInMainFile(FD->getLocation())) {
     _allFunctions[FD->getNameAsString()] = std::map<std::string, int>();
     _allFunctions[getDeclParentFuncName(*FD)]["numFunctions"]++;
+    std::cout << FD->getNameAsString() << std::endl;
+    FD->dumpColor();
     /*std::string name = FD->getName().str();*/
     /*if (_allFunctions.find(name) == _allFunctions.end()) _allFunctions[name] = _values;*/
   }
@@ -147,12 +157,12 @@ bool CountNodesVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
     std::string currentFunc = getStmtParentFuncName(*D);
     if (d->isIntegerType()) {
       incrementCount(currentFunc, "numIntDeclRef");
-      D->dumpColor();
+      /*D->dumpColor();*/
       if (partOfBinCompOp(*D))
         incrementCount(currentFunc, "numIntCompare");
     } else if (d->isArrayType()) {
       incrementCount(currentFunc, "numArray");
-      D->dumpColor();
+      /*D->dumpColor();*/
     } else if (d->isStructureType())
       incrementCount(currentFunc, "numStructRef");
     /*if (d->isCharType()) return false;*/
@@ -193,7 +203,7 @@ bool CountNodesVisitor::VisitIfStmt(clang::IfStmt *If) {
   if (_mgr->isInMainFile(If->getIfLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*If);
     incrementCount(currentFunc, "numIfStmt");
-    If->dumpColor();
+    /*If->dumpColor();*/
     if (If->getCond()->getExprStmt()->getType()->isIntegerType()) {
       // TODO this is almost always true due to being the result of the if
       // not the types being compared
@@ -248,9 +258,9 @@ bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
     if (O->isComparisonOp()) {
       incrementCount(currentFunc, "numBinaryCompareOp");
     }
-    if (O->isEqualityOp()) {
-      incrementCount(currentFunc, "numEqualityOp");
-    }
+    /*if (O->isEqualityOp()) {*/
+    /*  incrementCount(currentFunc, "numEqualityOp");*/
+    /*}*/
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryOperator(O);
 }
