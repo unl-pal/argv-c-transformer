@@ -1,5 +1,7 @@
+#pragma once
+#include <boost/json.hpp>
 #include <boost/json/object.hpp>
-#include <boost/json/src.hpp>
+#include <boost/json/value.hpp>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/Expr.h>
@@ -8,12 +10,14 @@
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <string>
+#include <string_view>
+#include <vector>
 
 class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
 public:
 	CountNodesVisitor(clang::ASTContext *C);
 
-	void incrementCount(std::string currentFunc, std::string count);
+	bool incrementCount(std::vector<std::string_view> fields);
 
 	bool partOfBinCompOp(const clang::Stmt &S);
 
@@ -53,15 +57,16 @@ public:
 
 	bool VisitType(clang::Type *T);
 
-	std::map<std::string, std::map<std::string, int>> report();
+	boost::json::object Report();
 
-	/*void PrintReport(std::unordered_map<std::string, int> report);*/
 	void PrintReport();
+	void PrintReport(const boost::json::value &jv, std::string indent);
 
 private:
 	clang::ASTContext *_C;
 	clang::SourceManager *_mgr;
 	std::map<std::string, int> _values;
-	std::map<std::string, std::map<std::string, int>> _allFunctions;
+	/*boost::json::object *_allFunctions;*/
+	boost::json::object _allFunctions;
 	/*std::string _currentFunc;*/
 };

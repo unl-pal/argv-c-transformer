@@ -1,6 +1,5 @@
 #include "include/Filter.h"
 
-#include <boost/utility/result_of.hpp>
 #include <clang/Basic/LLVM.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Frontend/CompilerInstance.h>
