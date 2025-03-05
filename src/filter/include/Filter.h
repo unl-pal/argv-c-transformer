@@ -51,22 +51,18 @@ public:
 
 	bool VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O);
 
-	/*bool VisitCompoundAssignOperator(clang::CompoundAssignOperator *O);*/
-
-	/*bool VisitIncrementDecrementOperator(clang::Incr *O);*/
-
 	bool VisitType(clang::Type *T);
 
 	boost::json::object Report();
 
 	void PrintReport(std::string fileName);
+
 	void PrintReport(const boost::json::value &jv, std::string indent);
 
 private:
 	clang::ASTContext *_C;
 	clang::SourceManager *_mgr;
 	std::map<std::string, int> _values;
-	/*boost::json::object *_allFunctions;*/
 	boost::json::object _allFunctions;
-	/*std::string _currentFunc;*/
+	int _isInBinCompOp;
 };

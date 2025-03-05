@@ -25,20 +25,14 @@
 
 CountNodesVisitor::CountNodesVisitor(clang::ASTContext *C) :
   _C(C),
-  _mgr(&(C->getSourceManager()))
-    /*_allFunctions(boost::json::object({{"noFunction", "numFunctions"}})) { //,*/
+  _mgr(&(C->getSourceManager())),
+  _isInBinCompOp(false)
 {
-    /*_allFunctions() { //,*/
-  /*_allFunctions["noFunction"] = {};*/
   _allFunctions = boost::json::object();
-  _allFunctions.insert("Program");
-  _allFunctions.at("Program") = boost::json::object();
-  _allFunctions.at("Program").as_object().insert("numFunctions");
-  _allFunctions.at("Program").at("numFunctions") = int64_t(0);
+  _allFunctions["Program"] = boost::json::object({{"numFunctions", int64_t(0)}});
 }
 
 bool CountNodesVisitor::incrementCount(std::vector<std::string_view> fields) {
-  /*std::cout << boost::json::serialize(_allFunctions) << std::endl;*/
   boost::json::object *currentObj = &_allFunctions;
   size_t size = fields.size();
   for (size_t i=0; i<size; i++) {
@@ -86,11 +80,10 @@ bool CountNodesVisitor::partOfBinCompOp(const clang::Stmt &S) {
 
 std::string CountNodesVisitor::getDeclParentFuncName(const clang::Decl &D) {
   clang::DynTypedNodeList parents = _C->getParents(D);
-  /*std::cout << parents.size() << std::endl;*/
   if (parents.size()) {
     for (const clang::DynTypedNode& parent : parents) {
       if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>()) {
-	parent.dump(llvm::outs(), *_C);
+	/*parent.dump(llvm::outs(), *_C);*/
 	return fd->getNameAsString();
       } else if (const clang::Stmt *s = parent.get<clang::Stmt>()) {
 	return getStmtParentFuncName(*s);
@@ -104,7 +97,6 @@ std::string CountNodesVisitor::getDeclParentFuncName(const clang::Decl &D) {
 
 std::string CountNodesVisitor::getStmtParentFuncName(const clang::Stmt &S) {
   clang::DynTypedNodeList parents = _C->getParents(S);
-  /*std::cout << parents.size() << std::endl;*/
   if (parents.size()) {
     for (const clang::DynTypedNode& parent : parents) {
       if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>()) {
@@ -135,13 +127,11 @@ bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
       incrementCount({currentFunc, "Variables", "numFloats"});
     } else if (VD->getType()->isPointerType()) {
       incrementCount({currentFunc, "Variables", "numPointers"});
-      /*VD->dumpColor();*/
-      std::cout << currentFunc << std::endl;
+      /*std::cout << currentFunc << std::endl;*/
     } else if (VD->getType()->isStructureType()) {
       incrementCount({currentFunc, "Variables", "numStructs"});
     }
   }
-  /*if (VD->getType()->isFunctionType()) incrementCount("numFunctions")++;*/
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitVarDecl(VD);
 }
 
@@ -151,10 +141,8 @@ bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
     _allFunctions.insert(FD->getNameAsString());
     _allFunctions.at(FD->getNameAsString()) = boost::json::object();
     _allFunctions.at("Program").at("numFunctions").get_int64()++;
-    std::cout << FD->getNameAsString() << std::endl;
-    FD->dumpColor();
-    /*std::string name = FD->getName().str();*/
-    /*if (_allFunctions.find(name) == _allFunctions.end()) _allFunctions[name] = _values;*/
+    /*std::cout << FD->getNameAsString() << std::endl;*/
+    /*FD->dumpColor();*/
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitFunctionDecl(FD);
 }
@@ -166,7 +154,8 @@ bool CountNodesVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
     if (d->isIntegerType()) {
       incrementCount({currentFunc, "VariableReference", "numIntDeclRef"});
       /*D->dumpColor();*/
-      if (partOfBinCompOp(*D))
+      /*std::cout << _isInBinCompOp << std::endl;*/
+      if (_isInBinCompOp)
         incrementCount({currentFunc, "VariableReference", "numIntCompare"});
     } else if (d->isArrayType()) {
       incrementCount({currentFunc, "VariableReference", "numArray"});
@@ -199,7 +188,7 @@ bool CountNodesVisitor::VisitStmt(clang::Stmt *S) {
 bool CountNodesVisitor::VisitIntegerLiteral(clang::IntegerLiteral *S) {
   if (!S) return false;
   if (_mgr->isInMainFile(S->getLocation())) {
-    if (partOfBinCompOp(*S)) {
+    if (_isInBinCompOp) {
       incrementCount({getStmtParentFuncName(*S), "BinaryCompare", "numIntCompare"});
     }
   }
@@ -211,6 +200,7 @@ bool CountNodesVisitor::VisitIfStmt(clang::IfStmt *If) {
   if (_mgr->isInMainFile(If->getIfLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*If);
     incrementCount({currentFunc, "numIfStmt"});
+    /*std::cout << "If Bool Count: " << _isInBinCompOp << std::endl;*/
     /*If->dumpColor();*/
     if (If->getCond()->getExprStmt()->getType()->isIntegerType()) {
       // TODO this is almost always true due to being the result of the if
@@ -265,6 +255,14 @@ bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
     incrementCount({currentFunc, "BinaryOperations", "numBinaryOpGeneral"});
     if (O->isComparisonOp()) {
       incrementCount({currentFunc, "BinaryOperations", "numCompareOp"});
+      bool result;
+      _isInBinCompOp++;
+      /*std::cout << "BinCompOp Count Before recurse: " << _isInBinCompOp << std::endl;*/
+      result = clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryOperator(O);
+      /*std::cout << "Result: " << result << std::endl;*/
+      _isInBinCompOp--;
+      /*std::cout << "BinCompOp Count After recurse: " << _isInBinCompOp << std::endl;*/
+      return result;
     }
     /*if (O->isEqualityOp()) {*/
     /*  incrementCount(currentFunc, "numEqualityOp");*/
