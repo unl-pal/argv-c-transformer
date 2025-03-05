@@ -59,7 +59,7 @@ public:
 
 	boost::json::object Report();
 
-	void PrintReport();
+	void PrintReport(std::string fileName);
 	void PrintReport(const boost::json::value &jv, std::string indent);
 
 private:

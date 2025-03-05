@@ -34,7 +34,7 @@ CountNodesVisitor::CountNodesVisitor(clang::ASTContext *C) :
   _allFunctions.insert("Program");
   _allFunctions.at("Program") = boost::json::object();
   _allFunctions.at("Program").as_object().insert("numFunctions");
-  _allFunctions.at("Program").at("numFunctions") = (0);
+  _allFunctions.at("Program").at("numFunctions") = int64_t(0);
 }
 
 bool CountNodesVisitor::incrementCount(std::vector<std::string_view> fields) {
@@ -46,8 +46,8 @@ bool CountNodesVisitor::incrementCount(std::vector<std::string_view> fields) {
     if (boost::json::value *next = currentObj->if_contains(field)) {
       if (next->is_object()) {
 	currentObj = &next->as_object();
-      } else if (next->is_uint64() && i == size - 1) {
-	next->as_uint64()++;
+      } else if (next->is_int64() && i == size - 1) {
+	next->as_int64()++;
 	return true;
       } else {
 	return false;
@@ -55,7 +55,7 @@ bool CountNodesVisitor::incrementCount(std::vector<std::string_view> fields) {
     } else {
       currentObj->insert(field);
       if (i == size - 1) {
-	currentObj->at(field) = uint64_t(1);
+	currentObj->at(field) = int64_t(1);
       } else {
 	currentObj->at(field) = boost::json::object();
 	currentObj = &currentObj->at(field).as_object();
@@ -300,12 +300,12 @@ boost::json::object CountNodesVisitor::Report() {
   return _allFunctions;
 }
 
-void CountNodesVisitor::PrintReport() {
+void CountNodesVisitor::PrintReport(std::string fileName) {
   std::cout << boost::json::serialize(_allFunctions) << std::endl;
-  std::cout << "{" << std::endl;
+  std::cout << fileName << " {" << std::endl;
   std::string indent = "  ";
   for (const boost::json::key_value_pair &val : _allFunctions) {
-    std::string open = (val.value().is_uint64()) ? " : " : " {\n";
+    std::string open = (val.value().is_int64()) ? " : " : " {\n";
     std::cout << indent << val.key() << open;
     PrintReport(val.value(), indent);
     std::cout << indent << ((open == " {\n") ? "}," : "") << std::endl; 
@@ -316,12 +316,12 @@ void CountNodesVisitor::PrintReport() {
 void CountNodesVisitor::PrintReport(const boost::json::value &jv, std::string indent) {
   /*std::cout << boost::json::serialize(*_allFunctions) << std::endl;*/
   indent += "  ";
-  if (jv.is_uint64()) {
-    std::cout << " " << jv.as_uint64() << ",";
+  if (jv.is_int64()) {
+    std::cout << " " << jv.as_int64() << ",";
   } else if (jv.is_object()) {
     const boost::json::object *obj = &jv.as_object();
     for (const boost::json::key_value_pair &val : *obj) {
-      std::string open = (val.value().is_uint64()) ? " : " : " {\n";
+      std::string open = (val.value().is_int64()) ? " : " : " {\n";
       std::cout << indent << val.key() << open;
       PrintReport(val.value(), indent);
       std::cout << indent << ((open == " {\n") ? "}," : "") << std::endl; 

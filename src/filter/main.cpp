@@ -72,7 +72,7 @@ int main(int argc, char** argv) {
   std::cout << "Traversing AST" << std::endl;
       std::cout << visitorA.TraverseAST(Context) << std::endl;
   std::cout << "Printing Report" << std::endl;
-      visitorA.PrintReport();
+      visitorA.PrintReport(argv[1]);
     } else {
       std::cerr << "Error" << std::endl;
     }
