@@ -1,9 +1,5 @@
 #include "include/Filter.h"
 
-#include <boost/json.hpp>
-#include <boost/json/object.hpp>
-#include <boost/json/serialize.hpp>
-#include <boost/json/string_view.hpp>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
@@ -16,47 +12,20 @@
 #include <clang/AST/ParentMapContext.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Basic/TypeTraits.h>
-#include <cstdint>
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 #include <string>
-#include <string_view>
-#include <vector>
+#include <unordered_map>
+#include <utility>
 
 CountNodesVisitor::CountNodesVisitor(clang::ASTContext *C) :
   _C(C),
   _mgr(&(C->getSourceManager())),
+  _allFunctions(),
   _isInBinCompOp(false)
 {
-  _allFunctions = boost::json::object();
-  _allFunctions["Program"] = boost::json::object({{"numFunctions", int64_t(0)}});
-}
-
-bool CountNodesVisitor::incrementCount(std::vector<std::string_view> fields) {
-  boost::json::object *currentObj = &_allFunctions;
-  size_t size = fields.size();
-  for (size_t i=0; i<size; i++) {
-    std::string_view field = fields[i];
-    if (boost::json::value *next = currentObj->if_contains(field)) {
-      if (next->is_object()) {
-	currentObj = &next->as_object();
-      } else if (next->is_int64() && i == size - 1) {
-	next->as_int64()++;
-	return true;
-      } else {
-	return false;
-      }
-    } else {
-      currentObj->insert(field);
-      if (i == size - 1) {
-	currentObj->at(field) = int64_t(1);
-      } else {
-	currentObj->at(field) = boost::json::object();
-	currentObj = &currentObj->at(field).as_object();
-      }
-    }
-  }
-  return false;
+  _allFunctions = std::unordered_map<std::string, CountNodesVisitor::attributes*>();
+  _allFunctions.try_emplace("Program", new attributes);
 }
 
 bool CountNodesVisitor::partOfBinCompOp(const clang::Stmt &S) {
@@ -122,14 +91,14 @@ bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
   if (_mgr->isInMainFile(VD->getLocation())) {
     std::string currentFunc = getDeclParentFuncName(*VD);
     if (VD->getType()->isIntegerType()) {
-      incrementCount({currentFunc, "Variables", "numInteger"});
+      _allFunctions[currentFunc]->numVarInt++;
     } else if (VD->getType()->isFloatingType()) {
-      incrementCount({currentFunc, "Variables", "numFloats"});
+      _allFunctions[currentFunc]->numVarFloat++;
     } else if (VD->getType()->isPointerType()) {
-      incrementCount({currentFunc, "Variables", "numPointers"});
+      _allFunctions[currentFunc]->numVarPoint++;
       /*std::cout << currentFunc << std::endl;*/
     } else if (VD->getType()->isStructureType()) {
-      incrementCount({currentFunc, "Variables", "numStructs"});
+      _allFunctions[currentFunc]->numVarStruct++;
     }
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitVarDecl(VD);
@@ -138,10 +107,8 @@ bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
 bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   if (!FD) return false;
   if (_mgr->isInMainFile(FD->getLocation())) {
-    _allFunctions.insert(FD->getNameAsString());
-    _allFunctions.at(FD->getNameAsString()) = boost::json::object();
-    _allFunctions.at("Program").at("numFunctions").get_int64()++;
-    /*std::cout << FD->getNameAsString() << std::endl;*/
+    _allFunctions.try_emplace(FD->getNameAsString(), new attributes);
+    _allFunctions["Program"]->numFunctions++;
     /*FD->dumpColor();*/
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitFunctionDecl(FD);
@@ -152,16 +119,16 @@ bool CountNodesVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
     const clang::QualType &d = D->getType();
     std::string currentFunc = getStmtParentFuncName(*D);
     if (d->isIntegerType()) {
-      incrementCount({currentFunc, "VariableReference", "numIntDeclRef"});
+      _allFunctions[currentFunc]->numVarRefInt++;
       /*D->dumpColor();*/
       /*std::cout << _isInBinCompOp << std::endl;*/
       if (_isInBinCompOp)
-        incrementCount({currentFunc, "VariableReference", "numIntCompare"});
+        _allFunctions[currentFunc]->numCompInt++;
     } else if (d->isArrayType()) {
-      incrementCount({currentFunc, "VariableReference", "numArray"});
+      _allFunctions[currentFunc]->numVarRefArray++;
       /*D->dumpColor();*/
     } else if (d->isStructureType())
-      incrementCount({currentFunc, "VariableReference", "numStructRef"});
+      _allFunctions[currentFunc]->numVarRefStruct++;
     /*if (d->isCharType()) return false;*/
     /*if (d->isDoubleType()) return false;*/
     /*if (d->isFloatingType()) return false;*/
@@ -177,9 +144,9 @@ bool CountNodesVisitor::VisitStmt(clang::Stmt *S) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*S);
     clang::Stmt::StmtClass className = S->getStmtClass();
     if (className == clang::Stmt::CallExprClass) {
-      incrementCount({currentFunc, "numFunctionCalls"});
+      _allFunctions[currentFunc]->numCallFunc++;
     } else if (className == clang::Stmt::UnaryOperatorClass) {
-      incrementCount({currentFunc, "Operations", "numOperations"});
+      _allFunctions[currentFunc]->numOpUnary++;
     }
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitStmt(S);
@@ -189,7 +156,7 @@ bool CountNodesVisitor::VisitIntegerLiteral(clang::IntegerLiteral *S) {
   if (!S) return false;
   if (_mgr->isInMainFile(S->getLocation())) {
     if (_isInBinCompOp) {
-      incrementCount({getStmtParentFuncName(*S), "BinaryCompare", "numIntCompare"});
+      _allFunctions[getStmtParentFuncName(*S)]->numCompInt++;
     }
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitIntegerLiteral(S);
@@ -199,14 +166,14 @@ bool CountNodesVisitor::VisitIfStmt(clang::IfStmt *If) {
   if (!If) return false;
   if (_mgr->isInMainFile(If->getIfLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*If);
-    incrementCount({currentFunc, "numIfStmt"});
+    _allFunctions[currentFunc]->numIfStmt++;
     /*std::cout << "If Bool Count: " << _isInBinCompOp << std::endl;*/
     /*If->dumpColor();*/
     if (If->getCond()->getExprStmt()->getType()->isIntegerType()) {
       // TODO this is almost always true due to being the result of the if
       // not the types being compared
       // which in c is a int not a bool
-      incrementCount({currentFunc, "BinaryCompare", "numIfStmtInt"});
+      _allFunctions[currentFunc]->numIfStmtInt++;
     }
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitIfStmt(If);
@@ -216,7 +183,7 @@ bool CountNodesVisitor::VisitForStmt(clang::ForStmt *F) {
   if (!F) return false;
   if (_mgr->isInMainFile(F->getForLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*F);
-    incrementCount({currentFunc, "Loops", "numFor"});
+    _allFunctions[currentFunc]->numLoopFor++;
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitForStmt(F);
 }
@@ -225,7 +192,7 @@ bool CountNodesVisitor::VisitWhileStmt(clang::WhileStmt *W) {
   if (!W) return false;
   if (_mgr->isInMainFile(W->getWhileLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*W);
-    incrementCount({currentFunc, "Loops", "numWhile"});
+    _allFunctions[currentFunc]->numLoopWhile++;
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitWhileStmt(W);
 }
@@ -234,7 +201,7 @@ bool CountNodesVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getOperatorLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
-    incrementCount({currentFunc, "UnaryOperations", "numUnaryOpGeneral"});
+    _allFunctions[currentFunc]->numOpUnary++;
     O->isPrefix();
     O->isPostfix();
     O->isDecrementOp();
@@ -252,9 +219,9 @@ bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getOperatorLoc())) {
     std::string currentFunc = getStmtParentFuncName(*O);
-    incrementCount({currentFunc, "BinaryOperations", "numBinaryOpGeneral"});
+    _allFunctions[currentFunc]->numOpBinary++;
     if (O->isComparisonOp()) {
-      incrementCount({currentFunc, "BinaryOperations", "numCompareOp"});
+      _allFunctions[currentFunc]->numOpCompare++;
       bool result;
       _isInBinCompOp++;
       /*std::cout << "BinCompOp Count Before recurse: " << _isInBinCompOp << std::endl;*/
@@ -275,7 +242,7 @@ bool CountNodesVisitor::VisitConditionalOperator(clang::ConditionalOperator *O) 
   if (!O) return false;
   if (_mgr->isInMainFile(O->getExprLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
-    incrementCount({currentFunc, "BinaryOperations", "numConditionOp"});
+    _allFunctions[currentFunc]->numOpCondition++;
   }
     return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitConditionalOperator(O);
 }
@@ -284,7 +251,7 @@ bool CountNodesVisitor::VisitBinaryConditionalOperator(clang::BinaryConditionalO
   if (!O) return false;
   if (_mgr->isInMainFile(O->getExprLoc())) {
     std::string currentFunc = getStmtParentFuncName(*O);
-    incrementCount({currentFunc, "BinaryOperations", "numConditionOp"});
+    _allFunctions[currentFunc]->numOpCondition++;
   }
     return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryConditionalOperator(O);
 }
@@ -294,37 +261,35 @@ bool CountNodesVisitor::VisitType(clang::Type *T) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitType(T);
 }
 
-boost::json::object CountNodesVisitor::Report() {
+std::unordered_map<std::string, CountNodesVisitor::attributes *>
+CountNodesVisitor::ReportAttributes() {
   return _allFunctions;
 }
 
 void CountNodesVisitor::PrintReport(std::string fileName) {
-  std::cout << boost::json::serialize(_allFunctions) << std::endl;
-  std::cout << fileName << " {" << std::endl;
-  std::string indent = "  ";
-  for (const boost::json::key_value_pair &val : _allFunctions) {
-    std::string open = (val.value().is_int64()) ? " : " : " {\n";
-    std::cout << indent << val.key() << open;
-    PrintReport(val.value(), indent);
-    std::cout << indent << ((open == " {\n") ? "}," : "") << std::endl; 
-  }
-  std::cout << "}" << std::endl;
-}
-
-void CountNodesVisitor::PrintReport(const boost::json::value &jv, std::string indent) {
-  /*std::cout << boost::json::serialize(*_allFunctions) << std::endl;*/
-  indent += "  ";
-  if (jv.is_int64()) {
-    std::cout << " " << jv.as_int64() << ",";
-  } else if (jv.is_object()) {
-    const boost::json::object *obj = &jv.as_object();
-    for (const boost::json::key_value_pair &val : *obj) {
-      std::string open = (val.value().is_int64()) ? " : " : " {\n";
-      std::cout << indent << val.key() << open;
-      PrintReport(val.value(), indent);
-      std::cout << indent << ((open == " {\n") ? "}," : "") << std::endl; 
-    }
-  } else {
-    std::cout << indent << "UNKNOWN," << std::endl;
+  std::cout << fileName << std::endl;
+  for (const std::pair<std::string, attributes*> func : _allFunctions) {
+    std::cout << " " << func.first << std::endl;
+    std::cout << "  numCallFunc: " << func.second->numCallFunc << std::endl;
+    std::cout << "  numCompChar: " << func.second->numCompChar << std::endl;
+    std::cout << "  numCompFloat: " << func.second->numCompFloat << std::endl;
+    std::cout << "  numCompInt: " << func.second->numCompInt << std::endl;
+    std::cout << "  numFunctions: " << func.second->numFunctions << std::endl;
+    std::cout << "  numIfStmt: " << func.second->numIfStmt << std::endl;
+    std::cout << "  numIfStmtInt: " << func.second->numIfStmtInt << std::endl;
+    std::cout << "  numLoopFor: " << func.second->numLoopFor << std::endl;
+    std::cout << "  numLoopWhile: " << func.second->numLoopWhile << std::endl;
+    std::cout << "  numOpBinary: " << func.second->numOpBinary << std::endl;
+    std::cout << "  numOpCompare: " << func.second->numOpCompare << std::endl;
+    std::cout << "  numOpCondition: " << func.second->numOpCondition << std::endl;
+    std::cout << "  numOpUnary: " << func.second->numOpUnary << std::endl;
+    std::cout << "  numVarFloat: " << func.second->numVarFloat << std::endl;
+    std::cout << "  numVarInt: " << func.second->numVarInt << std::endl;
+    std::cout << "  numVarPoint: " << func.second->numVarPoint << std::endl;
+    std::cout << "  numVarRefArray: " << func.second->numVarRefArray << std::endl;
+    std::cout << "  numVarRefCompare: " << func.second->numVarRefCompare << std::endl;
+    std::cout << "  numVarRefInt: " << func.second->numVarRefInt << std::endl;
+    std::cout << "  numVarRefStruct: " << func.second->numVarRefStruct << std::endl;
+    std::cout << "  numVarStruct: " << func.second->numVarStruct << std::endl;
   }
 }
