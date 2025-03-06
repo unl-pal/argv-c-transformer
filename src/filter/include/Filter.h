@@ -1,7 +1,4 @@
 #pragma once
-#include <boost/json.hpp>
-#include <boost/json/object.hpp>
-#include <boost/json/value.hpp>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/Expr.h>
@@ -10,14 +7,36 @@
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <string>
-#include <string_view>
-#include <vector>
+#include <unordered_map>
 
 class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
 public:
-	CountNodesVisitor(clang::ASTContext *C);
 
-	bool incrementCount(std::vector<std::string_view> fields);
+	struct attributes {
+		int numCallFunc = 0;
+		int numCompChar = 0;
+		int numCompFloat = 0;
+		int numCompInt = 0;
+		int numFunctions = 0;
+		int numIfStmt = 0;
+		int numIfStmtInt = 0;
+		int numLoopFor = 0;
+		int numLoopWhile = 0;
+		int numOpBinary = 0;
+		int numOpCompare = 0;
+		int numOpCondition = 0;
+		int numOpUnary = 0;
+		int numVarFloat = 0;
+		int numVarInt = 0;
+		int numVarPoint = 0;
+		int numVarRefArray = 0;
+		int numVarRefCompare = 0;
+		int numVarRefInt = 0;
+		int numVarRefStruct = 0;
+		int numVarStruct = 0;
+	};
+
+	CountNodesVisitor(clang::ASTContext *C);
 
 	bool partOfBinCompOp(const clang::Stmt &S);
 
@@ -53,16 +72,14 @@ public:
 
 	bool VisitType(clang::Type *T);
 
-	boost::json::object Report();
+	std::unordered_map<std::string, attributes*> ReportAttributes();
 
 	void PrintReport(std::string fileName);
-
-	void PrintReport(const boost::json::value &jv, std::string indent);
 
 private:
 	clang::ASTContext *_C;
 	clang::SourceManager *_mgr;
 	std::map<std::string, int> _values;
-	boost::json::object _allFunctions;
+	std::unordered_map<std::string, attributes*> _allFunctions;
 	int _isInBinCompOp;
 };
