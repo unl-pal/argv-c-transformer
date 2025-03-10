@@ -7,24 +7,30 @@
 #include <clang/AST/PrettyPrinter.h>
 #include <clang/AST/RawCommentList.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/Type.h>
 #include <clang/Basic/CodeGenOptions.h>
+#include <clang/Basic/LLVM.h>
 #include <clang/Basic/LangStandard.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Basic/Specifiers.h>
 #include <llvm/Support/raw_ostream.h>
 
-ReGenCodeVisitor::ReGenCodeVisitor(clang::ASTContext *C) : _C(C), _Mgr(_C->getSourceManager()) {
-}
+ReGenCodeVisitor::ReGenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &output)
+    : _C(C),
+  _Mgr(_C->getSourceManager()),
+  _Output(output) {}
 
 bool ReGenCodeVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
-  /*if ((_C->getSourceManager().isInMainFile(D->getLocation()) && (D->hasBody() || D->isFromExplicitGlobalModule()) ) || (!_C->getSourceManager().isInMainFile(D->getLocation()) && D->isReferenced())) {*/
   bool yes = false;
   if (_Mgr.isInMainFile(D->getLocation())) {
     if (D->hasBody()) {
       yes = false;
-    } else if (D->getDeclContext()->getParent() && D->getDeclContext()->isRecord()) {
+    } else if (D->getDeclContext()->getParent() &&
+               D->getDeclContext()->isRecord()) {
       yes = false;
-    } else if (!D->getDeclContext()->isTranslationUnit() && !D->getParentFunctionOrMethod()) {
+    } else if (!D->getDeclContext()->isTranslationUnit() &&
+               !D->getParentFunctionOrMethod()) {
       yes = true;
     }
   } else if (D->isUsed()) {
@@ -33,41 +39,37 @@ bool ReGenCodeVisitor::VisitDecl(clang::Decl *D) {
     yes = true;
   }
   if (yes) {
-    D->print(llvm::outs());
-    llvm::outs() << ";\n";
+    D->print(_Output);
+    _Output << ";\n";
   }
-
-  /*if (D->hasBody()) {*/
-  /*  D->print(llvm::outs());*/
-  /*  llvm::outs() << "\n";*/
-  /*}*/
-  /*if (!D->getDeclContext()->isTranslationUnit()) {*/
-  /*D->getDeclContext()->getDeclKind();*/
-  /*if (D->isReferenced()) std::cout << "referenced" << std::endl;*/
-  /*D->getDeclContext()->dumpAsDecl();*/
-  /*}*/
-  /*D->getDeclContext()->dumpDeclContext();*/
-  /*}*/
-  /*D->getDeclContext()->addDecl(Decl *D);*/
-  /*D->getDeclContext()->isFunctionOrMethod();*/
-  /*D->getDeclContext()->getParentASTContext().getCommentForDecl(const Decl *D, const Preprocessor *PP)*/
   return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitDecl(D);
 }
 
 bool ReGenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (!D) return false;
   if (_Mgr.isInMainFile(D->getLocation())) {
-    D->print(llvm::outs());
+    D->print(_Output);
   }
   return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitFunctionDecl(D);
 }
 
 bool ReGenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
   if (!D) return false;
-  /*if (_Mgr.isInMainFile(D->getLocation()) && !D->getDeclContext()->getParent() && D->getDeclContext()->getParent()->getDeclKind() == clang::Decl::Record) {*/
-  if (_Mgr.isInMainFile(D->getLocation()) && !D->getDeclContext()->getParent()) {
-    D->print(llvm::outs());
-    llvm::outs() << ";\n";
+  if (_Mgr.isInMainFile(D->getLocation()) &&
+      !D->getDeclContext()->getParent()) {
+    if (D->getType()->isBooleanType()) {
+      _Output << "_Bool ";
+      D->printName(_Output);
+      _Output << " = ";
+      D->getAnyInitializer()->getExprStmt()->printPretty(_Output, 0, _C->getPrintingPolicy());
+      /*S->printPretty(llvm::outs(), 0, policy, 0, "\n", _C);*/
+      if (auto *body = D->getBody()) {
+        body->children().begin()->PrintStats();
+      }
+    } else {
+      D->print(_Output);
+    }
+    _Output << ";\n";
   }
   return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitVarDecl(D);
 }
@@ -75,24 +77,11 @@ bool ReGenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
 bool ReGenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
   if (_Mgr.isInMainFile(D->getLocation())) {
-    D->print(llvm::outs());
-    llvm::outs() << ";\n";
+    D->print(_Output);
+    _Output << ";\n";
   }
-  /*return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitRecordDecl(D);*/
   return true;
 }
-
-bool ReGenCodeVisitor::VisitFieldDecl(clang::FieldDecl *D) {
-  if (!D) return false;
-  /*&& D->getDeclContext()->getDeclKind() != clang::Decl::Field*/
-  if (_Mgr.isInMainFile(D->getLocation())) {
-  }
-  /*return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitFieldDecl(D);*/
-  return true;
-}
-
-
-
 
 bool ReGenCodeVisitor::VisitStmt(clang::Stmt *S) {
   if (!S) return false;
@@ -104,7 +93,7 @@ bool ReGenCodeVisitor::VisitStmt(clang::Stmt *S) {
     /*clang::PrintingPolicy policy = _C->getPrintingPolicy();*/
     /*if (S->getStmtClass() == clang::comments::FullComment) {*/
     /*if (S->getStmtClass() == clang::LineComment) {*/
-      /*S->dumpColor();*/
+    /*S->dumpColor();*/
     /*}*/
     /*clang::PrinterHelper *helpMe;*/
     /*helpMe->handledStmt(S, llvm::outs());*/
@@ -113,3 +102,5 @@ bool ReGenCodeVisitor::VisitStmt(clang::Stmt *S) {
   }
   return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitStmt(S);
 }
+
+ 
