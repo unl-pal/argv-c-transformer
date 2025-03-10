@@ -1,4 +1,5 @@
-  #include "include/pretty_print_visitor.hpp"
+#include "include/pretty_print_visitor.hpp"
+#include "include/ReGenCode.h"
 
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/Tooling.h>
@@ -8,6 +9,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 
 
 int main(int argc, char** argv) {
@@ -34,6 +36,18 @@ int main(int argc, char** argv) {
         PrintASTVisitor visitorA(&Context);
       std::cout << "-------------- NEXT STEP --------------" << std::endl;
       visitorA.TraverseAST(Context);
+
+      std::filesystem::create_directory("preprocessed");
+      std::ofstream newFile(std::string(argv[1]) + ".i");
+      /*std::FILE tmp(std::string(argv[1]) + ".i");*/
+      std::error_code ec;
+      /*auto dir = llvm::sys::fs::create_directory(llvm::Twine("preprocessed"));*/
+      /*auto file = llvm::sys::fs::createUniqueFile("preprocessed" + llvm::StringRef(argv[1]) + ".i");*/
+      /*llvm::raw_fd_ostream output(llvm::StringRef(std::string(argv[1]) + ".i"), ec, llvm::sys::fs::CreationDisposition::CD_CreateNew);*/
+      llvm::raw_fd_ostream output(llvm::StringRef(std::string(argv[1]) + ".i"), ec);
+      ReGenCodeVisitor visitorD(&Context, output);
+      visitorD.TraverseAST(Context);
+
     } else {
       std::cerr << "Error" << std::endl;
     }

@@ -1,6 +1,5 @@
 #include "include/Filter.h"
 #include "include/Remove.h"
-#include "include/ReGenCode.h"
 
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/LangStandard.h>
@@ -12,7 +11,6 @@
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
 #include <cstdio>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <llvm/ADT/SmallString.h>
@@ -25,8 +23,6 @@
 #include <memory>
 #include <sstream>
 #include <string>
-#include <strstream>
-#include <system_error>
 #include <vector>
 
 std::vector<std::string> getPathDirectories() {
@@ -119,17 +115,6 @@ int main(int argc, char** argv) {
         const std::string fileContents = buffer.str();
         /*std::cout << fileContents << std::endl;*/
       }
-
-      std::filesystem::create_directory("preprocessed");
-      std::ofstream newFile(std::string(argv[1]) + ".i");
-      /*std::FILE tmp(std::string(argv[1]) + ".i");*/
-      std::error_code ec;
-      /*auto dir = llvm::sys::fs::create_directory(llvm::Twine("preprocessed"));*/
-      /*auto file = llvm::sys::fs::createUniqueFile("preprocessed" + llvm::StringRef(argv[1]) + ".i");*/
-      /*llvm::raw_fd_ostream output(llvm::StringRef(std::string(argv[1]) + ".i"), ec, llvm::sys::fs::CreationDisposition::CD_CreateNew);*/
-      llvm::raw_fd_ostream output(llvm::StringRef(std::string(argv[1]) + ".i"), ec);
-      ReGenCodeVisitor visitorD(&Context, output);
-      visitorD.TraverseAST(Context);
 
     } else {
       std::cerr << "Error" << std::endl;
