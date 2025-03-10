@@ -28,6 +28,7 @@ CountNodesVisitor::CountNodesVisitor(clang::ASTContext *C) :
   _allFunctions.try_emplace("Program", new attributes);
 }
 
+/// check if a stmt is a part of a binary operation
 bool CountNodesVisitor::partOfBinCompOp(const clang::Stmt &S) {
   clang::DynTypedNodeList parents = _C->getParents(S);
   if (parents.size()) {
@@ -47,23 +48,22 @@ bool CountNodesVisitor::partOfBinCompOp(const clang::Stmt &S) {
   return false;
 }
 
+/// Take Advantage of built in Decl get Parent function
 std::string CountNodesVisitor::getDeclParentFuncName(const clang::Decl &D) {
-  clang::DynTypedNodeList parents = _C->getParents(D);
-  if (parents.size()) {
-    for (const clang::DynTypedNode& parent : parents) {
-      if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>()) {
-	/*parent.dump(llvm::outs(), *_C);*/
-	return fd->getNameAsString();
-      } else if (const clang::Stmt *s = parent.get<clang::Stmt>()) {
-	return getStmtParentFuncName(*s);
-      } else if (const clang::Decl *d = parent.get<clang::Decl>()) {
-	return getDeclParentFuncName(*d);
-      }
+  std::string currentFunc = "Program";
+  if (const clang::DeclContext *parentFuncContext = D.getParentFunctionOrMethod()) {
+    if (parentFuncContext->isFunctionOrMethod()) {
+      const clang::FunctionDecl *FD = clang::dyn_cast<clang::FunctionDecl>(parentFuncContext);
+      currentFunc = FD->getNameAsString();
     }
+  } else {
+    currentFunc = "Program";
   }
-  return "Program";
+  return currentFunc;
 }
 
+/// Stmt does not have get parent function so recurse to decl and use built in
+/// from there
 std::string CountNodesVisitor::getStmtParentFuncName(const clang::Stmt &S) {
   clang::DynTypedNodeList parents = _C->getParents(S);
   if (parents.size()) {

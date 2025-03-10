@@ -3,6 +3,8 @@ build/
 bin/
 samples/
 
+compile_commands.json
+
 *cmake_cache
 *.cache
 

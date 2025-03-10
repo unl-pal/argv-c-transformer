@@ -81,14 +81,14 @@ int main(int argc, char** argv) {
   std::cout << "Traversing AST" << std::endl;
       std::cout << visitorA.TraverseAST(Context) << std::endl;
   std::cout << "Printing Report" << std::endl;
-      /*visitorA.PrintReport(argv[1]);*/
+      visitorA.PrintReport(argv[1]);
   std::cout << "Removing Nodes" << std::endl;
       RemoveFuncVisitor visitorB(&Context, Rewrite, {"doesThing"});
   std::cout << "Traversing AST" << std::endl;
       visitorB.TraverseAST(Context);
       CountNodesVisitor visitorC(&Context);
       visitorC.TraverseAST(Context);
-      /*visitorC.PrintReport(argv[1]);*/
+      visitorC.PrintReport(argv[1]);
       std::string hello = "---------------------------------\n"
         "!! This File Has Been Modified !!\n"
         "---------------------------------\n";
