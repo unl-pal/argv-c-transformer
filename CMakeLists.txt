@@ -36,7 +36,8 @@ set(SOURCE_DOWNLOAD
 
 set(SOURCE_FILTER
   src/filter/Filter.cpp
-  # src/filter/Remove.cpp
+  src/filter/Remove.cpp
+  src/filter/ReGenCode.cpp
 )
 
 set(SOURCE_TRANSFORM
@@ -86,6 +87,8 @@ target_link_libraries(download PRIVATE fmt::fmt git2 rapidcsv)
 target_link_libraries(experiment PRIVATE fmt::fmt LLVMSupport clang-cpp clang LLVM)
 target_link_libraries(filter PRIVATE LLVM LLVMSupport clang-cpp clang Boost::json)
 target_link_libraries(transform PRIVATE LLVMSupport clang-cpp clang LLVM)
+
+set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -W4")

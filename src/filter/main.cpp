@@ -1,6 +1,10 @@
 #include "include/Filter.h"
+#include "include/Remove.h"
+#include "include/ReGenCode.h"
 
 #include <clang/Basic/LLVM.h>
+#include <clang/Basic/LangStandard.h>
+#include <clang/Basic/SourceLocation.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -11,6 +15,7 @@
 #include <fstream>
 #include <iostream>
 #include <llvm/ADT/SmallString.h>
+#include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetOptions.h>
 #include <llvm/TargetParser/Triple.h>
 #include <memory>
@@ -66,13 +71,52 @@ int main(int argc, char** argv) {
       astUnit->Save(std::string(argv[1]) + ".ast");
       clang::ASTContext &Context = astUnit->getASTContext();
       CountNodesVisitor visitorA(&Context);
+      clang::Rewriter Rewrite;
+      Rewrite.setSourceMgr(astUnit->getSourceManager(), astUnit->getLangOpts());
       std::cout << "Diagnostics" << std::endl;
       astUnit->getDiagnostics();
       Context.PrintStats();
   std::cout << "Traversing AST" << std::endl;
       std::cout << visitorA.TraverseAST(Context) << std::endl;
   std::cout << "Printing Report" << std::endl;
-      visitorA.PrintReport(argv[1]);
+      /*visitorA.PrintReport(argv[1]);*/
+  std::cout << "Removing Nodes" << std::endl;
+      RemoveFuncVisitor visitorB(&Context, Rewrite, {"doesThing"});
+  std::cout << "Traversing AST" << std::endl;
+      visitorB.TraverseAST(Context);
+      CountNodesVisitor visitorC(&Context);
+      visitorC.TraverseAST(Context);
+      /*visitorC.PrintReport(argv[1]);*/
+      std::string hello = "---------------------------------\n"
+        "!! This File Has Been Modified !!\n"
+        "---------------------------------\n";
+      /*Rewrite.InsertTextBefore(Rewrite.getSourceMgr().getIncludeLoc(Context.getSourceManager().getMainFileID()), hello);*/
+    /*auto loc = _C->getSourceManager().getIncludeLoc(_C->getSourceManager().getMainFileID());*/
+    /*_R.InsertTextAfterToken(loc, "Hello");*/
+  std::cout << "OverWriting" << std::endl;
+      // None of these steps may be needed VV
+      /*astUnit->setASTContext(&Context);*/
+      /*astUnit->Save(astUnit->getOriginalSourceFileName().str() + ".bst");*/
+      Rewrite.setSourceMgr(Context.getSourceManager(), astUnit->getLangOpts());
+      // None of these steps may be needed ^^
+  std::cout << "OverWriting" << std::endl;
+      /*Rewrite.getEditBuffer(Rewrite.getSourceMgr().getMainFileID()).write(llvm::outs());*/
+      std::cout << Rewrite.overwriteChangedFiles() << std::endl;
+  std::cout << "OverWriting" << std::endl;
+
+    std::ifstream file(argv[1]);
+    std::stringstream buffer;
+
+    if (file.is_open()) {
+        buffer << file.rdbuf();
+        file.close();
+        const std::string fileContents = buffer.str();
+        /*std::cout << fileContents << std::endl;*/
+      }
+
+      ReGenCodeVisitor visitorD(&Context);
+      visitorD.TraverseAST(Context);
+
     } else {
       std::cerr << "Error" << std::endl;
     }
