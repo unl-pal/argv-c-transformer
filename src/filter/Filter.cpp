@@ -1,5 +1,6 @@
 #include "include/Filter.h"
 
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
@@ -12,6 +13,7 @@
 #include <clang/AST/ParentMapContext.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Basic/TypeTraits.h>
+#include <clang/Lex/PreprocessingRecord.h>
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 #include <string>
@@ -84,7 +86,6 @@ bool CountNodesVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
     return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitDecl(D);
 }
-
 
 bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
   if (!VD) return false;

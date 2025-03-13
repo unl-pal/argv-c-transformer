@@ -49,7 +49,10 @@ int myClone(int argc, char *myUrl) {
 }
 
 int main(int argc, char** argv) {
-  /*if (argc > 1) myClone(argc, argv[1]);*/
-  
+  if (argc > 1) {
+    myClone(argc, argv[1]);
+  } else {
+    myClone(2, (char*)"https://github.com/unl-pal/argv-transformer.git");
+  }
   return 0;
 }

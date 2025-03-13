@@ -1,11 +1,12 @@
 #pragma once
-#include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
+#include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Lex/PreprocessingRecord.h>
 #include <string>
 #include <unordered_map>
 

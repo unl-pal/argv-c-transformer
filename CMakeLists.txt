@@ -68,7 +68,6 @@ CPMAddPackage("gh:d99kris/rapidcsv#v8.84")
 find_package(LLVM REQUIRED)
 find_package(Clang REQUIRED)
 find_package(libgit2 REQUIRED)
-find_package(Boost REQUIRED json)
 
 include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local)
 
@@ -84,7 +83,7 @@ target_include_directories(transform PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUD
 
 target_link_libraries(download PRIVATE fmt::fmt git2 rapidcsv)
 target_link_libraries(experiment PRIVATE fmt::fmt LLVMSupport clang-cpp clang LLVM)
-target_link_libraries(filter PRIVATE LLVM LLVMSupport clang-cpp clang Boost::json)
+target_link_libraries(filter PRIVATE LLVM LLVMSupport clang-cpp clang)
 target_link_libraries(transform PRIVATE LLVMSupport clang-cpp clang LLVM)
 
 set_property(TARGET filter PROPERTY LINKER_TYPE LLD)

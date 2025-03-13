@@ -33,9 +33,9 @@ int main(int argc, char** argv) {
       }
 
       clang::ASTContext &Context = astUnit->getASTContext();
-        PrintASTVisitor visitorA(&Context);
-      std::cout << "-------------- NEXT STEP --------------" << std::endl;
-      visitorA.TraverseAST(Context);
+      /*  PrintASTVisitor visitorA(&Context);*/
+      /*std::cout << "-------------- NEXT STEP --------------" << std::endl;*/
+      /*visitorA.TraverseAST(Context);*/
 
       std::filesystem::create_directory("preprocessed");
       std::ofstream newFile(std::string(argv[1]) + ".i");
