@@ -2,6 +2,8 @@ temp/
 build/
 bin/
 samples/
+preprocessed/*
+filteredFiles/*
 
 compile_commands.json
 

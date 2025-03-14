@@ -79,7 +79,7 @@ add_executable(experiment ${SOURCE_EXPERIMENT})
 target_include_directories(download PRIVATE ${HEADERS_DOWNLOAD} ${libgit2_INC})
 target_include_directories(experiment PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 ${HEADERS_TRANSFORM})
 target_include_directories(filter PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 include/transform)
-target_include_directories(transform PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 include/transform)
+target_include_directories(transform PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC})
 
 target_link_libraries(download PRIVATE fmt::fmt git2 rapidcsv)
 target_link_libraries(experiment PRIVATE fmt::fmt LLVMSupport clang-cpp clang LLVM)

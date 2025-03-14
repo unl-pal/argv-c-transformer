@@ -80,7 +80,7 @@ bool checkPotentialFile(std::string fileName, std::shared_ptr<std::string> conte
       if (std::regex_search(line, match, pattern)) {
         if (std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) !=
           stdLibNames.end()) {
-          /*std::cout << match[2] << std::endl;*/
+          std::cout << match[2] << std::endl;
         } else if (!useBadIncludes) {
           file.close();
           return false;
@@ -110,7 +110,6 @@ bool checkPotentialFile(std::string fileName, std::shared_ptr<std::string> conte
 /// returns bool as place holder, has little meaning at the moment and should be fixed
 bool getAllCFiles(std::filesystem::path pathObject,
                   std::vector<std::string> &filesToFilter,
-                  /*std::shared_ptr<std::vector<std::string>> filesToFilter,*/
                   bool debug = false, int minLoC = 10) {
   if (!std::filesystem::exists(pathObject)) {
     if (debug) {
@@ -211,10 +210,25 @@ int main(int argc, char** argv) {
     for (std::string fileName : filesToFilter) {
       std::shared_ptr<std::string> contents = std::make_shared<std::string>();
       if (checkPotentialFile(fileName, contents, 10, false)) {
+        std::filesystem::path oldPath(fileName);
+        std::filesystem::path newPath(std::filesystem::current_path() / "filteredFiles");
+        for (const std::filesystem::path &component : oldPath) {
+          if (component.string() != oldPath.begin()->string() && component.string() != "..") {
+            newPath /= component;
+          }
+        }
+        std::filesystem::create_directories(newPath.parent_path());
+        std::ofstream filteredFile(newPath.string());
+        if (filteredFile.is_open()) {
+          filteredFile << *contents;
+          filteredFile.close();
+        } else {
+          std::cout << "Could Not Create Filtered File: " << newPath.string() << std::endl;
+        }
         /// Use args and file content to generate
         std::cout << "Creating astUnit for: " << fileName << std::endl;
         std::unique_ptr<clang::ASTUnit> astUnit =
-          clang::tooling::buildASTFromCodeWithArgs(*contents, args, fileName);
+          clang::tooling::buildASTFromCodeWithArgs(*contents, args, newPath.string());
         if (debug) {
           std::cout << *contents << std::endl;
         }
@@ -227,18 +241,25 @@ int main(int argc, char** argv) {
         /*std::cout << indent << "Saving AST" << std::endl;*/
         /*astUnit->Save(std::string(fileName) + ".ast");*/
 
-        std::cout << indent << "Diagnostics" << std::endl;
         clang::ASTContext &Context = astUnit->getASTContext();
-        astUnit->getDiagnostics();
-        Context.PrintStats();
 
+        if (debug) {
+          std::cout << indent << "Diagnostics" << std::endl;
+          astUnit->getDiagnostics();
+          Context.PrintStats();
+        }
+
+        std::cout << "Main File Name: " << astUnit->getMainFileName().str() << std::endl;
         std::cout << "Creating Counting Visitor" << std::endl;
         CountNodesVisitor countVisitor(&Context);
 
         std::cout << indent << "Traversing AST" << std::endl;
         std::cout << indent << countVisitor.TraverseAST(Context) << std::endl;
-        std::cout << indent << "Printing Report" << std::endl;
-        countVisitor.PrintReport(fileName);
+
+        if (debug) {
+          std::cout << indent << "Printing Report" << std::endl;
+          countVisitor.PrintReport(fileName);
+        }
 
         std::cout << indent << "Removing Nodes" << std::endl;
         clang::Rewriter Rewrite;
@@ -249,7 +270,9 @@ int main(int argc, char** argv) {
         std::cout << indent << "Re-Traversing AST" << std::endl;
         CountNodesVisitor reCountVisitor(&Context);
         reCountVisitor.TraverseAST(Context);
-        reCountVisitor.PrintReport(fileName);
+        if (debug) {
+          reCountVisitor.PrintReport(fileName);
+        }
 
         std::string hello = "---------------------------------\n"
           "!! This File Has Been Modified !!\n"
@@ -276,7 +299,7 @@ int main(int argc, char** argv) {
         /*auto thing2 = buff->write(output);*/
 
         if (debug) {
-          std::ifstream file(fileName);
+          std::ifstream file(newPath.string());
           std::stringstream buffer;
 
           if (file.is_open()) {
