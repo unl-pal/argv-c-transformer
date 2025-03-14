@@ -29,6 +29,7 @@
 #include <vector>
 #include <regex>
 
+/// vector of all standar library names to compare includes to
 const std::vector<std::string> stdLibNames =
   { "assert.h", 
     "complex.h", 
@@ -91,8 +92,6 @@ bool checkPotentialFile(std::string fileName, std::shared_ptr<std::string> conte
       }
       buffer << line << std::endl;
     }
-    /*std::cout << count << std::endl;*/
-    /*std::cout << badInclude << std::endl;*/
     file.close();
     if (count < minLoC) {
       return false;
@@ -113,7 +112,6 @@ bool getAllCFiles(std::filesystem::path pathObject,
                   bool debug = false, int minLoC = 10) {
   if (!std::filesystem::exists(pathObject)) {
     if (debug) {
-      /*std::cout << "Path: " << pathObject.filename() << " Does Not Exist"*/
       std::cout << "Path: " << " Does Not Exist"
                 << std::endl;
     }
@@ -145,7 +143,6 @@ bool getAllCFiles(std::filesystem::path pathObject,
   } else if (std::filesystem::is_directory(pathObject)) {
     bool result = true;
     for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(pathObject)) {
-      /*std::cout << entry.path() << std::endl;*/
       result &= getAllCFiles(entry.path(), filesToFilter, debug, minLoC);
     }
     return result;
@@ -181,15 +178,11 @@ std::vector<std::string> getPathDirectories() {
 /// ============================================================================
 int main(int argc, char** argv) {
   std::cout << "starting" << std::endl;
-  bool debug = true;
+  bool debug = false;
   if (argc == 2) {
     std::filesystem::path pathObject;
-    /*pathObject.assign(std::filesystem::current_path());*/
     pathObject.append(argv[1]);
 
-    /*std::shared_ptr<std::vector<std::string>> filesToFilter(*/
-    /*    new std::vector<std::string>);*/
-    /*std::shared_ptr<std::vector<std::string>> filesToFilter = std::make_shared<std::vector<std::string>>();*/
     std::vector<std::string> filesToFilter = std::vector<std::string>();
 
     std::cout << "Path: " << pathObject.string() << std::endl;
@@ -238,9 +231,6 @@ int main(int argc, char** argv) {
           break;
         }
 
-        /*std::cout << indent << "Saving AST" << std::endl;*/
-        /*astUnit->Save(std::string(fileName) + ".ast");*/
-
         clang::ASTContext &Context = astUnit->getASTContext();
 
         if (debug) {
@@ -277,26 +267,10 @@ int main(int argc, char** argv) {
         std::string hello = "---------------------------------\n"
           "!! This File Has Been Modified !!\n"
           "---------------------------------\n";
-        /*Rewrite.InsertTextBefore(Rewrite.getSourceMgr().getIncludeLoc(Context.getSourceManager().getMainFileID()), hello);*/
-        /*auto loc = _C->getSourceManager().getIncludeLoc(_C->getSourceManager().getMainFileID());*/
-        /*_R.InsertTextAfterToken(loc, "Hello");*/
 
         std::cout << "OverWriting" << std::endl;
         Rewrite.setSourceMgr(Context.getSourceManager(), astUnit->getLangOpts());
         std::cout << Rewrite.overwriteChangedFiles() << std::endl;
-        /*auto loc = Rewrite.buffer_begin();*/
-        /*std::stringstream rewriteBuff;*/
-        /*while (loc != Rewrite.buffer_end()) {*/
-        /*  const llvm::StringRef line = loc->second.begin().piece();*/
-        /*  rewriteBuff << line.str();*/
-        /*  loc->second.begin().MoveToNextPiece();*/
-        /*}*/
-
-        /*clang::FileID thing;*/
-        /*auto *buff = Rewrite.getRewriteBufferFor(thing);*/
-        /*std::error_code ec;*/
-        /*llvm::raw_fd_ostream output(llvm::StringRef(std::string(argv[1]) + ".i"), ec);*/
-        /*auto thing2 = buff->write(output);*/
 
         if (debug) {
           std::ifstream file(newPath.string());

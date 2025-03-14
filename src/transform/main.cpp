@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 
+/// stream file contents to contents shared pointer or return false if file does not open
 bool getFileContents(std::string fileName, std::shared_ptr<std::string> contents) {
   std::ifstream file(fileName);
   std::stringstream buffer;
@@ -31,12 +32,14 @@ bool getFileContents(std::string fileName, std::shared_ptr<std::string> contents
   }
 }
 
+/// Take an individual file and apply all transformations to it by generating 
+/// the ast, visitors and regenerating the source code as precompiled .i file
 bool transformFile(std::filesystem::path path, std::vector<std::string> &args) {
   if (!std::filesystem::exists(path)) return false;
   std::shared_ptr<std::string> fileContents = std::make_shared<std::string>();
   std::filesystem::path full = std::filesystem::current_path() / path;
   getFileContents((full).string(), fileContents);
-  std::cout << *fileContents << std::endl;
+  /*std::cout << *fileContents << std::endl;*/
   std::unique_ptr<clang::ASTUnit> astUnit = clang::tooling::buildASTFromCodeWithArgs(*fileContents, args, path.string());
   if(!astUnit) {
     std::cerr << "Failed to Build AST" << std::endl;
@@ -53,7 +56,6 @@ bool transformFile(std::filesystem::path path, std::vector<std::string> &args) {
   }
   prePath.replace_extension(".i");
   std::error_code ec;
-  std::cout << prePath.string() << std::endl;
   std::filesystem::create_directories(prePath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(prePath.string()), ec);
   ReGenCodeVisitor codeReGenVisitor(&Context, output);
@@ -62,18 +64,22 @@ bool transformFile(std::filesystem::path path, std::vector<std::string> &args) {
   return true;
 }
 
+/// Recursive algorithm for traversing the file structure and searching for 
+/// relavent c files to transform
+///     ideally files will have been filtered but some logic exists to prevent
+///     mishaps just incase
 bool transformAll(std::filesystem::path path, std::vector<std::string> &args) {
   if (std::filesystem::exists(path)) {
     if (std::filesystem::is_directory(path)) {
       bool result = true;
       for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(path)) {
-        std::cout << "Dir " << std::endl;
+        /*std::cout << "Dir " << std::endl;*/
         result &= transformAll(entry.path(), args);
       }
       return result;
     } else if (std::filesystem::is_regular_file(path)) {
       if (path.has_extension() && path.extension() == ".c") {
-        std::cout << "File " << std::endl;
+        /*std::cout << "File " << std::endl;*/
         return transformFile(path, args);
       }
     } else {
@@ -102,21 +108,18 @@ std::vector<std::string> getPathDirectories() {
   return directories;
 }
 
+/// Main function should be transfered to a driver for use via the full implementation
 int main(int argc, char** argv) {
-  std::cout << "Problem " << std::endl;
   if (argc == 2) {
-  std::cout << "Problem " << std::endl;
     std::filesystem::path path(argv[1]);
-  std::cout << "Problem " << std::endl;
     if (std::filesystem::exists(path)) {
       /// Set args for AST creation
       std::vector<std::string> args = std::vector<std::string>();
-      /*args.push_back("-v");*/
       std::vector<std::string> paths = getPathDirectories();
       for (const std::string &dir : paths) {
         args.push_back("-I" + dir);
-      /*transformAll(path, args, transforms);*/
       }
+      /// run the transformer on the file structure
       transformAll(path, args);
     }
   }
