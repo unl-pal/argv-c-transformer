@@ -1,6 +1,7 @@
 #include "include/pretty_print_visitor.hpp"
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/Basic/SourceManager.h>
 
 PrintASTVisitor::PrintASTVisitor(clang::ASTContext *Context) : _Context(Context) {}
 
@@ -20,7 +21,7 @@ bool PrintASTVisitor::VisitNamedDecl(clang::NamedDecl *D) {
 
 bool PrintASTVisitor::TraverseDecl(clang::Decl *D) {
   /*if (D->isInStdNamespace()) */
-  if (D->Import == true) {
+  if (_Context->getSourceManager().isInMainFile(D->getLocation()) == true) {
     /*clang::Decl::Kind::Import*/
     llvm::outs() << "Did it!! ================================" << "\n";
     return false;

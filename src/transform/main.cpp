@@ -1,3 +1,4 @@
+#include "include/Transform.hpp"
 #include "include/pretty_print_visitor.hpp"
 #include "include/ReGenCode.h"
 
@@ -35,6 +36,7 @@ bool getFileContents(std::string fileName, std::shared_ptr<std::string> contents
 /// Take an individual file and apply all transformations to it by generating 
 /// the ast, visitors and regenerating the source code as precompiled .i file
 bool transformFile(std::filesystem::path path, std::vector<std::string> &args) {
+  std::cout << "Transforming: " << path.string() << std::endl;
   if (!std::filesystem::exists(path)) return false;
   std::shared_ptr<std::string> fileContents = std::make_shared<std::string>();
   std::filesystem::path full = std::filesystem::current_path() / path;
@@ -47,6 +49,11 @@ bool transformFile(std::filesystem::path path, std::vector<std::string> &args) {
   }
 
   clang::ASTContext &Context = astUnit->getASTContext();
+
+  clang::Rewriter R;
+  R.setSourceMgr(Context.getSourceManager(), astUnit->getLangOpts());
+  TransformerVisitor transformerVisitor(&Context, R);
+  transformerVisitor.TraverseAST(Context);
 
   std::filesystem::path prePath = std::filesystem::path("preprocessed");
   for (const std::filesystem::path &component : path) {

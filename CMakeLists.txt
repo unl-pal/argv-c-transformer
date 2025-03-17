@@ -42,7 +42,7 @@ set(SOURCE_FILTER
 set(SOURCE_TRANSFORM
   # src/transform/create_ast.cpp
   src/transform/pretty_print_visitor.cpp
-  src/transform/transform.cpp
+  src/transform/Transform.cpp
   src/transform/ReGenCode.cpp
 )
 
