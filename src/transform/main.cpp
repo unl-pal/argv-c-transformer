@@ -42,18 +42,7 @@ bool transformFile(std::filesystem::path path, std::vector<std::string> &args) {
   std::filesystem::path full = std::filesystem::current_path() / path;
   getFileContents((full).string(), fileContents);
   /*std::cout << *fileContents << std::endl;*/
-  std::unique_ptr<clang::ASTUnit> astUnit = clang::tooling::buildASTFromCodeWithArgs(*fileContents, args, path.string());
-  if(!astUnit) {
-    std::cerr << "Failed to Build AST" << std::endl;
-    return false;
-  }
-
-  clang::ASTContext &Context = astUnit->getASTContext();
-
-  clang::Rewriter R;
-  R.setSourceMgr(Context.getSourceManager(), astUnit->getLangOpts());
-  TransformerVisitor transformerVisitor(&Context, R);
-  transformerVisitor.TraverseAST(Context);
+  std::unique_ptr<clang::ASTUnit> oldAstUnit = clang::tooling::buildASTFromCodeWithArgs(*fileContents, args, path.string());
 
   std::filesystem::path prePath = std::filesystem::path("preprocessed");
   for (const std::filesystem::path &component : path) {
@@ -62,12 +51,31 @@ bool transformFile(std::filesystem::path path, std::vector<std::string> &args) {
     }
   }
   prePath.replace_extension(".i");
+  std::unique_ptr<clang::ASTUnit> newAstUnit = clang::tooling::buildASTFromCodeWithArgs("", std::vector<std::string>({}), prePath.string());
+
+  if(!oldAstUnit || !newAstUnit) {
+    std::cerr << "Failed to Build AST" << std::endl;
+    return false;
+  }
+
+
+  clang::ASTContext &oldContext = oldAstUnit->getASTContext();
+  clang::ASTContext &newContext = newAstUnit->getASTContext();
+
+  clang::Rewriter R;
+  R.setSourceMgr(newContext.getSourceManager(), oldAstUnit->getLangOpts());
+  TransformerVisitor transformerVisitor(&newContext, &oldContext, R);
+  transformerVisitor.TraverseAST(oldContext);
+
+  /*newContext.getTranslationUnitDecl()->dumpColor();*/
+
   std::error_code ec;
   std::filesystem::create_directories(prePath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(prePath.string()), ec);
-  ReGenCodeVisitor codeReGenVisitor(&Context, output);
-  codeReGenVisitor.TraverseAST(Context);
-  /*astUnit->Save("output.ast");*/
+  ReGenCodeVisitor codeReGenVisitor(&newContext, output);
+  codeReGenVisitor.TraverseAST(newContext);
+
+  /*oldAstUnit->Save("output.ast");*/
   return true;
 }
 

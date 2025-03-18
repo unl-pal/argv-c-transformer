@@ -77,7 +77,25 @@ bool ReGenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
 bool ReGenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
   if (_Mgr.isInMainFile(D->getLocation())) {
-    D->print(_Output);
+    if (D->isStruct()) {
+      /*D->print(_Output);*/
+      _Output << "struct ";
+      D->printQualifiedName(_Output);
+      _Output << " {\n";
+      for (const auto &field : D->fields()) {
+        if (field->getType()->isBooleanType()) {
+          _Output << "    _Bool ";
+          _Output << field->getNameAsString();
+        } else {
+          _Output << "    ";
+          field->print(_Output, 2);
+        }
+        _Output << ";\n";
+      }
+      _Output << "}";
+    } else {
+      D->print(_Output);
+    }
     _Output << ";\n";
   }
   return true;
