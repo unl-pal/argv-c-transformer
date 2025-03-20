@@ -41,7 +41,8 @@ set(SOURCE_FILTER
 
 set(SOURCE_TRANSFORM
   # src/transform/create_ast.cpp
-  src/transform/pretty_print_visitor.cpp
+  # src/transform/pretty_print_visitor.cpp
+  src/transform/Transformer.cpp
   src/transform/Transform.cpp
   src/transform/ReGenCode.cpp
 )
@@ -52,41 +53,59 @@ set(SOURCE_EXPERIMENT
   src/transform/MyRewrite.cpp
 )
 
-set(CPM_DOWNLOAD_VERSION v0.40.5) 
-set(CPM_DOWNLOAD_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/cmake/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
+# FetchContent_Declare(
+#   <packageName>
+#   GIT_REPOSITORY <github_user>/<github_repo>
+#   GIT_TAG <git_tag>
+# )
 
-if(NOT (EXISTS $(CPM_DOWNLOAD_LOCATION)))
-  message(STATUS "Downloading CPM.cmake")
-  file(DOWNLOAD https://github.com/cpm-cmake/CPM.cmake/releases/download/${CPM_DOWNLOAD_VERSION}/CPM.cmake ${CPM_DOWNLOAD_LOCATION})
+include(FetchContent)
+
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+  GIT_TAG 11.1.3
+)
+
+FetchContent_GetProperties(fmt)
+if(NOT fmt_POPULATED)
+  FetchContent_MakeAvailable(fmt)
 endif()
 
-include(${CPM_DOWNLOAD_LOCATION})
-
-CPMAddPackage("gh:fmtlib/fmt#11.1.3")
-CPMAddPackage("gh:d99kris/rapidcsv#v8.84")
+# FetchContent_Declare(
+#   rapidcsv
+#   GIT_REPOSITORY d99kris/rapidcsv
+#   GIT_TAG v8.84
+# )
 
 find_package(LLVM REQUIRED)
 find_package(Clang REQUIRED)
-find_package(libgit2 REQUIRED)
+# find_package(libgit2 REQUIRED)
 
-include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local)
+include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local )
 
 add_executable(download src/download/main.cpp ${SOURCE_DOWNLOAD})
 add_executable(filter src/filter/main.cpp ${SOURCE_FILTER})
 add_executable(transform src/transform/main.cpp ${SOURCE_TRANSFORM})
 add_executable(experiment ${SOURCE_EXPERIMENT})
+add_executable(full src/full/main.cpp ${SOURCE_FILTER} ${SOURCE_DOWNLOAD} ${SOURCE_TRANSFORM})
 
-target_include_directories(download PRIVATE ${HEADERS_DOWNLOAD} ${libgit2_INC})
+target_include_directories(download PRIVATE ${HEADERS_DOWNLOAD}) # ${libgit2_INC})
 target_include_directories(experiment PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 ${HEADERS_TRANSFORM})
-target_include_directories(filter PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 include/transform)
-target_include_directories(transform PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC})
+target_include_directories(filter PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 ${HEADERS_FILTER})
+target_include_directories(transform PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM})
+target_include_directories(full PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM} ${HEADERS_DOWNLOAD} ${HEADERS_FILTER})
 
-target_link_libraries(download PRIVATE fmt::fmt git2 rapidcsv)
-target_link_libraries(experiment PRIVATE fmt::fmt LLVMSupport clang-cpp clang LLVM)
+target_link_libraries(download PRIVATE fmt) # git2 rapidcsv)
+target_link_libraries(experiment PRIVATE fmt LLVMSupport clang-cpp clang LLVM)
 target_link_libraries(filter PRIVATE LLVM LLVMSupport clang-cpp clang)
 target_link_libraries(transform PRIVATE LLVMSupport clang-cpp clang LLVM)
+target_link_libraries(full PRIVATE fmt LLVMSupport clang-cpp clang LLVM)
 
 set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
+set_property(TARGET download PROPERTY LINKER_TYPE LLD)
+set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
+set_property(TARGET full PROPERTY LINKER_TYPE LLD)
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -W4")

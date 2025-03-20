@@ -33,10 +33,13 @@ bool ReGenCodeVisitor::VisitDecl(clang::Decl *D) {
                !D->getParentFunctionOrMethod()) {
       yes = true;
     }
-  } else if (D->isUsed()) {
-    yes = true;
-  } else if (D->isReferenced()) {
-    yes = true;
+  } else if (D->isFunctionOrFunctionTemplate() || D->getKind() == D->Typedef) {
+    if (D->isUsed()) {
+      yes = true;
+      } else if (D->isReferenced()) {
+      yes = true;
+    /*} else if (D->Typedef) {*/
+    }
   }
   if (yes) {
     D->print(_Output);

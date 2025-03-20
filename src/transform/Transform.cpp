@@ -47,15 +47,17 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
       declName,
       funcQualType,
       nullptr,
-      clang::SC_None
+      clang::SC_Extern
     );
-    /*newFunction->setReferenced();*/
+    newFunction->setReferenced();
+    newFunction->setIsUsed();
     tempTd->addDecl(newFunction);
   }
   for (clang::Decl *decl : TD->decls()) {
     tempTd->addDecl(decl);
   }
-  TD = tempTd;
+  /*TD = tempTd;*/
+  /*return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);*/
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(tempTd);
 }
 
@@ -71,24 +73,30 @@ bool TransformerVisitor::VisitStmt(clang::Stmt *S) {
 
 /// This is working for identifying function calls that are defined
 bool TransformerVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
-  if (!_NewC->getSourceManager().isInMainFile(D->getLocation())) return true;
+  if (!_OldC->getSourceManager().isInMainFile(D->getLocation())) return true;
   if (D->getType()->isFunctionType()) {
-    if (D->getDecl()->isCanonicalDecl()) {
-      if (clang::Decl *d = D->getDecl()) {
-        if (clang::FunctionDecl *func = d->getAsFunction()) {
-          if (!func->isDefined()) {
-            std::string myType = func->getReturnType().getAsString();
-            /*D->dumpColor();*/
-            clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);
-            clang::DeclarationName newName(newInfo);
-            func->setDeclName(newName);
-            /*func->dumpColor();*/
-            /*D->dumpColor();*/
-            return true;
+    /*if (D->getDecl()->isCanonicalDecl()) {*/
+    if (clang::Decl *d = D->getDecl()) {
+      if (clang::FunctionDecl *func = d->getAsFunction()) {
+        if ((func->isImplicit()) || (!func->isDefined() && !func->isExternC())) {
+          std::string myType = func->getReturnType().getAsString();
+          /*D->dumpColor();*/
+          clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);
+          clang::DeclarationName newName(newInfo);
+          func->setDeclName(newName);
+          func->setBody(nullptr);
+          for (clang::ParmVarDecl *param : func->parameters()) {
+            func->removeDecl(param);
           }
+          func->dumpColor();
+          func->setParams(clang::ArrayRef<clang::ParmVarDecl*>());
+          /*func->dumpColor();*/
+          /*D->dumpColor();*/
+          return true;
         }
       }
     }
+    /*}*/
   }
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitDeclRefExpr(D);
 }
@@ -96,17 +104,17 @@ bool TransformerVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
 /// I Think This Can Be Deleted...
 /// Call Expr is the parent of the function decl ref and the args used
 bool TransformerVisitor::VisitCallExpr(clang::CallExpr *E) {
-  if (!_OldC->getSourceManager().isInMainFile(E->getExprLoc())) return true;
-  if (const auto *func = E->getCalleeDecl()->getAsFunction()) {
-    if (!func->isImplicit()) return true;
-    if (!func->isDefined()) {
-      if (!E->arguments().empty()) {
-        E->dumpColor();
-        /*llvm::outs() << "Now What\n";*/
-        E->shrinkNumArgs(0);
-        E->computeDependence();
-      }
-    }
-  }
+  /*if (!_OldC->getSourceManager().isInMainFile(E->getExprLoc())) return true;*/
+  /*if (const auto *func = E->getCalleeDecl()->getAsFunction()) {*/
+  /*  if (!func->isImplicit()) return true;*/
+  /*  if (!func->isDefined()) {*/
+  /*    if (!E->arguments().empty()) {*/
+  /*      E->dumpColor();*/
+  /*//      llvm::outs() << "Now What\n";*/
+  /*      E->shrinkNumArgs(0);*/
+  /*      E->computeDependence();*/
+  /*    }*/
+  /*  }*/
+  /*}*/
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitCallExpr(E);
 }

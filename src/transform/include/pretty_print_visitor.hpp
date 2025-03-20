@@ -1,3 +1,5 @@
+#pragma once
+
 #include <clang/AST/Decl.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 
