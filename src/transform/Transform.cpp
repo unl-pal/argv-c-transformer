@@ -7,6 +7,7 @@
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/DeclarationName.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/NestedNameSpecifier.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
@@ -74,47 +75,60 @@ bool TransformerVisitor::VisitStmt(clang::Stmt *S) {
 /// This is working for identifying function calls that are defined
 bool TransformerVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
   if (!_OldC->getSourceManager().isInMainFile(D->getLocation())) return true;
-  if (D->getType()->isFunctionType()) {
+  /*if (D->getType()->isFunctionType()) {*/
     /*if (D->getDecl()->isCanonicalDecl()) {*/
-    if (clang::Decl *d = D->getDecl()) {
-      if (clang::FunctionDecl *func = d->getAsFunction()) {
-        if ((func->isImplicit()) || (!func->isDefined() && !func->isExternC())) {
-          std::string myType = func->getReturnType().getAsString();
+    /*if (clang::Decl *d = D->getDecl()) {*/
+    /*  if (clang::FunctionDecl *func = d->getAsFunction()) {*/
+    /*    if ((func->isImplicit()) || (!func->isDefined() && !func->isExternC())) {*/
+          ///
+          /*std::string myType = func->getReturnType().getAsString();*/
           /*D->dumpColor();*/
-          clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);
-          clang::DeclarationName newName(newInfo);
-          func->setDeclName(newName);
-          func->setBody(nullptr);
-          for (clang::ParmVarDecl *param : func->parameters()) {
-            func->removeDecl(param);
-          }
-          func->dumpColor();
-          func->setParams(clang::ArrayRef<clang::ParmVarDecl*>());
+          /*clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);*/
+          /*clang::DeclarationName newName(newInfo);*/
+          /*func->setDeclName(newName);*/
+          /*func->dumpColor();*/
+          ///
+          /*for (auto * arg : func->decls()) {*/
+            /*func->removeDecl(arg);*/
+          /*}*/
+          /*for (clang::ParmVarDecl *param : func->parameters()) {*/
+            /*func->removeDecl(param);*/
+          /*}*/
+          /*func->dumpColor();*/
+          /*func->setParams(clang::ArrayRef<clang::ParmVarDecl*>());*/
+          /*D->dumpColor();*/
+          /*newFunction->setReferenced();*/
+          /*newFunction->setIsUsed();*/
+          /*newFunction->setParams(clang::ArrayRef<clang::ParmVarDecl *>());*/
+          /*_NewC->getTranslationUnitDecl()->removeDecl(d);*/
+    
           /*func->dumpColor();*/
           /*D->dumpColor();*/
-          return true;
-        }
-      }
-    }
+          /*return true;*/
+    /*    }*/
+    /*  }*/
     /*}*/
-  }
+    /*}*/
+  /*}*/
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitDeclRefExpr(D);
 }
 
 /// I Think This Can Be Deleted...
 /// Call Expr is the parent of the function decl ref and the args used
 bool TransformerVisitor::VisitCallExpr(clang::CallExpr *E) {
-  /*if (!_OldC->getSourceManager().isInMainFile(E->getExprLoc())) return true;*/
-  /*if (const auto *func = E->getCalleeDecl()->getAsFunction()) {*/
-  /*  if (!func->isImplicit()) return true;*/
-  /*  if (!func->isDefined()) {*/
-  /*    if (!E->arguments().empty()) {*/
-  /*      E->dumpColor();*/
-  /*//      llvm::outs() << "Now What\n";*/
-  /*      E->shrinkNumArgs(0);*/
-  /*      E->computeDependence();*/
-  /*    }*/
-  /*  }*/
-  /*}*/
+  if (!_OldC->getSourceManager().isInMainFile(E->getExprLoc())) return true;
+  if (clang::FunctionDecl *func = E->getCalleeDecl()->getAsFunction()) {
+    if ((func->isImplicit()) || (!func->isDefined() && !func->isExternC())) {
+      /*func->dumpColor();*/
+      std::string myType = func->getReturnType().getAsString();
+      /*D->dumpColor();*/
+      clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);
+      clang::DeclarationName newName(newInfo);
+      func->setDeclName(newName);
+      /*func->dumpColor();*/
+      E->shrinkNumArgs(0);
+      /*E->dumpColor();*/
+    }
+  }
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitCallExpr(E);
 }
