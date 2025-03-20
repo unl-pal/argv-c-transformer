@@ -130,6 +130,7 @@ bool CountNodesVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
       /*D->dumpColor();*/
     } else if (d->isStructureType())
       _allFunctions[currentFunc]->numVarRefStruct++;
+    /// but what tho?
     /*if (d->isCharType()) return false;*/
     /*if (d->isDoubleType()) return false;*/
     /*if (d->isFloatingType()) return false;*/
@@ -202,6 +203,7 @@ bool CountNodesVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getOperatorLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
+    /// TODO what is this?
     _allFunctions[currentFunc]->numOpUnary++;
     O->isPrefix();
     O->isPostfix();
@@ -225,6 +227,7 @@ bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
       _allFunctions[currentFunc]->numOpCompare++;
       bool result;
       _isInBinCompOp++;
+      /// TODO more debug statements
       /*std::cout << "BinCompOp Count Before recurse: " << _isInBinCompOp << std::endl;*/
       result = clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryOperator(O);
       /*std::cout << "Result: " << result << std::endl;*/
@@ -232,6 +235,7 @@ bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
       /*std::cout << "BinCompOp Count After recurse: " << _isInBinCompOp << std::endl;*/
       return result;
     }
+    /// TODO Decide what op types to count
     /*if (O->isEqualityOp()) {*/
     /*  incrementCount(currentFunc, "numEqualityOp");*/
     /*}*/

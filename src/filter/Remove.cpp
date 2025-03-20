@@ -58,6 +58,11 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         /*D->getDeclContext()->getParent()->removeDecl(D);*/
         /*std::cout << "Removed Node" << std::endl;*/
         /*return false;*/
+        /// TODO check if this works with the tree regen
+        /// keeps function def
+        /// loses function body
+        D->setBody(nullptr);
+        /// TODO remove this?? VV
         if (clang::TranslationUnitDecl *TU =
                 clang::dyn_cast<clang::TranslationUnitDecl>(
                     D->getDeclContext())) {
@@ -66,7 +71,8 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
           /*D->setDeletedAsWritten();*/
           TU->removeDecl(D);
           std::cout << "Removed Node" << std::endl;
-          return false;
+        /// TODO remove this?? ^^
+          return true;
         }
       }
     }
