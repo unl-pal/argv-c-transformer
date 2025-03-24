@@ -1,4 +1,5 @@
 #include "include/Remove.h"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
@@ -10,7 +11,6 @@
 #include <clang/Basic/LangStandard.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Rewrite/Core/Rewriter.h>
-#include <iostream>
 #include <vector>
 
 RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext *C, clang::Rewriter &R,
@@ -22,37 +22,18 @@ bool RemoveFuncVisitor::VisitStmt(clang::Stmt *S) {
 }
 
 bool RemoveFuncVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
-  if (D) {
-    /*clang::RawComment *hello = _C->getSourceManager().getloc"---------------------------------\n"*/
-    /*    "!! This File Has Been Modified !!\n"*/
-    /*    "---------------------------------\n";*/
-    /*_C->addComment(hello);*/
-    /*auto loc = _C->getSourceManager().getIncludeLoc(_C->getSourceManager().getMainFileID());*/
-    /*auto loc = D->getLocation();*/
-    /*_R.InsertTextAfterToken(loc, "Hello");*/
-  }
   return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitDecl(D);
 }
 
 bool RemoveFuncVisitor::VisitDecl(clang::Decl *D) {
-  if (D->isCanonicalDecl()) {
-    /*clang::RawComment *hello = _C->getSourceManager().getloc"---------------------------------\n"*/
-    /*    "!! This File Has Been Modified !!\n"*/
-    /*    "---------------------------------\n";*/
-    /*_C->addComment(hello);*/
-    /*auto loc = _C->getSourceManager().getIncludeLoc(_C->getSourceManager().getFileID(D->getLocation()));*/
-    /*_R.InsertTextBefore(loc, "Hello");*/
-  }
   return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitDecl(D);
 }
 
 bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if(!D) return false;
   if (_mgr.isInMainFile(D->getLocation())) {
-    std::cout << "In Main File" << std::endl;
     for (std::string& name : _toRemove) {
       if (name == D->getNameAsString()) {
-          std::cout << "Matched Name" << std::endl;
         // TODO replace all references to the function with a 'type' ref
         /*clang::QualType type = D->getReturnType();*/
         /*D->getDeclContext()->getParent()->removeDecl(D);*/
@@ -68,9 +49,7 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
                     D->getDeclContext())) {
           auto thing = D->getSourceRange();
           _R.RemoveText(thing);
-          /*D->setDeletedAsWritten();*/
           TU->removeDecl(D);
-          std::cout << "Removed Node" << std::endl;
         /// TODO remove this?? ^^
           return true;
         }
@@ -81,6 +60,7 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   return true;
 }
 
+// 
 bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
   /*if (E->EvaluateAsBooleanCondition(bool &Result, const ASTContext &Ctx)) {*/
   if (!E) return false;
@@ -95,9 +75,6 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
       } else if (thing->isArrayType()) {
       } else if (thing->isNullPtrType()) {
       } else if (thing->isDoubleType()) {
-      /*} else if (thing->is) {*/
-      /*} else if (thing->) {*/
-      /*} else if (thing->) {*/
       } else {
       }
     }

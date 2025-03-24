@@ -76,10 +76,7 @@ bool Filterer::checkPotentialFile(std::string fileName,
       if (std::regex_search(line, match, pattern)) {
         if (std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) !=
             stdLibNames.end()) {
-          std::cout << match[2] << std::endl;
         } else if (!config["useNonStdHeaders"]) {
-          // std::cout << "Used Non Std Header" << std::endl;
-          std::cout << match[2] << std::endl;
           file.close();
           return false;
         }
@@ -91,10 +88,8 @@ bool Filterer::checkPotentialFile(std::string fileName,
     }
     file.close();
     if (count < config["minFileLoC"]) {
-      // std::cout << "Too Small" << std::endl;
       return false;
     } else if (count > config["maxFileLoC"]) {
-      // std::cout << "Too Big" << std::endl;
       return false;
     } else {
       *contents += buffer.str();
@@ -235,7 +230,6 @@ int Filterer::run(int argc, char **argv) {
     for (std::string fileName : filesToFilter) {
       std::shared_ptr<std::string> contents = std::make_shared<std::string>();
       *contents += hello;
-      std::cout << *contents << std::endl;
       if (checkPotentialFile(fileName, contents)) {
         std::filesystem::path oldPath(fileName);
         std::filesystem::path newPath(std::filesystem::current_path() /
@@ -259,7 +253,7 @@ int Filterer::run(int argc, char **argv) {
 
         if (!astUnit) {
           std::cerr << "Failed to build AST for: " << fileName << std::endl;
-          break;
+          continue;
         }
 
         clang::ASTContext &Context = astUnit->getASTContext();
@@ -276,7 +270,7 @@ int Filterer::run(int argc, char **argv) {
         CountNodesVisitor countVisitor(&Context);
 
         std::cout << indent << "Traversing AST" << std::endl;
-        std::cout << indent << countVisitor.TraverseAST(Context) << std::endl;
+        countVisitor.TraverseAST(Context);
 
         if (config["debug"]) {
           std::cout << indent << "Printing Report" << std::endl;
@@ -296,24 +290,8 @@ int Filterer::run(int argc, char **argv) {
         }
 
         std::filesystem::create_directories(newPath.parent_path());
-        // std::ofstream filteredFile(newPath.string());
-        // if (filteredFile.is_open()) {
-        //   std::string hello = "// ---------------------------------\n"
-        //                       "// !! This File Has Been Modified !!\n"
-        //                       "// ---------------------------------\n";
-        //   filteredFile << hello;
-        //   filteredFile << *contents;
-        //   filteredFile.close();
-        // } else {
-        //   std::cout << "Could Not Create Potential File: " << newPath.string()
-        //             << std::endl;
-        //   continue;
-        // }
 
         std::cout << indent << "Removing Nodes" << std::endl;
-        for (std::string name : functionsToRemove) {
-          std::cout << name << std::endl;
-        }
         clang::Rewriter Rewrite;
         Rewrite.setSourceMgr(astUnit->getSourceManager(),
                              astUnit->getLangOpts());
@@ -321,14 +299,6 @@ int Filterer::run(int argc, char **argv) {
                                                 functionsToRemove);
         RemoveFunctionsVisitor.TraverseAST(Context);
 
-        // std::cout << indent << "Re-Traversing AST" << std::endl;
-        // CountNodesVisitor reCountVisitor(&Context);
-        // reCountVisitor.TraverseAST(Context);
-        // if (config["debug"]) {
-        //   reCountVisitor.PrintReport(fileName);
-        // }
-
-        // TODO check if overwrite requires that there already be text in the file
         std::cout << "Writing File" << std::endl;
         Rewrite.setSourceMgr(Context.getSourceManager(),
                              astUnit->getLangOpts());
