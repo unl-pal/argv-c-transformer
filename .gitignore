@@ -1,7 +1,8 @@
 temp/
 build/
 bin/
-samples/
+samples/TheAlgorithmsC/
+samples/EggListener.c
 preprocessed/*
 filteredFiles/*
 
