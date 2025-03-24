@@ -1,5 +1,4 @@
-#include "include/Filter.h"
-#include "include/Remove.h"
+#include "include/Filterer.hpp"
 #include "include/Utilities.hpp"
 
 #include <clang/Basic/LLVM.h>
@@ -173,127 +172,18 @@ std::vector<std::string> getPathDirectories() {
   return directories;
 }
 
-/// ============================================================================
-/// MAIN FUNCTION SHOULD GO TO DRIVER FUNCTION IN OTHER FILE FOR CALLS WITH FULL
-/// ============================================================================
+/// Target for calling the Filterer Individually
 int main(int argc, char** argv) {
-  std::cout << "starting" << std::endl;
-  bool debug = false;
-  if (argc == 2) {
-    std::filesystem::path pathObject;
-    pathObject.append(argv[1]);
+  if (argc == 3) {
+    Filterer filter;
+    filter.run(argc, argv);
 
-    std::vector<std::string> filesToFilter = std::vector<std::string>();
-
-    std::cout << "Path: " << pathObject.string() << std::endl;
-    /// Check Path exists and get list of files to filter
-    getAllCFiles(pathObject, filesToFilter, debug);
-
-    /// Set args for AST creation
-    std::vector<std::string> args = std::vector<std::string>();
-    /*args.push_back("-v");*/
-    std::vector<std::string> paths = getPathDirectories();
-    for (const std::string &dir : paths) {
-      args.push_back("-I" + dir);
-    }
-
-    std::string indent = "    ";
-    /// Loop over all c files in filter list and run through the checker before
-    /// creating the AST
-    for (std::string fileName : filesToFilter) {
-      std::shared_ptr<std::string> contents = std::make_shared<std::string>();
-      if (checkPotentialFile(fileName, contents, 10, false)) {
-        std::filesystem::path oldPath(fileName);
-        std::filesystem::path newPath(std::filesystem::current_path() / "filteredFiles");
-        for (const std::filesystem::path &component : oldPath) {
-          if (component.string() != oldPath.begin()->string() && component.string() != "..") {
-            newPath /= component;
-          }
-        }
-        std::filesystem::create_directories(newPath.parent_path());
-        std::ofstream filteredFile(newPath.string());
-        if (filteredFile.is_open()) {
-          filteredFile << *contents;
-          filteredFile.close();
-        } else {
-          std::cout << "Could Not Create Filtered File: " << newPath.string() << std::endl;
-        }
-        /// Use args and file content to generate
-        std::cout << "Creating astUnit for: " << fileName << std::endl;
-        std::unique_ptr<clang::ASTUnit> astUnit =
-          clang::tooling::buildASTFromCodeWithArgs(*contents, args, newPath.string());
-        if (debug) {
-          std::cout << *contents << std::endl;
-        }
-
-        if (!astUnit) {
-          std::cout << indent << "AST Unit failed to build" << std::endl;
-          break;
-        }
-
-        clang::ASTContext &Context = astUnit->getASTContext();
-
-        if (debug) {
-          std::cout << indent << "Diagnostics" << std::endl;
-          astUnit->getDiagnostics();
-          Context.PrintStats();
-        }
-
-        std::cout << "Main File Name: " << astUnit->getMainFileName().str() << std::endl;
-        std::cout << "Creating Counting Visitor" << std::endl;
-        CountNodesVisitor countVisitor(&Context);
-
-        std::cout << indent << "Traversing AST" << std::endl;
-        std::cout << indent << countVisitor.TraverseAST(Context) << std::endl;
-
-        if (debug) {
-          std::cout << indent << "Printing Report" << std::endl;
-          countVisitor.PrintReport(fileName);
-        }
-
-        std::cout << indent << "Removing Nodes" << std::endl;
-        clang::Rewriter Rewrite;
-        Rewrite.setSourceMgr(astUnit->getSourceManager(), astUnit->getLangOpts());
-        RemoveFuncVisitor RemoveLameFuncVisitor(&Context, Rewrite, {"doesThing"});
-        RemoveLameFuncVisitor.TraverseAST(Context);
-
-        std::cout << indent << "Re-Traversing AST" << std::endl;
-        CountNodesVisitor reCountVisitor(&Context);
-        reCountVisitor.TraverseAST(Context);
-        if (debug) {
-          reCountVisitor.PrintReport(fileName);
-        }
-
-        std::string hello = "---------------------------------\n"
-          "!! This File Has Been Modified !!\n"
-          "---------------------------------\n";
-
-        std::cout << "OverWriting" << std::endl;
-        Rewrite.setSourceMgr(Context.getSourceManager(), astUnit->getLangOpts());
-        std::cout << Rewrite.overwriteChangedFiles() << std::endl;
-
-        if (debug) {
-          std::ifstream file(newPath.string());
-          std::stringstream buffer;
-
-          if (file.is_open()) {
-            buffer << file.rdbuf();
-            file.close();
-            const std::string fileContents = buffer.str();
-            std::cout << fileContents << std::endl;
-          }
-        }
-
-        if (!astUnit) {
-          std::cerr << "Failed to build AST for: " << fileName << std::endl;
-        }
-
-    } else {
-      std::cerr << "File: " << fileName << " Does Not Meet Criteria" << std::endl;
-      }
-    }
   } else {
   std::cout << "Incorrect Number of Args" << std::endl;
+  std::cout << "Please Give the Location of the File or Directory to Filter "
+               "and the Location of the Configuration File\n"
+               "Example: `<filter> <directory> <config-file>`"
+            << std::endl;
   return 1;
   }
 }

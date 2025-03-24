@@ -169,8 +169,8 @@ bool CountNodesVisitor::VisitIfStmt(clang::IfStmt *If) {
   if (_mgr->isInMainFile(If->getIfLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*If);
     _allFunctions[currentFunc]->numIfStmt++;
-    /*std::cout << "If Bool Count: " << _isInBinCompOp << std::endl;*/
-    /*If->dumpColor();*/
+    // std::cout << "If Bool Count: " << _isInBinCompOp << std::endl;
+    // If->dumpColor();
     if (If->getCond()->getExprStmt()->getType()->isIntegerType()) {
       // TODO this is almost always true due to being the result of the if
       // not the types being compared
