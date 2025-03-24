@@ -1,9 +1,12 @@
 #pragma once
 
+#include "Filter.h"
+
 #include <filesystem>
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 class Filterer {
@@ -19,6 +22,8 @@ public:
            int numFiles = 0);
 
   std::vector<std::string> getPathDirectories();
+
+  std::vector<std::string> filterFunctions(std::unordered_map<std::string, CountNodesVisitor::attributes*> functions);
 
   void debugInfo(std::string info);
 
@@ -67,8 +72,8 @@ private:
     {"minNumIfStmt", 1},
     {"minNumVarRefInt", 1},
     {"minNumOpCompare", 1},
-    {"minFileLoc", 5},
-    {"maxFileLoc", 2000},
+    {"minFileLoC", 5},
+    {"maxFileLoC", 2000},
     {"debug", 1},
     {"useNonStdHeaders", 0},
   };

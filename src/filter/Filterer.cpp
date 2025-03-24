@@ -1,5 +1,6 @@
 #include "include/Filterer.hpp"
-#include "include/Filter.h"
+
+#include "Filter.h"
 #include "include/Remove.h"
 #include "include/Utilities.hpp"
 
@@ -7,6 +8,9 @@
 #include <fstream>
 #include <iostream>
 #include <regex>
+#include <string>
+#include <unordered_map>
+#include <utility>
 
 Filterer::Filterer(){};
 
@@ -44,10 +48,8 @@ void Filterer::parseConfigFile(std::string configFile) {
     }
     file.close();
     std::cout << "Using Config Settings:" << std::endl;
-    if (config["debug"]) {
-      for (std::pair item : config) {
-        std::cout << "Property: " << item.first << "=" << item.second << std::endl;
-      }
+    for (std::pair item : config) {
+      std::cout << "Property: " << item.first << "=" << item.second << std::endl;
     }
   } else {
     std::cerr << "File Failed to Open" << std::endl;
@@ -63,9 +65,10 @@ bool Filterer::checkPotentialFile(std::string fileName,
                                   std::shared_ptr<std::string> contents) {
   std::ifstream file(fileName);
   std::stringstream buffer;
+  std::cout << fileName << std::endl;
 
   if (file.is_open()) {
-    std::regex pattern("#(include|import)\\s*[<\"]([\\w\\/0-9\\.]*)[\">]");
+    std::regex pattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
     std::string line;
     std::smatch match;
     int count = 0;
@@ -73,8 +76,10 @@ bool Filterer::checkPotentialFile(std::string fileName,
       if (std::regex_search(line, match, pattern)) {
         if (std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) !=
             stdLibNames.end()) {
-          /*std::cout << match[2] << std::endl;*/
+          std::cout << match[2] << std::endl;
         } else if (!config["useNonStdHeaders"]) {
+          // std::cout << "Used Non Std Header" << std::endl;
+          std::cout << match[2] << std::endl;
           file.close();
           return false;
         }
@@ -86,11 +91,13 @@ bool Filterer::checkPotentialFile(std::string fileName,
     }
     file.close();
     if (count < config["minFileLoC"]) {
+      // std::cout << "Too Small" << std::endl;
       return false;
     } else if (count > config["maxFileLoC"]) {
+      // std::cout << "Too Big" << std::endl;
       return false;
     } else {
-      *contents = buffer.str();
+      *contents += buffer.str();
       return true;
     }
   } else {
@@ -146,6 +153,29 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   return 0;
 }
 
+std::vector<std::string> Filterer::filterFunctions(
+  std::unordered_map<std::string, CountNodesVisitor::attributes *> functions) {
+  std::vector<std::string> functionsToRemove;
+  for (std::pair<std::string, CountNodesVisitor::attributes*> func : functions) {
+    std::string key = func.first;
+    CountNodesVisitor::attributes *attr = func.second;
+    if (key == "Program") {
+      continue;
+    } else if (attr->numIfStmt < config["minNumIfStmt"]) {
+      functionsToRemove.push_back(key);
+    } else if (attr->numLoopFor > config["maxNumLoopFor"]) {
+      functionsToRemove.push_back(key);
+    } else if (attr->numLoopWhile > config["maxNumLoopWhile"]) {
+      functionsToRemove.push_back(key);
+    } else if (attr->numVarRefInt < config["minNumVarRefInt"]) {
+      functionsToRemove.push_back(key);
+    } else if (attr->numOpCompare < config["minNumOpCompare"]) {
+      functionsToRemove.push_back(key);
+    }
+  }
+  return functionsToRemove;
+}
+
 /// checks the users path for path to libc files for ast generation
 std::vector<std::string> Filterer::getPathDirectories() {
   std::vector<std::string> directories;
@@ -194,11 +224,18 @@ int Filterer::run(int argc, char **argv) {
       args.push_back("-I" + dir);
     }
 
-    std::string indent = "    ";
+    // string indent to use for organizing debug statements
+    std::string indent = "    "; // TODO something about this, is it needed?
+    std::string hello = "// ---------------------------------\n"
+                        "// !! This File Has Been Modified !!\n"
+                        "// ---------------------------------\n";
+
     /// Loop over all c files in filter list and run through the checker before
     /// creating the AST
     for (std::string fileName : filesToFilter) {
       std::shared_ptr<std::string> contents = std::make_shared<std::string>();
+      *contents += hello;
+      std::cout << *contents << std::endl;
       if (checkPotentialFile(fileName, contents)) {
         std::filesystem::path oldPath(fileName);
         std::filesystem::path newPath(std::filesystem::current_path() /
@@ -210,15 +247,7 @@ int Filterer::run(int argc, char **argv) {
             newPath /= component;
           }
         }
-        std::filesystem::create_directories(newPath.parent_path());
-        std::ofstream filteredFile(newPath.string());
-        if (filteredFile.is_open()) {
-          filteredFile << *contents;
-          filteredFile.close();
-        } else {
-          std::cout << "Could Not Create Filtered File: " << newPath.string()
-                    << std::endl;
-        }
+
         /// Use args and file content to generate
         std::cout << "Creating astUnit for: " << fileName << std::endl;
         std::unique_ptr<clang::ASTUnit> astUnit =
@@ -254,31 +283,57 @@ int Filterer::run(int argc, char **argv) {
           countVisitor.PrintReport(fileName);
         }
 
+        std::unordered_map<std::string, CountNodesVisitor::attributes*> functions = countVisitor.ReportAttributes();
+        std::vector<std::string> functionsToRemove = filterFunctions(functions);
+
+        // If all funtions besides the global 'function', Program, which holds
+        // all variables and declarations made outside of functions are removed
+        // then do not add the file
+        if (functions.size() - functionsToRemove.size() <= 1) {
+          std::cout << "No Potential Funtions In: " << fileName << std::endl;
+          std::cout << "Moving to Next Potential File" << std::endl;
+          continue;
+        }
+
+        std::filesystem::create_directories(newPath.parent_path());
+        // std::ofstream filteredFile(newPath.string());
+        // if (filteredFile.is_open()) {
+        //   std::string hello = "// ---------------------------------\n"
+        //                       "// !! This File Has Been Modified !!\n"
+        //                       "// ---------------------------------\n";
+        //   filteredFile << hello;
+        //   filteredFile << *contents;
+        //   filteredFile.close();
+        // } else {
+        //   std::cout << "Could Not Create Potential File: " << newPath.string()
+        //             << std::endl;
+        //   continue;
+        // }
+
         std::cout << indent << "Removing Nodes" << std::endl;
+        for (std::string name : functionsToRemove) {
+          std::cout << name << std::endl;
+        }
         clang::Rewriter Rewrite;
         Rewrite.setSourceMgr(astUnit->getSourceManager(),
                              astUnit->getLangOpts());
-        std::string functionsToRemove = filterFunctions(countVisitor.ReportAttributes());
-
         RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
-                                                {"doesThing"});
+                                                functionsToRemove);
         RemoveFunctionsVisitor.TraverseAST(Context);
 
-        std::cout << indent << "Re-Traversing AST" << std::endl;
-        CountNodesVisitor reCountVisitor(&Context);
-        reCountVisitor.TraverseAST(Context);
-        if (config["debug"]) {
-          reCountVisitor.PrintReport(fileName);
-        }
+        // std::cout << indent << "Re-Traversing AST" << std::endl;
+        // CountNodesVisitor reCountVisitor(&Context);
+        // reCountVisitor.TraverseAST(Context);
+        // if (config["debug"]) {
+        //   reCountVisitor.PrintReport(fileName);
+        // }
 
-        std::string hello = "---------------------------------\n"
-                            "!! This File Has Been Modified !!\n"
-                            "---------------------------------\n";
-
-        std::cout << "OverWriting" << std::endl;
+        // TODO check if overwrite requires that there already be text in the file
+        std::cout << "Writing File" << std::endl;
         Rewrite.setSourceMgr(Context.getSourceManager(),
                              astUnit->getLangOpts());
         std::cout << Rewrite.overwriteChangedFiles() << std::endl;
+
 
         if (config["debug"]) {
           std::ifstream file(newPath.string());
@@ -292,7 +347,6 @@ int Filterer::run(int argc, char **argv) {
             file.close();
           }
         }
-
       } else {
         std::cerr << "File: " << fileName << " Does Not Meet Criteria"
                   << std::endl;
