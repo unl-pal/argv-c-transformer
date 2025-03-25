@@ -292,6 +292,9 @@ int Filterer::run(int argc, char **argv) {
         std::filesystem::create_directories(newPath.parent_path());
 
         std::cout << indent << "Removing Nodes" << std::endl;
+        for (std::string name : functionsToRemove) {
+          std::cout << name << std::endl;
+        }
         clang::Rewriter Rewrite;
         Rewrite.setSourceMgr(astUnit->getSourceManager(),
                              astUnit->getLangOpts());

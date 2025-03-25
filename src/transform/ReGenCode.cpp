@@ -60,18 +60,7 @@ bool ReGenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
   if (!D) return false;
   if (_Mgr.isInMainFile(D->getLocation()) &&
       !D->getDeclContext()->getParent()) {
-    if (D->getType()->isBooleanType()) {
-      _Output << "_Bool ";
-      D->printName(_Output);
-      _Output << " = ";
-      D->getAnyInitializer()->getExprStmt()->printPretty(_Output, 0, _C->getPrintingPolicy());
-      /*S->printPretty(llvm::outs(), 0, policy, 0, "\n", _C);*/
-      if (auto *body = D->getBody()) {
-        body->children().begin()->PrintStats();
-      }
-    } else {
-      D->print(_Output);
-    }
+    D->print(_Output);
     _Output << ";\n";
   }
   return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitVarDecl(D);
@@ -80,25 +69,7 @@ bool ReGenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
 bool ReGenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
   if (_Mgr.isInMainFile(D->getLocation())) {
-    if (D->isStruct()) {
-      /*D->print(_Output);*/
-      _Output << "struct ";
-      D->printQualifiedName(_Output);
-      _Output << " {\n";
-      for (const auto &field : D->fields()) {
-        if (field->getType()->isBooleanType()) {
-          _Output << "    _Bool ";
-          _Output << field->getNameAsString();
-        } else {
-          _Output << "    ";
-          field->print(_Output, 2);
-        }
-        _Output << ";\n";
-      }
-      _Output << "}";
-    } else {
       D->print(_Output);
-    }
     _Output << ";\n";
   }
   return true;

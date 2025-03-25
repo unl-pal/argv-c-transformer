@@ -11,6 +11,7 @@
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
+#include <clang/AST/TypeLoc.h>
 #include <clang/Basic/IdentifierTable.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
@@ -19,6 +20,7 @@
 #include <clang/Sema/Ownership.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
+#include <iostream>
 #include <string>
 
 TransformerVisitor::TransformerVisitor(clang::ASTContext *newC, clang::ASTContext *oldC, clang::Rewriter &R) :
@@ -32,13 +34,13 @@ TransformerVisitor::TransformerVisitor(clang::ASTContext *newC, clang::ASTContex
 bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD) {
   clang::TranslationUnitDecl *tempTd = _NewC->getTranslationUnitDecl();
   int size = VerifierFuncs.size();
+  clang::SourceLocation loc = tempTd->getLocation();
   for (int i=0; i<size; i++) {
     clang::IdentifierInfo *funcName = &_NewC->Idents.get(VerifierFuncs[i]);
     clang::DeclarationName declName(funcName);
     clang::QualType returnType = ReturnTypes[i];
     clang::FunctionProtoType::ExtProtoInfo epi;
     clang::QualType funcQualType = _NewC->getFunctionType(returnType, clang::ArrayRef<clang::QualType>(), epi);
-    clang::SourceLocation loc = tempTd->getLocation();
 
     clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
       *_NewC,
@@ -53,12 +55,22 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
     newFunction->setReferenced();
     newFunction->setIsUsed();
     tempTd->addDecl(newFunction);
+    // _R.InsertTextAfterToken(loc, newFunction->getNameAsString());
   }
+
+  clang::TypedefDecl* newTypeDef = clang::TypedefDecl::Create(*_OldC, _NewC->getTranslationUnitDecl(), loc, loc, &_NewC->Idents.get("bool"), _OldC->getTrivialTypeSourceInfo(_OldC->BoolTy));
+  // newTypeDef->dumpColor();
+  newTypeDef->setIsUsed();
+  newTypeDef->setReferenced();
+  tempTd->addDecl(newTypeDef);
+  // _R.InsertTextAfterToken(loc, newTypeDef->getNameAsString());
   for (clang::Decl *decl : TD->decls()) {
     tempTd->addDecl(decl);
+  // _R.InsertTextAfter(loc, decl->getSourceRange().printToString(*_M));
   }
-  /*TD = tempTd;*/
-  /*return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);*/
+  // std::cout << "Nope" << std::endl;
+  // TD = tempTd;
+  // return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(tempTd);
 }
 
@@ -72,48 +84,11 @@ bool TransformerVisitor::VisitStmt(clang::Stmt *S) {
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitStmt(S);
 }
 
-/// This is working for identifying function calls that are defined
 bool TransformerVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
   if (!_OldC->getSourceManager().isInMainFile(D->getLocation())) return true;
-  /*if (D->getType()->isFunctionType()) {*/
-    /*if (D->getDecl()->isCanonicalDecl()) {*/
-    /*if (clang::Decl *d = D->getDecl()) {*/
-    /*  if (clang::FunctionDecl *func = d->getAsFunction()) {*/
-    /*    if ((func->isImplicit()) || (!func->isDefined() && !func->isExternC())) {*/
-          ///
-          /*std::string myType = func->getReturnType().getAsString();*/
-          /*D->dumpColor();*/
-          /*clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);*/
-          /*clang::DeclarationName newName(newInfo);*/
-          /*func->setDeclName(newName);*/
-          /*func->dumpColor();*/
-          ///
-          /*for (auto * arg : func->decls()) {*/
-            /*func->removeDecl(arg);*/
-          /*}*/
-          /*for (clang::ParmVarDecl *param : func->parameters()) {*/
-            /*func->removeDecl(param);*/
-          /*}*/
-          /*func->dumpColor();*/
-          /*func->setParams(clang::ArrayRef<clang::ParmVarDecl*>());*/
-          /*D->dumpColor();*/
-          /*newFunction->setReferenced();*/
-          /*newFunction->setIsUsed();*/
-          /*newFunction->setParams(clang::ArrayRef<clang::ParmVarDecl *>());*/
-          /*_NewC->getTranslationUnitDecl()->removeDecl(d);*/
-    
-          /*func->dumpColor();*/
-          /*D->dumpColor();*/
-          /*return true;*/
-    /*    }*/
-    /*  }*/
-    /*}*/
-    /*}*/
-  /*}*/
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitDeclRefExpr(D);
 }
 
-/// I Think This Can Be Deleted...
 /// Call Expr is the parent of the function decl ref and the args used
 bool TransformerVisitor::VisitCallExpr(clang::CallExpr *E) {
   if (!_OldC->getSourceManager().isInMainFile(E->getExprLoc())) return true;

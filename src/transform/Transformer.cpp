@@ -3,6 +3,7 @@
 #include "include/Transform.hpp"
 
 #include <clang/Tooling/Tooling.h>
+#include <filesystem>
 #include <llvm/ADT/StringRef.h>
 #include <iostream>
 #include <fstream>
@@ -35,9 +36,6 @@ bool Transformer::transformFile(std::filesystem::path path,
   std::filesystem::path full = std::filesystem::current_path() / path;
   getFileContents((full).string(), fileContents);
   /*std::cout << *fileContents << std::endl;*/
-  std::unique_ptr<clang::ASTUnit> oldAstUnit =
-      clang::tooling::buildASTFromCodeWithArgs(*fileContents, args,
-                                               path.string());
 
   std::filesystem::path prePath = std::filesystem::path("preprocessed");
   for (const std::filesystem::path &component : path) {
@@ -45,6 +43,10 @@ bool Transformer::transformFile(std::filesystem::path path,
       prePath /= component;
     }
   }
+  std::unique_ptr<clang::ASTUnit> oldAstUnit =
+      clang::tooling::buildASTFromCodeWithArgs(*fileContents, args,
+                                               prePath.string());
+                                               // path.string());
   prePath.replace_extension(".i");
   std::unique_ptr<clang::ASTUnit> newAstUnit =
       clang::tooling::buildASTFromCodeWithArgs("", std::vector<std::string>({}),
@@ -60,12 +62,21 @@ bool Transformer::transformFile(std::filesystem::path path,
   clang::ASTContext &newContext = newAstUnit->getASTContext();
 
   clang::Rewriter R;
-  R.setSourceMgr(newContext.getSourceManager(), oldAstUnit->getLangOpts());
+  R.setSourceMgr(oldAstUnit->getSourceManager(), oldAstUnit->getLangOpts());
+  // R.setSourceMgr(newAstUnit->getSourceManager(), newAstUnit->getLangOpts());
   TransformerVisitor transformerVisitor(&newContext, &oldContext, R);
   transformerVisitor.TraverseAST(oldContext);
 
-  /*newContext.getTranslationUnitDecl()->dumpColor();*/
+  std::filesystem::create_directories(prePath.parent_path());
+  // newContext.getTranslationUnitDecl()->dumpColor();
+  std::cout << "Writing File" << std::endl;
+  // R.setSourceMgr(newContext.getSourceManager(), newAstUnit->getLangOpts());
+  // R.setSourceMgr(newContext.getSourceManager(), newAstUnit->getLangOpts());
+  // R.overwriteChangedFiles();
+  std::cout << "Wrotteded it" << std::endl;
 
+
+  prePath.replace_extension(".i");
   std::error_code ec;
   std::filesystem::create_directories(prePath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(prePath.string()), ec);
