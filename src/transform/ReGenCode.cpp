@@ -34,10 +34,11 @@ bool ReGenCodeVisitor::VisitDecl(clang::Decl *D) {
       yes = true;
     }
   } else if (D->isFunctionOrFunctionTemplate() || D->getKind() == D->Typedef) {
-    if (D->isUsed()) {
+    if (D->isUsed() && D->isReferenced()) {
+    // if (D->isUsed()) {
       yes = true;
-      } else if (D->isReferenced()) {
-      yes = true;
+      // } else if (D->isReferenced()) {
+      // yes = true;
     /*} else if (D->Typedef) {*/
     }
   }

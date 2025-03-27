@@ -8,6 +8,7 @@
 #include <clang/AST/DeclarationName.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/NestedNameSpecifier.h>
+#include <clang/AST/RawCommentList.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
@@ -20,7 +21,6 @@
 #include <clang/Sema/Ownership.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
-#include <iostream>
 #include <string>
 
 TransformerVisitor::TransformerVisitor(clang::ASTContext *newC, clang::ASTContext *oldC, clang::Rewriter &R) :
@@ -34,6 +34,7 @@ TransformerVisitor::TransformerVisitor(clang::ASTContext *newC, clang::ASTContex
 bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD) {
   clang::TranslationUnitDecl *tempTd = _NewC->getTranslationUnitDecl();
   int size = VerifierFuncs.size();
+  clang::SourceLocation oldLoc = TD->getLocation();
   clang::SourceLocation loc = tempTd->getLocation();
   for (int i=0; i<size; i++) {
     clang::IdentifierInfo *funcName = &_NewC->Idents.get(VerifierFuncs[i]);
@@ -56,6 +57,11 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
     newFunction->setIsUsed();
     tempTd->addDecl(newFunction);
     // _R.InsertTextAfterToken(loc, newFunction->getNameAsString());
+    // newFunction->dumpAsDecl(llvm::outs());
+    // newFunction->print(llvm::outs());
+    // llvm::outs() << "\n";
+    // _R.InsertTextAfterToken(newFunction->getLocation(), newFunction->getNameAsString());
+    // _R.InsertTextAfterToken(oldLoc, newFunction->getNameAsString());
   }
 
   clang::TypedefDecl* newTypeDef = clang::TypedefDecl::Create(*_OldC, _NewC->getTranslationUnitDecl(), loc, loc, &_NewC->Idents.get("bool"), _OldC->getTrivialTypeSourceInfo(_OldC->BoolTy));
@@ -64,14 +70,25 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
   newTypeDef->setReferenced();
   tempTd->addDecl(newTypeDef);
   // _R.InsertTextAfterToken(loc, newTypeDef->getNameAsString());
+  // _R.InsertTextAfterToken(oldLoc, newTypeDef->getNameAsString());
   for (clang::Decl *decl : TD->decls()) {
     tempTd->addDecl(decl);
-  // _R.InsertTextAfter(loc, decl->getSourceRange().printToString(*_M));
+    // _R.InsertTextAfter(oldLoc, decl->getSourceRange().printToString(*_M));
   }
+  // auto comments = _OldC->Comments.getCommentsInFile(_OldC->getSourceManager().getMainFileID());
+  // for (auto it = comments->begin(); it != comments->end(); it++) {
+  //   clang::RawComment *comment = it->second;
+  //   std::string source = comment->getFormattedText(_OldC->getSourceManager(), _OldC->getDiagnostics());
+  //   // _R.InsertTextBefore(TD->getLocation(), source);
+  //   llvm::outs() << source + "\n";
+  // }
   // std::cout << "Nope" << std::endl;
   // TD = tempTd;
-  // return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);
-  return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(tempTd);
+  // tempTd->dumpColor();
+  // tempTd->print(llvm::outs());
+  // TD->print(llvm::outs());
+  return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);
+  // return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(tempTd);
 }
 
 bool TransformerVisitor::VisitDecl(clang::Decl *D) {
