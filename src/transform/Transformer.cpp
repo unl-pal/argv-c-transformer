@@ -3,6 +3,7 @@
 #include "include/Transform.hpp"
 
 #include <clang/Tooling/Tooling.h>
+#include <filesystem>
 #include <llvm/ADT/StringRef.h>
 #include <iostream>
 #include <fstream>
@@ -35,20 +36,25 @@ bool Transformer::transformFile(std::filesystem::path path,
   std::filesystem::path full = std::filesystem::current_path() / path;
   getFileContents((full).string(), fileContents);
   /*std::cout << *fileContents << std::endl;*/
-  std::unique_ptr<clang::ASTUnit> oldAstUnit =
-      clang::tooling::buildASTFromCodeWithArgs(*fileContents, args,
-                                               path.string());
 
-  std::filesystem::path prePath = std::filesystem::path("preprocessed");
+  std::filesystem::path srcPath = std::filesystem::path("benchmark");
+  std::filesystem::path preprocessedPath = std::filesystem::path("preprocessed");
   for (const std::filesystem::path &component : path) {
     if (component.string() != path.begin()->string() && component.string() != "..") {
-      prePath /= component;
+      preprocessedPath /= component;
+      srcPath /= component;
     }
   }
-  prePath.replace_extension(".i");
+
+  std::unique_ptr<clang::ASTUnit> oldAstUnit =
+    clang::tooling::buildASTFromCodeWithArgs(*fileContents, args,
+                                             srcPath.string());
+
+  // preprocessedPath.replace_extension(".i");
   std::unique_ptr<clang::ASTUnit> newAstUnit =
       clang::tooling::buildASTFromCodeWithArgs("", std::vector<std::string>({}),
-                                               prePath.string());
+      // clang::tooling::buildASTFromCodeWithArgs(*fileContents, std::vector<std::string>({}),
+                                               preprocessedPath.string());
 
   if(!oldAstUnit || !newAstUnit) {
     std::cerr << "Failed to Build AST" << std::endl;
@@ -60,17 +66,23 @@ bool Transformer::transformFile(std::filesystem::path path,
   clang::ASTContext &newContext = newAstUnit->getASTContext();
 
   clang::Rewriter R;
-  R.setSourceMgr(newContext.getSourceManager(), oldAstUnit->getLangOpts());
+  R.setSourceMgr(oldContext.getSourceManager(), oldAstUnit->getLangOpts());
   TransformerVisitor transformerVisitor(&newContext, &oldContext, R);
   transformerVisitor.TraverseAST(oldContext);
 
   /*newContext.getTranslationUnitDecl()->dumpColor();*/
 
   std::error_code ec;
-  std::filesystem::create_directories(prePath.parent_path());
-  llvm::raw_fd_ostream output(llvm::StringRef(prePath.string()), ec);
+  std::filesystem::create_directories(preprocessedPath.parent_path());
+  llvm::raw_fd_ostream output(llvm::StringRef(preprocessedPath.string()), ec);
   ReGenCodeVisitor codeReGenVisitor(&newContext, output);
   codeReGenVisitor.TraverseAST(newContext);
+
+  std::filesystem::create_directories(srcPath.parent_path());
+  llvm::raw_fd_ostream srcOutput(llvm::StringRef(srcPath.string()), ec);
+  R.setSourceMgr(oldContext.getSourceManager(), newAstUnit->getLangOpts());
+  R.InsertTextBefore(oldContext.getTranslationUnitDecl()->getLocation(), "// Benchmark File");
+  R.getEditBuffer(oldContext.getSourceManager().getFileID(oldAstUnit->getStartOfMainFileID())).write(srcOutput);
 
   /*oldAstUnit->Save("output.ast");*/
   return true;
@@ -134,6 +146,10 @@ int Transformer::run(std::string filePath) {
       args.push_back("-I" + dir);
     }
     /// run the transformer on the file structure
+    if (transformAll(path, args)) {
+      return 0;
+    }
+    // std::vector<std::string> args = {"-I stdHeaders"};
     if (transformAll(path, args)) {
       return 0;
     }

@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.30.7)
 
+set(CMAKE_CXX_COMPILER clang++)
+set(CMAKE_C_COMPILER clang)
+
 project(
   MyTransform
   VERSION 0.0.0

@@ -5,8 +5,10 @@
 #include "include/Utilities.hpp"
 
 #include <clang/Tooling/Tooling.h>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <llvm/Support/raw_ostream.h>
 #include <regex>
 #include <string>
 #include <unordered_map>
@@ -88,8 +90,10 @@ bool Filterer::checkPotentialFile(std::string fileName,
     }
     file.close();
     if (count < config["minFileLoC"]) {
+      *contents = "";
       return false;
     } else if (count > config["maxFileLoC"]) {
+      *contents = "";
       return false;
     } else {
       *contents += buffer.str();
@@ -214,6 +218,7 @@ int Filterer::run(int argc, char **argv) {
     /// Set args for AST creation
     /// including path to c standard headers from user path
     std::vector<std::string> args = std::vector<std::string>();
+    // args.push_back("-IstdHeaders");
     std::vector<std::string> paths = getPathDirectories();
     for (const std::string &dir : paths) {
       args.push_back("-I" + dir);
@@ -222,7 +227,7 @@ int Filterer::run(int argc, char **argv) {
     // string indent to use for organizing debug statements
     std::string indent = "    "; // TODO something about this, is it needed?
     std::string hello = "// ---------------------------------\n"
-                        "// !! This File Has Been Modified !!\n"
+                        "// !! This File Has Been Filtered !!\n"
                         "// ---------------------------------\n";
 
     /// Loop over all c files in filter list and run through the checker before
@@ -283,7 +288,7 @@ int Filterer::run(int argc, char **argv) {
         // If all funtions besides the global 'function', Program, which holds
         // all variables and declarations made outside of functions are removed
         // then do not add the file
-        if (functions.size() - functionsToRemove.size() <= 1) {
+        if (functions.size() && functions.size() - functionsToRemove.size() <= 1) {
           std::cout << "No Potential Funtions In: " << fileName << std::endl;
           std::cout << "Moving to Next Potential File" << std::endl;
           continue;
@@ -291,21 +296,36 @@ int Filterer::run(int argc, char **argv) {
 
         std::filesystem::create_directories(newPath.parent_path());
 
-        std::cout << indent << "Removing Nodes" << std::endl;
         clang::Rewriter Rewrite;
-        Rewrite.setSourceMgr(astUnit->getSourceManager(),
-                             astUnit->getLangOpts());
-        RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
-                                                functionsToRemove);
-        RemoveFunctionsVisitor.TraverseAST(Context);
-
-        std::cout << "Writing File" << std::endl;
         Rewrite.setSourceMgr(Context.getSourceManager(),
                              astUnit->getLangOpts());
-        std::cout << Rewrite.overwriteChangedFiles() << std::endl;
+        if (functionsToRemove.size()) {
+          std::cout << indent << "Removing Nodes\n";
+          for (std::string node : functionsToRemove) {
+            std::cout << indent << indent << node + "\n";
+          }
+          std::cout << std::endl;
+          // Rewrite.setSourceMgr(astUnit->getSourceManager(),
+          RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
+                                                   functionsToRemove);
+          RemoveFunctionsVisitor.TraverseAST(Context);
+        }
+
+        std::cout << "Writing File" << std::endl;
+        // Rewrite.setSourceMgr(Context.getSourceManager(),
+        //                      astUnit->getLangOpts());
+        // Rewrite.getEditBuffer(Context.getSourceManager().getFileID(Context.getFullLoc(astUnit->getSourceManager().dump()))).write(llvm::outs());
+        // Rewrite.getEditBuffer(Context.getSourceManager().getFileID(Context.getTranslationUnitDecl()->getLocation())).write(llvm::outs());
+        Rewrite.InsertTextBefore(Context.getTranslationUnitDecl()->decls_begin()->getBeginLoc(), "// ========== Try Again Filter ==========\n");
+        std::error_code ec;
+        llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
+        Rewrite.getEditBuffer(Context.getSourceManager().getFileID(astUnit->getStartOfMainFileID())).write(output);
+        // std::ofstream file(newPath.string());
+        // std::cout << Rewrite.overwriteChangedFiles() << std::endl;
+        std::cout << "Finished Rewrite step" << std::endl;
 
 
-        if (config["debug"]) {
+        if (config["debug"] && std::filesystem::exists(newPath)) {
           std::ifstream file(newPath.string());
           std::stringstream buffer;
 

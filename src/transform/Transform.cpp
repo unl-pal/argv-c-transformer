@@ -17,6 +17,7 @@
 #include <clang/Basic/Specifiers.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Sema/Ownership.h>
+#include <iterator>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <string>
@@ -53,9 +54,11 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
     newFunction->setReferenced();
     newFunction->setIsUsed();
     tempTd->addDecl(newFunction);
+    _R.InsertTextBefore(tempTd->getBeginLoc(), declName.getAsString());
   }
   for (clang::Decl *decl : TD->decls()) {
     tempTd->addDecl(decl);
+    _R.InsertTextBefore(TD->getLocation(), decl->getSourceRange().printToString(_NewC->getSourceManager()));
   }
   /*TD = tempTd;*/
   /*return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);*/
@@ -128,6 +131,7 @@ bool TransformerVisitor::VisitCallExpr(clang::CallExpr *E) {
       /*func->dumpColor();*/
       E->shrinkNumArgs(0);
       /*E->dumpColor();*/
+      _R.ReplaceText(E->getSourceRange(), newName.getAsString() + "()");
     }
   }
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitCallExpr(E);

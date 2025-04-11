@@ -1,5 +1,6 @@
 #pragma once
 
+#include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
@@ -22,12 +23,16 @@ public:
 		int numFunctions = 0;
 		int numIfStmt = 0;
 		int numIfStmtInt = 0;
+		int numIntParam = 0;
 		int numLoopFor = 0;
 		int numLoopWhile = 0;
 		int numOpBinary = 0;
 		int numOpCompare = 0;
 		int numOpCondition = 0;
 		int numOpUnary = 0;
+		int numParam = 0;
+		int numPostfix = 0;
+		int numPrefix = 0;
 		int numVarFloat = 0;
 		int numVarInt = 0;
 		int numVarPoint = 0;
@@ -73,6 +78,8 @@ public:
 	bool VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O);
 
 	bool VisitType(clang::Type *T);
+
+	bool VisitImplicitParamDecl(clang::ImplicitParamDecl *D);
 
 	std::unordered_map<std::string, attributes*> ReportAttributes();
 

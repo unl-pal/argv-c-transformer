@@ -11,6 +11,7 @@
 #include <clang/Basic/LangStandard.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <llvm/Support/raw_ostream.h>
 #include <vector>
 
 RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext *C, clang::Rewriter &R,
@@ -22,10 +23,12 @@ bool RemoveFuncVisitor::VisitStmt(clang::Stmt *S) {
 }
 
 bool RemoveFuncVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
-  return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitDecl(D);
+  if (!D) return true;
+  return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitTranslationUnitDecl(D);
 }
 
 bool RemoveFuncVisitor::VisitDecl(clang::Decl *D) {
+  if (!D) return false;
   return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitDecl(D);
 }
 
@@ -34,6 +37,7 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (_mgr.isInMainFile(D->getLocation())) {
     for (std::string& name : _toRemove) {
       if (name == D->getNameAsString()) {
+        llvm::outs() << "Removing Node: " << D->getNameAsString() << "\n";
         // TODO replace all references to the function with a 'type' ref
         /*clang::QualType type = D->getReturnType();*/
         /*D->getDeclContext()->getParent()->removeDecl(D);*/
@@ -42,25 +46,27 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         /// TODO check if this works with the tree regen
         /// keeps function def
         /// loses function body
-        D->setBody(nullptr);
+        // _R.InsertTextBefore(D->getBeginLoc(), "// ====== Try Again Little Remover ======\n");
+        // D->setBody(nullptr);
         /// TODO remove this?? VV
-        if (clang::TranslationUnitDecl *TU =
-                clang::dyn_cast<clang::TranslationUnitDecl>(
-                    D->getDeclContext())) {
-          auto thing = D->getSourceRange();
-          _R.RemoveText(thing);
-          TU->removeDecl(D);
-        /// TODO remove this?? ^^
-          return true;
-        }
+        // if (clang::TranslationUnitDecl *TU =
+        //         clang::dyn_cast<clang::TranslationUnitDecl>(
+        //             D->getDeclContext())) {
+        //   // TU->removeDecl(D);
+        // /// TODO remove this?? ^^
+        //   // return false;
+        // }
+        _R.ReplaceText( D->getSourceRange(), "// === Once More Little Remove ===\n");
+        return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
       }
     }
-    return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
+    // _R.InsertTextBefore(D->getSourceRange().getBegin(), "// Keeping Function: \n");
+    // return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
   }
-  return true;
+    return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
 }
 
-// 
+// TODO Remove this for now?
 bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
   /*if (E->EvaluateAsBooleanCondition(bool &Result, const ASTContext &Ctx)) {*/
   if (!E) return false;
