@@ -17,7 +17,6 @@
 #include <clang/Basic/Specifiers.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Sema/Ownership.h>
-#include <iterator>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <string>
@@ -60,8 +59,16 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
     tempTd->addDecl(decl);
     _R.InsertTextBefore(TD->getLocation(), decl->getSourceRange().printToString(_NewC->getSourceManager()));
   }
-  /*TD = tempTd;*/
-  /*return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);*/
+  // TD = tempTd;
+  // return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);
+  if (_OldC->Comments.empty()) {
+    for (auto comment : *_OldC->Comments.getCommentsInFile(_M->getFileID(TD->getLocation()))) {
+      if (!comment.second->isAttached()) {
+        llvm::outs() << "Comment is not Attached\n";
+        _R.ReplaceText(comment.second->getSourceRange(), "");
+      }
+    }
+  }
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(tempTd);
 }
 
@@ -75,62 +82,23 @@ bool TransformerVisitor::VisitStmt(clang::Stmt *S) {
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitStmt(S);
 }
 
-/// This is working for identifying function calls that are defined
+// This is working for identifying function calls that are defined
 bool TransformerVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
   if (!_OldC->getSourceManager().isInMainFile(D->getLocation())) return true;
-  /*if (D->getType()->isFunctionType()) {*/
-    /*if (D->getDecl()->isCanonicalDecl()) {*/
-    /*if (clang::Decl *d = D->getDecl()) {*/
-    /*  if (clang::FunctionDecl *func = d->getAsFunction()) {*/
-    /*    if ((func->isImplicit()) || (!func->isDefined() && !func->isExternC())) {*/
-          ///
-          /*std::string myType = func->getReturnType().getAsString();*/
-          /*D->dumpColor();*/
-          /*clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);*/
-          /*clang::DeclarationName newName(newInfo);*/
-          /*func->setDeclName(newName);*/
-          /*func->dumpColor();*/
-          ///
-          /*for (auto * arg : func->decls()) {*/
-            /*func->removeDecl(arg);*/
-          /*}*/
-          /*for (clang::ParmVarDecl *param : func->parameters()) {*/
-            /*func->removeDecl(param);*/
-          /*}*/
-          /*func->dumpColor();*/
-          /*func->setParams(clang::ArrayRef<clang::ParmVarDecl*>());*/
-          /*D->dumpColor();*/
-          /*newFunction->setReferenced();*/
-          /*newFunction->setIsUsed();*/
-          /*newFunction->setParams(clang::ArrayRef<clang::ParmVarDecl *>());*/
-          /*_NewC->getTranslationUnitDecl()->removeDecl(d);*/
-    
-          /*func->dumpColor();*/
-          /*D->dumpColor();*/
-          /*return true;*/
-    /*    }*/
-    /*  }*/
-    /*}*/
-    /*}*/
-  /*}*/
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitDeclRefExpr(D);
 }
 
-/// I Think This Can Be Deleted...
-/// Call Expr is the parent of the function decl ref and the args used
+// I Think This Can Be Deleted...
+// Call Expr is the parent of the function decl ref and the args used
 bool TransformerVisitor::VisitCallExpr(clang::CallExpr *E) {
   if (!_OldC->getSourceManager().isInMainFile(E->getExprLoc())) return true;
   if (clang::FunctionDecl *func = E->getCalleeDecl()->getAsFunction()) {
     if ((func->isImplicit()) || (!func->isDefined() && !func->isExternC())) {
-      /*func->dumpColor();*/
       std::string myType = func->getReturnType().getAsString();
-      /*D->dumpColor();*/
       clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);
       clang::DeclarationName newName(newInfo);
       func->setDeclName(newName);
-      /*func->dumpColor();*/
       E->shrinkNumArgs(0);
-      /*E->dumpColor();*/
       _R.ReplaceText(E->getSourceRange(), newName.getAsString() + "()");
     }
   }

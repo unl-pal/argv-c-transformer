@@ -212,10 +212,6 @@ bool CountNodesVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
     if (O->isPostfix()) {
       _allFunctions[currentFunc]->numPostfix++;
     }
-    // O->isKnownToHaveBooleanValue();
-    // O->isLValue();
-    // O->isPRValue();
-    /*O->isNullPointerConstant(*_C, NPC);*/
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitUnaryOperator(O);
 }

@@ -2,8 +2,8 @@
 
 #include "Filter.h"
 #include "include/Remove.h"
-#include "include/Utilities.hpp"
 
+#include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
 #include <filesystem>
 #include <fstream>
@@ -25,7 +25,7 @@ void Filterer::parseConfigFile(std::string configFile) {
   }
   if (file.is_open()) {
     std::cout << "Using: " << configFile << " Specified Settings" << std::endl;
-    std::regex pattern("\\ *(\\w+)\\ *=\\ *([0-9]+|\\w+)");
+    std::regex pattern("^\\ *(\\w+)\\ *=\\ *([0-9]+|\\w+)$");
     std::string line;
     std::smatch match;
     while (std::getline(file, line)) {
@@ -175,25 +175,6 @@ std::vector<std::string> Filterer::filterFunctions(
   return functionsToRemove;
 }
 
-/// checks the users path for path to libc files for ast generation
-std::vector<std::string> Filterer::getPathDirectories() {
-  std::vector<std::string> directories;
-  const char *pathEnv = std::getenv("PATH");
-  if (pathEnv != nullptr) {
-    std::string pathString(pathEnv);
-    std::stringstream ss(pathString);
-    std::string token;
-    char delimiter = ':';
-#ifdef _WIN32
-    delimiter = ';';
-#endif
-    while (std::getline(ss, token, delimiter)) {
-      directories.push_back(token);
-    }
-  }
-  return directories;
-}
-
 void Filterer::debugInfo(std::string info) {
   if (config["debug"]) {
     std::cout << info << std::endl;
@@ -203,7 +184,7 @@ void Filterer::debugInfo(std::string info) {
 /// Main driver for the Filter System
 int Filterer::run(int argc, char **argv) {
   std::cout << "starting" << std::endl;
-  if (argc == 3) {
+  if (argc == 4) {
     parseConfigFile(argv[2]);
 
     std::filesystem::path pathObject(argv[1]);
@@ -216,13 +197,9 @@ int Filterer::run(int argc, char **argv) {
     debugInfo("Files Found: " + std::to_string(filesFound));
 
     /// Set args for AST creation
-    /// including path to c standard headers from user path
     std::vector<std::string> args = std::vector<std::string>();
-    // args.push_back("-IstdHeaders");
-    std::vector<std::string> paths = getPathDirectories();
-    for (const std::string &dir : paths) {
-      args.push_back("-I" + dir);
-    }
+    args.push_back("-fparse-all-comments");
+    args.push_back(std::string("-resource-dir=") + argv[3]);
 
     // string indent to use for organizing debug statements
     std::string indent = "    "; // TODO something about this, is it needed?
@@ -249,6 +226,7 @@ int Filterer::run(int argc, char **argv) {
 
         /// Use args and file content to generate
         std::cout << "Creating astUnit for: " << fileName << std::endl;
+
         std::unique_ptr<clang::ASTUnit> astUnit =
           clang::tooling::buildASTFromCodeWithArgs(*contents, args,
                                                    newPath.string());

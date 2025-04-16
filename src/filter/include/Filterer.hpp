@@ -21,8 +21,6 @@ public:
            std::vector<std::string> &filesToFilter,
            int numFiles = 0);
 
-  std::vector<std::string> getPathDirectories();
-
   std::vector<std::string> filterFunctions(std::unordered_map<std::string, CountNodesVisitor::attributes*> functions);
 
   void debugInfo(std::string info);

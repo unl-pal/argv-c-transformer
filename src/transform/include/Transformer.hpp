@@ -9,9 +9,8 @@ public:
   bool getFileContents(std::string fileName, std::shared_ptr<std::string> contents);
   bool transformFile(std::filesystem::path path, std::vector<std::string> &args);
   bool transformAll(std::filesystem::path path, std::vector<std::string> &args);
-  std::vector<std::string> getPathDirectories();
   void parseConfig();
-  int run(std::string filePath);
+  int run(std::string filePath, std::string resources);
 
 private:
   struct configs {

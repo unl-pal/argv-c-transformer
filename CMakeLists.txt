@@ -27,10 +27,6 @@ set(HEADERS_TRANSFORM
   src/transform/include
 )
 
-set(HEADERS_EXPERIMENT
-  src/transform/include
-)
-
 set(SOURCE_DOWNLOAD
   src/download/download.cpp
   src/download/gitclone.cpp
@@ -44,17 +40,9 @@ set(SOURCE_FILTER
 )
 
 set(SOURCE_TRANSFORM
-  # src/transform/create_ast.cpp
-  # src/transform/pretty_print_visitor.cpp
   src/transform/Transformer.cpp
   src/transform/Transform.cpp
   src/transform/ReGenCode.cpp
-)
-
-set(SOURCE_EXPERIMENT
-  src/transform/experiment.cpp
-  src/transform/IfRewrite.cpp
-  src/transform/MyRewrite.cpp
 )
 
 # FetchContent_Declare(
@@ -91,17 +79,14 @@ include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLA
 add_executable(download src/download/main.cpp ${SOURCE_DOWNLOAD})
 add_executable(filter src/filter/main.cpp ${SOURCE_FILTER})
 add_executable(transform src/transform/main.cpp ${SOURCE_TRANSFORM})
-add_executable(experiment ${SOURCE_EXPERIMENT})
 add_executable(full src/full/main.cpp ${SOURCE_FILTER} ${SOURCE_DOWNLOAD} ${SOURCE_TRANSFORM})
 
-target_include_directories(download PRIVATE ${HEADERS_DOWNLOAD}) # ${libgit2_INC})
-target_include_directories(experiment PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 ${HEADERS_TRANSFORM})
-target_include_directories(filter PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 ${HEADERS_FILTER})
-target_include_directories(transform PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM})
-target_include_directories(full PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM} ${HEADERS_DOWNLOAD} ${HEADERS_FILTER})
+target_include_directories(download SYSTEM PRIVATE ${HEADERS_DOWNLOAD}) # ${libgit2_INC})
+target_include_directories(filter SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 ${HEADERS_FILTER})
+target_include_directories(transform SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM})
+target_include_directories(full SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM} ${HEADERS_DOWNLOAD} ${HEADERS_FILTER})
 
 target_link_libraries(download PRIVATE fmt) # git2 rapidcsv)
-target_link_libraries(experiment PRIVATE fmt LLVMSupport clang-cpp clang LLVM)
 target_link_libraries(filter PRIVATE LLVM LLVMSupport clang-cpp clang)
 target_link_libraries(transform PRIVATE LLVMSupport clang-cpp clang LLVM)
 target_link_libraries(full PRIVATE fmt LLVMSupport clang-cpp clang LLVM)

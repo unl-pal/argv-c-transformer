@@ -2,6 +2,10 @@
 #include "include/ReGenCode.h"
 #include "include/Transform.hpp"
 
+#include <clang/Basic/FileManager.h>
+#include <clang/Frontend/CompilerInstance.h>
+#include <clang/Frontend/CompilerInvocation.h>
+#include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
 #include <filesystem>
 #include <llvm/ADT/StringRef.h>
@@ -9,7 +13,7 @@
 #include <fstream>
 #include <memory>
 
-/// stream file contents to contents shared pointer or return false if file does not open
+// stream file contents to contents shared pointer or return false if file does not open
 bool Transformer::getFileContents(std::string fileName,
                                std::shared_ptr<std::string> contents) {
   std::ifstream file(fileName);
@@ -25,9 +29,9 @@ bool Transformer::getFileContents(std::string fileName,
   }
 }
 
-/// Take an individual file and apply all transformations to it by generating 
-/// the ast, visitors and regenerating the source code as precompiled .i file
-/// returns false if the AST fails to build
+// Take an individual file and apply all transformations to it by generating 
+// the ast, visitors and regenerating the source code as precompiled .i file
+// returns false if the AST fails to build
 bool Transformer::transformFile(std::filesystem::path path,
                              std::vector<std::string> &args) {
   std::cout << "Transforming: " << path.string() << std::endl;
@@ -52,9 +56,8 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   // preprocessedPath.replace_extension(".i");
   std::unique_ptr<clang::ASTUnit> newAstUnit =
-      clang::tooling::buildASTFromCodeWithArgs("", std::vector<std::string>({}),
-      // clang::tooling::buildASTFromCodeWithArgs(*fileContents, std::vector<std::string>({}),
-                                               preprocessedPath.string());
+    clang::tooling::buildASTFromCodeWithArgs("", args, preprocessedPath.string());
+    // clang::tooling::buildASTFromCodeWithArgs(*fileContents, std::vector<std::string>({}),
 
   if(!oldAstUnit || !newAstUnit) {
     std::cerr << "Failed to Build AST" << std::endl;
@@ -88,11 +91,11 @@ bool Transformer::transformFile(std::filesystem::path path,
   return true;
 }
 
-/// Recursive algorithm for traversing the file structure and searching for 
-/// relavent c files to transform
-///     ideally files will have been filtered but some logic exists to prevent
-///     mishaps just incase
-/// Returns false if any C files failed transformation
+// Recursive algorithm for traversing the file structure and searching for 
+// relavent c files to transform
+//     ideally files will have been filtered but some logic exists to prevent
+//     mishaps just incase
+// Returns false if any C files failed transformation
 bool Transformer::transformAll(std::filesystem::path path,
                             std::vector<std::string> &args) {
   if (std::filesystem::exists(path)) {
@@ -112,44 +115,22 @@ bool Transformer::transformAll(std::filesystem::path path,
   return true;
 }
 
-/// checks the users path for path to libc files for ast generation
-std::vector<std::string> Transformer::getPathDirectories() {
-  std::vector<std::string> directories;
-  const char* pathEnv = std::getenv("PATH");
-  if (pathEnv != nullptr) {
-    std::string pathString(pathEnv);
-    std::stringstream ss(pathString);
-    std::string token;
-    char delimiter = ':';
-#ifdef _WIN32
-    delimiter = ';';
-#endif
-    while (std::getline(ss, token, delimiter)) {
-      directories.push_back(token);
-    }
-  }
-  return directories;
-}
-
 void Transformer::parseConfig() {
 }
 
-/// Main function should be transfered to a driver for use via the full implementation
-int Transformer::run(std::string filePath) {
+// Main function should be transfered to a driver for use via the full implementation
+int Transformer::run(std::string filePath, std::string resources) {
   std::filesystem::path path(filePath);
   if (std::filesystem::exists(path)) {
     parseConfig();
-    /// Set args for AST creation
+    // Set args for AST creation
     std::vector<std::string> args = std::vector<std::string>();
-    std::vector<std::string> paths = getPathDirectories();
-    for (const std::string &dir : paths) {
-      args.push_back("-I" + dir);
-    }
-    /// run the transformer on the file structure
+    args.push_back("-fparse-all-comments");
+    args.push_back("-resource-dir=" + resources);
+    // run the transformer on the file structure
     if (transformAll(path, args)) {
       return 0;
     }
-    // std::vector<std::string> args = {"-I stdHeaders"};
     if (transformAll(path, args)) {
       return 0;
     }
