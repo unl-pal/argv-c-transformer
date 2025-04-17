@@ -205,6 +205,10 @@ bool CountNodesVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getOperatorLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
+    // if (O->isArithmeticOp()) {
+    if (O->isArithmeticOp()) {
+      _allFunctions[currentFunc]->numberTypeArithmeticOperation++;
+    }
     _allFunctions[currentFunc]->numOpUnary++;
     if (O->isPrefix()) {
       _allFunctions[currentFunc]->numPrefix++;

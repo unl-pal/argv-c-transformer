@@ -16,6 +16,7 @@ class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
 public:
 
 	struct attributes {
+		int numberTypeArithmeticOperation = 0;
 		int numCallFunc = 0;
 		int numCompChar = 0;
 		int numCompFloat = 0;
