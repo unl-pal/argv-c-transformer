@@ -218,8 +218,7 @@ int Filterer::run(int argc, char **argv) {
                                       "filteredFiles");
         /// set up the new path in filteredFiles to keep directory structure
         for (const std::filesystem::path &component : oldPath) {
-          if (component.string() != oldPath.begin()->string() &&
-              component.string() != "..") {
+          if (component.string() != "..") {
             newPath /= component;
           }
         }

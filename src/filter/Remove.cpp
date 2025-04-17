@@ -36,6 +36,10 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         if (_C->Comments.empty()) {
           llvm::outs() << "There are NO comments in file\n";
         }
+        if (_C->DeclRawComments.count(D)) {
+          clang::SourceRange commentRange = _C->DeclRawComments.find(D)->second->getSourceRange();
+          _R.ReplaceText(commentRange, "");
+        }
         if (clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D)) {
           _R.ReplaceText(rawComment->getSourceRange(), "");
           llvm::outs() << "Handled RawComment\n";

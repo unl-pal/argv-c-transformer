@@ -48,7 +48,6 @@ set(SOURCE_TRANSFORM
   src/transform/Transformer.cpp
   src/transform/Transform.cpp
   src/transform/ReGenCode.cpp
-  src/transform/srcCodeGenerator.cpp
 )
 
 # FetchContent_Declare(

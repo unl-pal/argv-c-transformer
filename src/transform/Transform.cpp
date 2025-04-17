@@ -13,10 +13,12 @@
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
 #include <clang/AST/TypeLoc.h>
+#include <clang/Basic/CommentOptions.h>
 #include <clang/Basic/IdentifierTable.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/Specifiers.h>
+#include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Sema/Ownership.h>
 #include <llvm/Support/Error.h>
@@ -27,7 +29,7 @@ TransformerVisitor::TransformerVisitor(clang::ASTContext *newC, clang::ASTContex
   _NewC(newC),
   _OldC(oldC),
   _R(R),
-  _M(&_NewC->getSourceManager()) {
+  _M(_NewC->getSourceManager()) {
 }
 
 
@@ -36,6 +38,12 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
   int size = VerifierFuncs.size();
   clang::SourceLocation oldLoc = TD->getLocation();
   clang::SourceLocation loc = tempTd->getLocation();
+  // RawComment(const SourceManager &SourceMgr, SourceRange SR,
+  //            const CommentOptions &CommentOpts, bool Merged);
+  // const clang::RawComment *RC = (clang::dyn_cast<clang::RawComment>("Transformed"));
+  clang::RawComment RC(_M, tempTd->getSourceRange(), clang::CommentOptions({}), false);
+  auto commentSrc = RC.getBeginLoc();
+  _NewC->addComment(RC);
   for (int i=0; i<size; i++) {
     clang::IdentifierInfo *funcName = &_NewC->Idents.get(VerifierFuncs[i]);
     clang::DeclarationName declName(funcName);
@@ -56,7 +64,7 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
     newFunction->setReferenced();
     newFunction->setIsUsed();
     tempTd->addDecl(newFunction);
-    _R.InsertTextBefore(tempTd->getBeginLoc(), declName.getAsString());
+    _R.InsertTextBefore(newFunction->getBeginLoc(), declName.getAsString());
   }
 
   clang::TypedefDecl* newTypeDef = clang::TypedefDecl::Create(*_OldC, _NewC->getTranslationUnitDecl(), loc, loc, &_NewC->Idents.get("bool"), _OldC->getTrivialTypeSourceInfo(_OldC->BoolTy));
@@ -64,16 +72,17 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
   newTypeDef->setIsUsed();
   newTypeDef->setReferenced();
   tempTd->addDecl(newTypeDef);
+  _R.InsertTextBefore(tempTd->decls_begin()->getBeginLoc(), newTypeDef->getNameAsString());
   // _R.InsertTextAfterToken(loc, newTypeDef->getNameAsString());
   // _R.InsertTextAfterToken(oldLoc, newTypeDef->getNameAsString());
   for (clang::Decl *decl : TD->decls()) {
     tempTd->addDecl(decl);
-    _R.InsertTextBefore(TD->getLocation(), decl->getSourceRange().printToString(_NewC->getSourceManager()));
+    _R.InsertTextBefore(tempTd->getLocation(), decl->getSourceRange().printToString(_NewC->getSourceManager()));
   }
   // TD = tempTd;
   // return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);
   if (_OldC->Comments.empty()) {
-    for (auto comment : *_OldC->Comments.getCommentsInFile(_M->getFileID(TD->getLocation()))) {
+    for (auto comment : *_OldC->Comments.getCommentsInFile(_M.getFileID(TD->getLocation()))) {
       if (!comment.second->isAttached()) {
         llvm::outs() << "Comment is not Attached\n";
         _R.ReplaceText(comment.second->getSourceRange(), "");
@@ -99,7 +108,6 @@ bool TransformerVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitDeclRefExpr(D);
 }
 
-// I Think This Can Be Deleted...
 // Call Expr is the parent of the function decl ref and the args used
 bool TransformerVisitor::VisitCallExpr(clang::CallExpr *E) {
   if (!_OldC->getSourceManager().isInMainFile(E->getExprLoc())) return true;

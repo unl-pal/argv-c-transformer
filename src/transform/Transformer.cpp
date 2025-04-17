@@ -1,6 +1,5 @@
 #include "include/Transformer.hpp"
 #include "include/ReGenCode.h"
-#include "include/srcCodeGenerator.hpp"
 #include "include/Transform.hpp"
 
 #include <clang/Basic/FileManager.h>
@@ -38,13 +37,15 @@ bool Transformer::transformFile(std::filesystem::path path,
   if (!std::filesystem::exists(path)) return false;
   std::shared_ptr<std::string> fileContents = std::make_shared<std::string>();
   std::filesystem::path full = std::filesystem::current_path() / path;
-  getFileContents((full).string(), fileContents);
+  getFileContents(full.string(), fileContents);
   /*std::cout << *fileContents << std::endl;*/
 
   std::filesystem::path srcPath = std::filesystem::path("benchmark");
   std::filesystem::path preprocessedPath = std::filesystem::path("preprocessed");
+  // Keeps people from being able to write files outside of the project folder for now
+  // Eliminates the filteredFiles part of the path
   for (const std::filesystem::path &component : path) {
-    if (component.string() != path.begin()->string() && component.string() != "..") {
+    if (component.string() != "filteredFiles" && component.string() != "..") {
       preprocessedPath /= component;
       srcPath /= component;
     }
@@ -148,9 +149,6 @@ int Transformer::run(std::string filePath, std::string resources) {
     args.push_back("-fparse-all-comments");
     args.push_back("-resource-dir=" + resources);
     // run the transformer on the file structure
-    if (transformAll(path, args)) {
-      return 0;
-    }
     if (transformAll(path, args)) {
       return 0;
     }

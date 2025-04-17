@@ -28,7 +28,7 @@ private:
   clang::ASTContext *_NewC;
   clang::ASTContext *_OldC;
   clang::Rewriter &_R;
-  clang::SourceManager *_M;
+  const clang::SourceManager &_M;
   std::vector<std::string> VerifierFuncs = {
     "__VERIFIER_nondet_char",
     "__VERIFIER_nondet_double",
