@@ -1,13 +1,7 @@
-cmake_minimum_required(VERSION 3.30.7)
+cmake_minimum_required(VERSION 3.30)
 
 set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_C_COMPILER clang)
-
-project(
-  MyTransform
-  VERSION 0.0.0
-  LANGUAGES CXX C
-)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
@@ -15,6 +9,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "../bin")
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+
+
+project(
+  MyTransform
+  VERSION 0.0.0
+  LANGUAGES CXX C
+)
+
+find_package(Clang REQUIRED)
+find_package(LLVM REQUIRED)
+# find_package(libgit2 REQUIRED)
 
 set(HEADERS_DOWNLOAD
   src/download/include
@@ -43,6 +48,7 @@ set(SOURCE_TRANSFORM
   src/transform/Transformer.cpp
   src/transform/Transform.cpp
   src/transform/ReGenCode.cpp
+  src/transform/srcCodeGenerator.cpp
 )
 
 # FetchContent_Declare(
@@ -69,10 +75,6 @@ endif()
 #   GIT_REPOSITORY d99kris/rapidcsv
 #   GIT_TAG v8.84
 # )
-
-find_package(LLVM REQUIRED)
-find_package(Clang REQUIRED)
-# find_package(libgit2 REQUIRED)
 
 include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local )
 

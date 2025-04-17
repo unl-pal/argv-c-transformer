@@ -1,16 +1,16 @@
 #include "include/Transformer.hpp"
 #include "include/ReGenCode.h"
+#include "include/srcCodeGenerator.hpp"
 #include "include/Transform.hpp"
 
 #include <clang/Basic/FileManager.h>
-#include <clang/Frontend/CompilerInstance.h>
-#include <clang/Frontend/CompilerInvocation.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
 #include <filesystem>
 #include <llvm/ADT/StringRef.h>
 #include <iostream>
 #include <fstream>
+#include <llvm/Support/raw_ostream.h>
 #include <memory>
 
 // stream file contents to contents shared pointer or return false if file does not open
@@ -64,7 +64,6 @@ bool Transformer::transformFile(std::filesystem::path path,
     return false;
   }
 
-
   clang::ASTContext &oldContext = oldAstUnit->getASTContext();
   clang::ASTContext &newContext = newAstUnit->getASTContext();
 
@@ -73,13 +72,34 @@ bool Transformer::transformFile(std::filesystem::path path,
   TransformerVisitor transformerVisitor(&newContext, &oldContext, R);
   transformerVisitor.TraverseAST(oldContext);
 
-  /*newContext.getTranslationUnitDecl()->dumpColor();*/
+  std::filesystem::create_directories(srcPath.parent_path());
+  // newContext.getTranslationUnitDecl()->dumpColor();
+  std::cout << "Writing File" << std::endl;
+  // R.setSourceMgr(newContext.getSourceManager(), newAstUnit->getLangOpts());
+  // R.setSourceMgr(newContext.getSourceManager(), oldAstUnit->getLangOpts());
+  // R.setSourceMgr(oldContext.getSourceManager(), oldAstUnit->getLangOpts());
+  // std::ofstream file(newSrcPath);
+  // file << *fileContents;
+  // file.close();
+
+  // std::shared_ptr<clang::Preprocessor> PP = newAstUnit->getPreprocessorPtr();
+  // clang::Preprocessor *PP = &oldAstUnit->getPreprocessor();
+  // std::cout << "Reparse" << std::endl;
+  // std::shared_ptr blank = std::make_shared<clang::PCHContainerOperations>();
+  // oldAstUnit->Reparse(blank);
+
+  // clang::ASTContext &lastContext = oldAstUnit->getASTContext();
+  // lastContext.getTranslationUnitDecl()->print(llvm::outs());
+  // std::cout << lastContext.getTranslationUnitDecl()->getSourceRange().printToString(lastContext.getSourceManager()) << std::endl;
+  // oldAstUnit->getStartOfMainFileID().dump(oldAstUnit->getSourceManager());
 
   std::error_code ec;
   std::filesystem::create_directories(preprocessedPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(preprocessedPath.string()), ec);
   ReGenCodeVisitor codeReGenVisitor(&newContext, output);
   codeReGenVisitor.TraverseAST(newContext);
+  // ReGenCodeVisitor codeReGenVisitor(&lastContext, output);
+  // codeReGenVisitor.TraverseAST(lastContext);
 
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream srcOutput(llvm::StringRef(srcPath.string()), ec);

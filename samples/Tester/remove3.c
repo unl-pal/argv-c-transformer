@@ -53,7 +53,7 @@ int main() {
   }
 
   // comments by the removed function call
-  doesThing(a0, true);
+  int i = doesThing(a0, true);
 
   struct thing myThing;
   struct thing *myThing2 = &myThing;

@@ -1,9 +1,15 @@
 temp/
 build/
 bin/
+<<<<<<< HEAD
 
 samples/TheAlgorithmsC/
 samples/EggListener.c
+=======
+database/
+/samples/TheAlgorithmsC/
+/samples/EggListener.c
+>>>>>>> feature/4/jckreg/transformComments
 preprocessed/*
 filteredFiles/*
 benchmark/*

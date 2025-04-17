@@ -8,9 +8,11 @@
 #include <clang/AST/DeclarationName.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/NestedNameSpecifier.h>
+#include <clang/AST/RawCommentList.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
+#include <clang/AST/TypeLoc.h>
 #include <clang/Basic/IdentifierTable.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
@@ -32,13 +34,14 @@ TransformerVisitor::TransformerVisitor(clang::ASTContext *newC, clang::ASTContex
 bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD) {
   clang::TranslationUnitDecl *tempTd = _NewC->getTranslationUnitDecl();
   int size = VerifierFuncs.size();
+  clang::SourceLocation oldLoc = TD->getLocation();
+  clang::SourceLocation loc = tempTd->getLocation();
   for (int i=0; i<size; i++) {
     clang::IdentifierInfo *funcName = &_NewC->Idents.get(VerifierFuncs[i]);
     clang::DeclarationName declName(funcName);
     clang::QualType returnType = ReturnTypes[i];
     clang::FunctionProtoType::ExtProtoInfo epi;
     clang::QualType funcQualType = _NewC->getFunctionType(returnType, clang::ArrayRef<clang::QualType>(), epi);
-    clang::SourceLocation loc = tempTd->getLocation();
 
     clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
       *_NewC,
@@ -55,6 +58,14 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
     tempTd->addDecl(newFunction);
     _R.InsertTextBefore(tempTd->getBeginLoc(), declName.getAsString());
   }
+
+  clang::TypedefDecl* newTypeDef = clang::TypedefDecl::Create(*_OldC, _NewC->getTranslationUnitDecl(), loc, loc, &_NewC->Idents.get("bool"), _OldC->getTrivialTypeSourceInfo(_OldC->BoolTy));
+  // newTypeDef->dumpColor();
+  newTypeDef->setIsUsed();
+  newTypeDef->setReferenced();
+  tempTd->addDecl(newTypeDef);
+  // _R.InsertTextAfterToken(loc, newTypeDef->getNameAsString());
+  // _R.InsertTextAfterToken(oldLoc, newTypeDef->getNameAsString());
   for (clang::Decl *decl : TD->decls()) {
     tempTd->addDecl(decl);
     _R.InsertTextBefore(TD->getLocation(), decl->getSourceRange().printToString(_NewC->getSourceManager()));
