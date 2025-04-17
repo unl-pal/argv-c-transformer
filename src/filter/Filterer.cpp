@@ -1,6 +1,5 @@
+#include "include/CountingVisitor.hpp"
 #include "include/Filterer.hpp"
-
-#include "Filter.h"
 #include "include/Remove.h"
 
 #include <clang/Lex/Preprocessor.h>
@@ -160,13 +159,13 @@ std::vector<std::string> Filterer::filterFunctions(
     CountNodesVisitor::attributes *attr = func.second;
     if (key == "Program") {
       continue;
-    } else if (attr->numIfStmt < config["minNumIfStmt"]) {
+    } else if (attr->numberIfStmt < config["minNumIfStmt"]) {
       functionsToRemove.push_back(key);
-    } else if (attr->numLoopFor > config["maxNumLoopFor"]) {
+    } else if (attr->numberForLoops > config["maxNumLoopFor"]) {
       functionsToRemove.push_back(key);
-    } else if (attr->numLoopWhile > config["maxNumLoopWhile"]) {
+    } else if (attr->numberWhileLoops > config["maxNumLoopWhile"]) {
       functionsToRemove.push_back(key);
-    } else if (attr->numVarRefInt < config["minNumVarRefInt"]) {
+    } else if (attr->numberTypeVariableReference < config["minNumVarRefInt"]) {
       functionsToRemove.push_back(key);
     } else if (attr->numOpCompare < config["minNumOpCompare"]) {
       functionsToRemove.push_back(key);
@@ -217,6 +216,7 @@ int Filterer::run(int argc, char **argv) {
         std::filesystem::path newPath(std::filesystem::current_path() /
                                       "filteredFiles");
         /// set up the new path in filteredFiles to keep directory structure
+        // prevent writing outside the project directory for now
         for (const std::filesystem::path &component : oldPath) {
           if (component.string() != "..") {
             newPath /= component;

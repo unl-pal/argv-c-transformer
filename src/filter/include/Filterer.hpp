@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Filter.h"
+#include "CountingVisitor.hpp"
 
 #include <filesystem>
 #include <map>

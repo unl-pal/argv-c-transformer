@@ -25,4 +25,4 @@ echo "=================================== Run Filter ===========================
 ./build/filter samples/Tester/ properties.config "$clangResourceDir"
 
 echo "=================================== Run Transform ==================================="
-./build/transform filteredFiles/Tester "$clangResourceDir"
+./build/transform filteredFiles/ "$clangResourceDir"

@@ -39,7 +39,7 @@ set(SOURCE_DOWNLOAD
 )
 
 set(SOURCE_FILTER
-  src/filter/Filter.cpp
+  src/filter/CountingVisitor.cpp
   src/filter/Filterer.cpp
   src/filter/Remove.cpp
 )
