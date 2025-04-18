@@ -278,6 +278,30 @@ CountNodesVisitor::ReportAttributes() {
   return _allFunctions;
 }
 
+bool CountNodesVisitor::VisitBuiltinType(clang::BuiltinType *T) {
+  T->isIntegerType();
+  if (T->getKind() == 480) {
+    // llvm::outs() << ;
+  }
+
+  switch (T->getKind()) {
+    case clang::BuiltinType::Float:
+      llvm::outs() << "Float\n";
+      break;
+    // case 48:
+    //   llvm::outs() << "Float\n";
+    //   break;
+    case clang::BuiltinType::Int:
+      llvm::outs() << "Int\n";
+      break;
+    default:
+      llvm::outs() << "Was Not A Handled Type: " + std::to_string(T->getKind()) + "\n";
+  }
+  // T->Int;
+  // T->Float;
+  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBuiltinType(T);
+}
+
 // Outdated debugging print statement for the report
 void CountNodesVisitor::PrintReport(std::string fileName) {
   std::cout << fileName << std::endl;

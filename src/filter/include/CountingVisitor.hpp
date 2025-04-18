@@ -14,19 +14,28 @@
 
 class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
 public:
+	
+	struct types {
+
+	};
+
+	enum myTypes {
+		INT = 0
+	};
+
+	// clang::Type::isIntegerType
+	// clang::Type::getAs<>
+	// clang::Stmt::getA
+	// clang::BuiltinType::UChar;
+	// clang::BuiltinType::Int;
 
 	struct attributes {
-		int TypeArithmeticOperation = 0;
 		int CallFunc = 0;
 		int CompChar = 0;
 		int CompFloat = 0;
-		int TypeComparisons = 0;
+		int ForLoops = 0;
 		int Functions = 0;
 		int IfStmt = 0;
-		int TypeIfStmt = 0;
-		int TypeParameters = 0;
-		int ForLoops = 0;
-		int WhileLoops = 0;
 		int OpBinary = 0;
 		int OpCompare = 0;
 		int OpCondition = 0;
@@ -34,14 +43,19 @@ public:
 		int Param = 0;
 		int Postfix = 0;
 		int Prefix = 0;
-		int VarFloat = 0;
+		int StructVariable = 0;
+		int TypeArithmeticOperation = 0;
+		int TypeComparisons = 0;
+		int TypeIfStmt = 0;
+		int TypeParameters = 0;
+		int TypeVariableReference = 0;
 		int TypeVariables = 0;
+		int VarFloat = 0;
 		int VarPoint = 0;
 		int VarRefArray = 0;
 		int VarRefCompare = 0;
-		int TypeVariableReference = 0;
 		int VarRefStruct = 0;
-		int StructVariable = 0;
+		int WhileLoops = 0;
 	};
 
 	CountNodesVisitor(clang::ASTContext *C);
@@ -79,6 +93,8 @@ public:
 	bool VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O);
 
 	bool VisitType(clang::Type *T);
+
+	bool VisitBuiltinType(clang::BuiltinType *T);
 
 	bool VisitImplicitParamDecl(clang::ImplicitParamDecl *D);
 

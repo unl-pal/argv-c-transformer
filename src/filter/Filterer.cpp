@@ -2,6 +2,7 @@
 #include "include/Filterer.hpp"
 #include "include/Remove.h"
 
+#include <clang/AST/Type.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
 #include <filesystem>
@@ -13,7 +14,9 @@
 #include <unordered_map>
 #include <utility>
 
-Filterer::Filterer(){};
+Filterer::Filterer(){
+  types = std::vector<int>();
+};
 
 void Filterer::parseConfigFile(std::string configFile) {
   std::ifstream file(configFile);
@@ -24,7 +27,8 @@ void Filterer::parseConfigFile(std::string configFile) {
   }
   if (file.is_open()) {
     std::cout << "Using: " << configFile << " Specified Settings" << std::endl;
-    std::regex pattern("^\\ *(\\w+)\\ *=\\ *([0-9]+|\\w+)$");
+    std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|\\w+)$");
+    std::regex typePattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|\\w+)$");
     std::string line;
     std::smatch match;
     while (std::getline(file, line)) {
@@ -41,6 +45,17 @@ void Filterer::parseConfigFile(std::string configFile) {
           } else if (value == "true" || value == "True") {
             config[key] = 1;
           }
+      else if (value == "type" || value == "Type") {
+        if (value == "int" || value == "Int") {
+            types.push_back(clang::BuiltinType::Int);
+          } else if (value == "float" || value == "Float") {
+            types.push_back(clang::BuiltinType::Float);
+          } else if (value == "long" || value == "Long") {
+            types.push_back(clang::BuiltinType::Long);
+          } else if (value == "bool" || value == "Bool") {
+            types.push_back(clang::BuiltinType::Bool);
+          } else if (value == "char" || value == "Char") {
+            types.push_back(clang::BuiltinType::UChar);
         } else {
           std::cout << "Key: " << key
                     << " Is Not A Valid Key For Filtering Files" << std::endl;
@@ -159,15 +174,15 @@ std::vector<std::string> Filterer::filterFunctions(
     CountNodesVisitor::attributes *attr = func.second;
     if (key == "Program") {
       continue;
-    } else if (attr->numberIfStmt < config["minNumIfStmt"]) {
+    } else if (attr->IfStmt < config["minNumIfStmt"]) {
       functionsToRemove.push_back(key);
-    } else if (attr->numberForLoops > config["maxNumLoopFor"]) {
+    } else if (attr->ForLoops > config["maxNumLoopFor"]) {
       functionsToRemove.push_back(key);
-    } else if (attr->numberWhileLoops > config["maxNumLoopWhile"]) {
+    } else if (attr->WhileLoops > config["maxNumLoopWhile"]) {
       functionsToRemove.push_back(key);
-    } else if (attr->numberTypeVariableReference < config["minNumVarRefInt"]) {
+    } else if (attr->TypeVariableReference < config["minNumVarRefInt"]) {
       functionsToRemove.push_back(key);
-    } else if (attr->numOpCompare < config["minNumOpCompare"]) {
+    } else if (attr->OpCompare < config["minNumOpCompare"]) {
       functionsToRemove.push_back(key);
     }
   }

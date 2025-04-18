@@ -64,6 +64,8 @@ private:
     "wctype.h"
   };
 
+  std::vector<int> types;
+
   /// Map of Valid Config Settings with Default Values
   std::map<std::string, int> config = {
     {"minFileLoC", 5},
