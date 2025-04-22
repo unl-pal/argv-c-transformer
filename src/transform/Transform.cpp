@@ -36,13 +36,11 @@ TransformerVisitor::TransformerVisitor(clang::ASTContext *newC, clang::ASTContex
 bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD) {
   clang::TranslationUnitDecl *tempTd = _NewC->getTranslationUnitDecl();
   int size = VerifierFuncs.size();
-  clang::SourceLocation oldLoc = TD->getLocation();
   clang::SourceLocation loc = tempTd->getLocation();
   // RawComment(const SourceManager &SourceMgr, SourceRange SR,
   //            const CommentOptions &CommentOpts, bool Merged);
   // const clang::RawComment *RC = (clang::dyn_cast<clang::RawComment>("Transformed"));
   clang::RawComment RC(_M, tempTd->getSourceRange(), clang::CommentOptions({}), false);
-  auto commentSrc = RC.getBeginLoc();
   _NewC->addComment(RC);
   for (int i=0; i<size; i++) {
     clang::IdentifierInfo *funcName = &_NewC->Idents.get(VerifierFuncs[i]);

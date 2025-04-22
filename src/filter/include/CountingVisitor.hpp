@@ -11,56 +11,31 @@
 #include <clang/Lex/PreprocessingRecord.h>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
 public:
 	
-	struct types {
-
-	};
-
-	enum myTypes {
-		INT = 0
-	};
-
-	// clang::Type::isIntegerType
-	// clang::Type::getAs<>
-	// clang::Stmt::getA
-	// clang::BuiltinType::UChar;
-	// clang::BuiltinType::Int;
-
 	struct attributes {
 		int CallFunc = 0;
-		int CompChar = 0;
-		int CompFloat = 0;
 		int ForLoops = 0;
 		int Functions = 0;
 		int IfStmt = 0;
-		int OpBinary = 0;
-		int OpCompare = 0;
-		int OpCondition = 0;
-		int OpUnary = 0;
 		int Param = 0;
-		int Postfix = 0;
-		int Prefix = 0;
-		int StructVariable = 0;
 		int TypeArithmeticOperation = 0;
+		int TypeCompareOperation = 0;
 		int TypeComparisons = 0;
 		int TypeIfStmt = 0;
 		int TypeParameters = 0;
+		int TypePostfix = 0;
+		int TypePrefix = 0;
+		int TypeUnaryOperation = 0;
 		int TypeVariableReference = 0;
 		int TypeVariables = 0;
-		int VarFloat = 0;
-		int VarPoint = 0;
-		int VarRefArray = 0;
-		int VarRefCompare = 0;
-		int VarRefStruct = 0;
 		int WhileLoops = 0;
 	};
 
-	CountNodesVisitor(clang::ASTContext *C);
-
-	bool partOfBinCompOp(const clang::Stmt &S);
+	CountNodesVisitor(clang::ASTContext *C, std::vector<unsigned int> T);
 
 	std::string getStmtParentFuncName(const clang::Stmt &S);
 
@@ -75,8 +50,6 @@ public:
 	bool VisitDeclRefExpr(clang::DeclRefExpr *D);
 
 	bool VisitStmt(clang::Stmt *S);
-
-	bool VisitIntegerLiteral(clang::IntegerLiteral *S);
 
 	bool VisitIfStmt(clang::IfStmt *If);
 
@@ -107,5 +80,6 @@ private:
 	clang::SourceManager *_mgr;
 	std::map<std::string, int> _values;
 	std::unordered_map<std::string, attributes*> _allFunctions;
-	int _isInBinCompOp;
+	std::vector<unsigned int> _T;
+	bool _allTypes;
 };
