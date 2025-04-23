@@ -70,11 +70,17 @@ if(NOT fmt_POPULATED)
   FetchContent_MakeAvailable(fmt)
 endif()
 
-# FetchContent_Declare(
-#   rapidcsv
-#   GIT_REPOSITORY d99kris/rapidcsv
-#   GIT_TAG v8.84
-# )
+FetchContent_Declare(
+  rapidcsv
+  GIT_REPOSITORY https://github.com/d99kris/rapidcsv.git
+  GIT_TAG v8.84
+  # hash: sha256-A7WfDO4sH//vxUAE9ZVRbRQ21d+z24DqpSGs6mh9svQ=
+)
+
+FetchContent_GetProperties(rapidcsv)
+if(NOT rapidcsv_POPULATED)
+  FetchContent_MakeAvailable(rapidcsv)
+endif()
 
 include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local )
 
@@ -88,7 +94,7 @@ target_include_directories(filter SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_IN
 target_include_directories(transform SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM})
 target_include_directories(full SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM} ${HEADERS_DOWNLOAD} ${HEADERS_FILTER})
 
-target_link_libraries(download PRIVATE fmt) # git2 rapidcsv)
+target_link_libraries(download PRIVATE fmt rapidcsv) # git2 rapidcsv)
 target_link_libraries(filter PRIVATE LLVM LLVMSupport clang-cpp clang)
 target_link_libraries(transform PRIVATE LLVMSupport clang-cpp clang LLVM)
 target_link_libraries(full PRIVATE LLVMSupport clang-cpp clang LLVM)
