@@ -108,4 +108,4 @@ elseif(UNIX)
 
 endif()
 
-#install(TARGETS {name} DESTINATION {abs_loc})
+install(TARGETS filter download transform full)
