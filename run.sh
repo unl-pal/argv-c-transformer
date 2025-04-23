@@ -17,8 +17,10 @@ rm -r filteredFiles/*
 rm -r preprocessed/*
 rm -r benchmark/*
 
+set -e
+
 echo "=================================== Using Resources ==================================="
-clangResourceDir="$(/usr/bin/clang -print-resource-dir)"
+clangResourceDir="$(clang -print-resource-dir)"
 echo "Using Resource Directory: $clangResourceDir"
 
 echo "=================================== Run Filter ==================================="
