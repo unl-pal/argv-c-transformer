@@ -1,4 +1,4 @@
-name: Build and Test
+name: Build and Test CMake/Ninja on Multiple Platforms
 
 on:
   workflow_dispatch:
@@ -7,18 +7,15 @@ on:
 jobs:
   build-and-test-on-all-OS:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
-      # - name: Set up Clang
-      #   uses: actions/setup-clang@v3
-      #   with:
-      #     clang-version: 18
-      - name: Run Full Transformer
-        # run: ./fullRun.sh 
-        run: |
-          cmake -B build -S . -G Ninja
-          ninja -C build
-          ./build/full "$(clang -print-resource-dir)" samples/Tester/ properties.config
+      - uses: actions/checkout@v4
+      - name: Configure CMake
+        run: cmake -B build -S . -G Ninja
+      - name: Build
+        run: ninja -C build
+      - name: Run Full
+        run: ./build/full "$(clang -print-resource-dir)" samples/Tester/ properties.config
