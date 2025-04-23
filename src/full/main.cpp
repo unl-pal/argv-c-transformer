@@ -17,11 +17,12 @@ int main(int argc, char** argv) {
     transformer.run(argv[1]);
 	} else {
   std::cout << "Incorrect Number of Args" << std::endl;
-  std::cout << "Please Give the Location of the File or Directory to Filter "
-               "and the Location of the Configuration File\n"
-               "and the Location of the Clang Resource Directory\n"
-               "    This can be found by running 'clang -print-resource-dir'\n"
-               "Example: `<filter-directory> <config-file> <Resource-Dir>`"
+  std::cout << "Please Give the Location of the:\n"
+      "File or Directory to Filter\n"
+      "Location of the Clang Resource Directory\n"
+      "    This can be found by running 'clang -print-resource-dir'\n"
+      "Location of the Configuration File\n"
+      "    Example: `<filter-directory> <config-file> <Resource-Dir>`"
             << std::endl;
   return 1;
   }

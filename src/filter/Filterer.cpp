@@ -139,6 +139,7 @@ bool Filterer::checkPotentialFile(std::string fileName,
   }
 }
 
+// Searches through the directory and identifies all c files, adding to array
 int Filterer::getAllCFiles(std::filesystem::path pathObject,
                            std::vector<std::string> &filesToFilter,
                            int numFiles) {
