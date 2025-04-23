@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 mv ./build/_deps/ ./
 rm -r ./build/*
