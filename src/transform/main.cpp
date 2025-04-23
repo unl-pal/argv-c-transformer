@@ -6,7 +6,10 @@ int main(int argc, char** argv) {
   if (argc == 3) {
     Transformer transformer;
     transformer.run(argv[1], argv[2]);
-  } else {
+  } else if (argc > 1 ) {
+    Transformer transformer;
+    transformer.run(argv[1]);
+  }else {
     std::cout << "Incorrect Number of Args" << std::endl;
     std::cout << "Please Give the Location of the File or Directory to Transform";
   }

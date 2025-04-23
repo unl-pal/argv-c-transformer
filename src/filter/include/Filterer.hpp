@@ -26,7 +26,9 @@ public:
 
   void debugInfo(std::string info);
 
-  int run(int argc, char **argv);
+  int run(std::string pathForResources,
+          std::string fileOrDirToFilter    = "database",
+          std::string propertiesConfigFile = "properties.config");
 
 private:
   /// vector of all standard library names to compare includes to
