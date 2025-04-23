@@ -31,10 +31,10 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (_mgr.isInMainFile(D->getLocation())) {
     for (std::string& name : _toRemove) {
       if (name == D->getNameAsString()) {
-        llvm::outs() << "Removing Node: " << D->getNameAsString() << "\n";
-        llvm::outs() << "Removed Node Code\n";
+        // llvm::outs() << "Removing Node: " << D->getNameAsString() << "\n";
+        // llvm::outs() << "Removed Node Code\n";
         if (_C->Comments.empty()) {
-          llvm::outs() << "There are NO comments in file\n";
+          // llvm::outs() << "There are NO comments in file\n";
         }
         if (_C->DeclRawComments.count(D)) {
           clang::SourceRange commentRange = _C->DeclRawComments.find(D)->second->getSourceRange();
@@ -42,11 +42,13 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         }
         if (clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D)) {
           _R.ReplaceText(rawComment->getSourceRange(), "");
-          llvm::outs() << "Handled RawComment\n";
+          // llvm::outs() << "Handled RawComment\n";
         }
         _R.ReplaceText( D->getSourceRange(), "// === Removed Undesired Function ===\n");
         return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
       }
+
+      // Code to Remove nodes as well as text if needed to make comment removal possible
         // D->setBody(nullptr);
         /// TODO remove Node or Just Text?? VV
         // if (clang::TranslationUnitDecl *TU =
@@ -56,6 +58,7 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         // /// TODO remove this?? ^^
         //   // return false;
         // }
+
     }
     // _R.InsertTextBefore(D->getSourceRange().getBegin(), "// Keeping Function: \n");
     // return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
@@ -63,7 +66,8 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
     return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
 }
 
-// TODO Remove this for now?
+// TODO CallExpr can be used to also ID the return type for replacing with the
+// correct versions of the verifier
 bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
   /*if (E->EvaluateAsBooleanCondition(bool &Result, const ASTContext &Ctx)) {*/
   if (!E) return false;

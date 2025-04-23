@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 echo "=================================== CMake ==================================="
@@ -17,12 +17,14 @@ rm -r filteredFiles/*
 rm -r preprocessed/*
 rm -r benchmark/*
 
+set -e
+
 echo "=================================== Using Resources ==================================="
-clangResourceDir=$(/usr/bin/clang -print-resource-dir)
+clangResourceDir="$(clang -print-resource-dir)"
 echo "Using Resource Directory: $clangResourceDir"
 
 echo "=================================== Run Filter ==================================="
-./build/filter samples/Tester/ properties.config "$clangResourceDir"
+./build/filter samples/Tester/ properties.config "${clangResourceDir}"
 
 echo "=================================== Run Transform ==================================="
-./build/transform filteredFiles/Tester "$clangResourceDir"
+./build/transform filteredFiles/ "${clangResourceDir}"

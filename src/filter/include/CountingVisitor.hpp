@@ -11,42 +11,31 @@
 #include <clang/Lex/PreprocessingRecord.h>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
 public:
-
+	
 	struct attributes {
-		int numberTypeArithmeticOperation = 0;
-		int numCallFunc = 0;
-		int numCompChar = 0;
-		int numCompFloat = 0;
-		int numCompInt = 0;
-		int numFunctions = 0;
-		int numIfStmt = 0;
-		int numIfStmtInt = 0;
-		int numIntParam = 0;
-		int numLoopFor = 0;
-		int numLoopWhile = 0;
-		int numOpBinary = 0;
-		int numOpCompare = 0;
-		int numOpCondition = 0;
-		int numOpUnary = 0;
-		int numParam = 0;
-		int numPostfix = 0;
-		int numPrefix = 0;
-		int numVarFloat = 0;
-		int numVarInt = 0;
-		int numVarPoint = 0;
-		int numVarRefArray = 0;
-		int numVarRefCompare = 0;
-		int numVarRefInt = 0;
-		int numVarRefStruct = 0;
-		int numVarStruct = 0;
+		int CallFunc = 0;
+		int ForLoops = 0;
+		int Functions = 0;
+		int IfStmt = 0;
+		int Param = 0;
+		int TypeArithmeticOperation = 0;
+		int TypeCompareOperation = 0;
+		int TypeComparisons = 0;
+		int TypeIfStmt = 0;
+		int TypeParameters = 0;
+		int TypePostfix = 0;
+		int TypePrefix = 0;
+		int TypeUnaryOperation = 0;
+		int TypeVariableReference = 0;
+		int TypeVariables = 0;
+		int WhileLoops = 0;
 	};
 
-	CountNodesVisitor(clang::ASTContext *C);
-
-	bool partOfBinCompOp(const clang::Stmt &S);
+	CountNodesVisitor(clang::ASTContext *C, std::vector<unsigned int> T);
 
 	std::string getStmtParentFuncName(const clang::Stmt &S);
 
@@ -61,8 +50,6 @@ public:
 	bool VisitDeclRefExpr(clang::DeclRefExpr *D);
 
 	bool VisitStmt(clang::Stmt *S);
-
-	bool VisitIntegerLiteral(clang::IntegerLiteral *S);
 
 	bool VisitIfStmt(clang::IfStmt *If);
 
@@ -80,6 +67,8 @@ public:
 
 	bool VisitType(clang::Type *T);
 
+	bool VisitBuiltinType(clang::BuiltinType *T);
+
 	bool VisitImplicitParamDecl(clang::ImplicitParamDecl *D);
 
 	std::unordered_map<std::string, attributes*> ReportAttributes();
@@ -91,5 +80,6 @@ private:
 	clang::SourceManager *_mgr;
 	std::map<std::string, int> _values;
 	std::unordered_map<std::string, attributes*> _allFunctions;
-	int _isInBinCompOp;
+	std::vector<unsigned int> _T;
+	bool _allTypes;
 };
