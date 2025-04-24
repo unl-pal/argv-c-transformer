@@ -14,7 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Get Dependencies
-        run: sudo apt install -y clang-devel llvm-devel
+        run: >
+          sudo apt install -y 
+          clang-19
+          clang-tools-19
+          libclang-common-19-dev
+          llvm-19-dev
       - name: Configure CMake
         run: cmake -B build -S . -G Ninja
       - name: Build
