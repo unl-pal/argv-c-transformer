@@ -13,17 +13,31 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install Dependencies (if needed)
+      # - name: Install Dependencies (if needed)
+      #   run: |
+      #     if [[ "$RUNNER_OS" == "Linux" ]]; then
+      #       sudo apt-get update
+      #       sudo apt-get install -y clang-20 llvm-20 clang-tools-20 libclang-common-20-dev libclang-20-dev libclang1-20 llvm-20-dev
+      #     elif [[ "$RUNNER_OS" == "macOS" ]]; then
+      #       brew upgrade
+      #       brew install llvm
+      #     elif [[ "$RUNNER_OS" == "Windows" ]]; then
+      #       choco install llvm
+      #     fi
+      - name: Get Dependencies Ubuntu
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            sudo apt-get update
-            sudo apt-get install -y clang-20 llvm-20 clang-tools-20 libclang-common-20-dev libclang-20-dev libclang1-20 llvm-20-dev
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            brew upgrade
-            brew install llvm
-          elif [[ "$RUNNER_OS" == "Windows" ]]; then
-            choco install llvm
-          fi
+          sudo apt-get update
+          sudo apt-get install -y clang-20 llvm-20 clang-tools-20 libclang-common-20-dev libclang-20-dev libclang1-20 llvm-20-dev
+      - name: Get Dependencies Mac
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          brew upgrade
+          brew install llvm
+      - name: Get Dependencies Windows
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: >
+          choco install llvm
       - name: Find Clang Prefix Path
         id: find-clang
         shell: bash
@@ -33,26 +47,11 @@ jobs:
           else
             echo "CLANG_PATH=$(dirname $(which clang) || true)" >> "$GITHUB_OUTPUT"
           fi
-      # - name: Get Dependencies Ubuntu
-      #   if: ${{ matrix.os == 'ubuntu-latest' }}
-      #   run: |
-      #     sudo apt-get update
-      #     sudo apt-get install -y clang-20 llvm-20 clang-tools-20 libclang-common-20-dev libclang-20-dev libclang1-20 llvm-20-dev
-      # - name: Get Dependencies Mac
-      #   if: ${{ matrix.os == 'macos-latest' }}
-      #   run: |
-      #     brew upgrade
-      #     brew install llvm
       # - name: Set reusable strings
       #   id: strings
       #   shell: bash
       #   run: |
       #     echo "windowsClangDIR=${{ which clang }}" >> "$GITHUB_OUTPUT"
-      # - name: Get Dependencies Windows
-      #   if: ${{ matrix.os == 'windows-latest' }}
-      #   run: >
-      #     choco install llvm
-          
       - name: Configure CMake
         run: |
           cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=${{ steps.find-clang.outputs.CLANG_PATH }}
