@@ -81,7 +81,7 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
       } else if (thing->isObjectPointerType()) {
       } else if (thing->isArrayType()) {
       } else if (thing->isNullPtrType()) {
-      } else if (thing->isDoubleType()) {
+      // } else if (thing->isDoubleType()) {
       } else {
       }
     }
