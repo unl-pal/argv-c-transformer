@@ -28,7 +28,7 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-20 llvm-20 clang-tools-20 libclang-common-20-dev libclang-20-dev libclang1-20 llvm-20-dev
+          sudo apt-get install -y clang-19 llvm-19 clang-tools-19 libclang-common-19-dev libclang-19-dev libclang1-19 llvm-19-dev
       - name: Get Dependencies Mac
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
