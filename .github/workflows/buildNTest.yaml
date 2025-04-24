@@ -15,8 +15,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: Get Dependencies Ubuntu
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: >
+        run: |
           sudo apt-get update
+          >
           sudo apt-get install -y 
           clang-20
           llvm-20
@@ -27,7 +28,7 @@ jobs:
           llvm-20-dev
       - name: Get Dependencies Mac
         if: ${{ matrix.os == 'macos-latest' }}
-        run: >
+        run: |
           brew upgrade
           brew install llvm
       - name: Get Dependencies Windows
