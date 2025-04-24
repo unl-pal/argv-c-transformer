@@ -17,8 +17,8 @@ project(
   LANGUAGES CXX C
 )
 
-find_package(LLVM REQUIRED)
 find_package(Clang REQUIRED)
+find_package(LLVM REQUIRED)
 # find_package(libgit2 REQUIRED)
 
 set(HEADERS_FILTER
