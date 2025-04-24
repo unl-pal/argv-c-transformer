@@ -13,6 +13,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Get Dependencies
+        run: sudo apt install -y clang-devel llvm-devel
       - name: Configure CMake
         run: cmake -B build -S . -G Ninja
       - name: Build
