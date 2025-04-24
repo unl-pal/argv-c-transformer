@@ -17,8 +17,11 @@ jobs:
         run: >
           sudo apt install -y 
           clang-16
+          llvm-16
           clang-tools-16
           libclang-common-16-dev
+          libclang-16-dev
+          libclang1-16
           llvm-16-dev
       - name: Configure CMake
         run: cmake -B build -S . -G Ninja
