@@ -16,10 +16,10 @@ jobs:
       - name: Get Dependencies
         run: >
           sudo apt install -y 
-          clang-19
-          clang-tools-19
-          libclang-common-19-dev
-          llvm-19-dev
+          clang-16
+          clang-tools-16
+          libclang-common-16-dev
+          llvm-16-dev
       - name: Configure CMake
         run: cmake -B build -S . -G Ninja
       - name: Build
