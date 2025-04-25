@@ -29,6 +29,7 @@ jobs:
           choco install llvm
       - name: Find Clang Prefix Path Windows
         id: find-clang-windows
+        if: ${{ matrix.os == 'windows-latest' }}
         shell: powershell
         run: |
           $ClangCommand = Get-Command clang
@@ -42,6 +43,7 @@ jobs:
           }
       - name: Find Clang Prefix Path Unix
         id: find-clang-unix
+        if: ${{ matrix.os == 'macos-latest' }} || ${{ matrix.os == 'ubuntu-latest' }}
         shell: bash
         run: |
           CLANG_PATH=$(dirname $(which clang) || true)
