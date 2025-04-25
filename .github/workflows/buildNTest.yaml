@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-          powershell_output=$(Get-Command clang 2>$1)
+          powershell_output=$(Get-Command clang 2>&1)
             if [[ "$powershell_output" ]]; then
             CLANG_PATH=$(echo "$powershell_output" | Seletct-Object -ExpandProperty Source | Split-Path -Parent)
               echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
