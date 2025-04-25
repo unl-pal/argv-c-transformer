@@ -55,12 +55,10 @@ jobs:
         if: steps.find-clang-unix.outcome == 'success' || steps.find-clang-windows.outcome == 'success'
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "windows-latest" ]]; then
+          if ( "$RUNNER_OS" == "Windows" ); then
             MY_CLANG_PATH=${{ steps.find-clang-windows.outputs.clang_path }}
-            # MY_CLANG_PATH=${{ needs.set-up-environments.outputs.windows-path }}
           else
             MY_CLANG_PATH=${{ steps.find-clang-unix.outputs.clang_path }}
-            # MY_CLANG_PATH=${{ needs.set-up-environments.outputs.unix-path }}
           fi
           cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=$"MY_CLANG_PATH"
       - name: Build
