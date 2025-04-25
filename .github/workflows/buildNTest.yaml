@@ -43,9 +43,21 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "CLANG_PATH=$(Get-Command clang | Select-Object -ExpandProperty Source | Split-Path -Parent)" >> "$GITHUB_OUTPUT"
+          powershell_output=$(Get-Command clang 2>$1)
+            if [[ "$powershell_output" ]]; then
+            CLANG_PATH=$(echo "$powershell_output" | Seletct-Object -ExpandProperty Source | Split-Path -Parent)
+              echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
+            else
+              echo "Warning: Clang command not found on Windows."
+              echo "clang_path=" >> "$GITHUB_OUTPUT"
+            fi
+          # =$(Get-Command clang | Select-Object -ExpandProperty Source | Split-Path -Parent)"
           else
-            echo "CLANG_PATH=$(dirname $(which clang) || true)" >> "$GITHUB_OUTPUT"
+            CLANG_PATH=$(dirname $(which clang) || true)
+            echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
+            if [[ -z "$CLANG_PATH" ]]; then
+              echo "Warning: Clang command not found on Linux or MacOS."
+            fi
           fi
       # - name: Set reusable strings
       #   id: strings
