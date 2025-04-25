@@ -43,7 +43,7 @@ jobs:
           }
       - name: Find Clang Prefix Path Unix
         id: find-clang-unix
-        if: ${{ matrix.os == 'macos-latest' }} || ${{ matrix.os == 'ubuntu-latest' }}
+        if: ${{ matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest' }}
         shell: bash
         run: |
           CLANG_PATH=$(dirname $(which clang) || true)
