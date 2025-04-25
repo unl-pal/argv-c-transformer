@@ -36,10 +36,10 @@ jobs:
           if ($ClangCommand) {
             $ClangPath = Split-Path -Parent $ClangCommand.Path
             Write-Host "Clang Path: $ClangPath"
-          Write-Output "::set-output name=clang_path::$ClangPath"
+            Write-Output "clang_path=$ClangPath" >> $GITHUB_OUTPUT
           } else {
             Write-Warning "CLang Command Not Found"
-          Write-Output "::set-output name=clang_path::"
+            Write-Output "clang_path=" >> $GITHUB_OUTPUT
           }
       - name: Find Clang Prefix Path Unix
         id: find-clang-unix
@@ -53,15 +53,15 @@ jobs:
           fi
       - name: Configure CMake
         # if: ${{ success() }}
-        if: (steps.find-clang-unix.outcome == 'success' && steps.find-clang-windows.outcome == 'skipped') || (steps.find-clang-windows.outcome == 'success' && steps.find-clang-unix.outcome == 'skipped')
+        # if: (steps.find-clang-unix.outcome == 'success' && steps.find-clang-windows.outcome == 'skipped') || (steps.find-clang-windows.outcome == 'success' && steps.find-clang-unix.outcome == 'skipped')
         # if: (steps.find-clang-unix.status == 'success' || steps.find-clang-windows.status == 'success')
         shell: bash
         run: |
           echo "${{ steps.find-clang-windows.outputs.clang_path }}"
           if [[ ! -z "${{ steps.find-clang-windows.outputs.clang_path }}" ]]; then
-            MY_CLANG_PATH=${{ steps.find-clang-windows.outputs.clang_path }}
+            MY_CLANG_PATH="\"${{ steps.find-clang-windows.outputs.clang_path }}\""
           else
-            MY_CLANG_PATH=${{ steps.find-clang-unix.outputs.clang_path }}
+            MY_CLANG_PATH="${{ steps.find-clang-unix.outputs.clang_path }}"
           fi
           cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=$"MY_CLANG_PATH"
       - name: Build
