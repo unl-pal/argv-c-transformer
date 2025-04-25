@@ -57,6 +57,7 @@ jobs:
         # if: (steps.find-clang-unix.status == 'success' || steps.find-clang-windows.status == 'success')
         shell: bash
         run: |
+          echo "${{ steps.find-clang-windows.outputs.clang_path }}"
           if [[ ! -z "${{ steps.find-clang-windows.outputs.clang_path }}" ]]; then
             MY_CLANG_PATH=${{ steps.find-clang-windows.outputs.clang_path }}
           else
