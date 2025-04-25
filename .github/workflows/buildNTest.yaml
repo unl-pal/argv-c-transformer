@@ -65,7 +65,7 @@ jobs:
           else
             MY_CLANG_PATH="${{ steps.find-clang-unix.outputs.clang_path }}"
           fi
-          cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=$"MY_CLANG_PATH"
+          cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH="$MY_CLANG_PATH"
       - name: Build
         run: |
           ninja -C build
