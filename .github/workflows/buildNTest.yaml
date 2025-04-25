@@ -52,10 +52,11 @@ jobs:
             echo "Warning: Clang command not found on Linux or MacOS."
           fi
       - name: Configure CMake
-        if: steps.find-clang-unix.outcome == 'success' || steps.find-clang-windows.outcome == 'success'
+        # if: ${{ success() }}
+        if: steps.find-clang-unix.outcome == 'success' && steps.find-clang-windows.outcome == 'success'
         shell: bash
         run: |
-          if [[ -z "${{ steps.find-clang-unix.outputs.clang_path }}" ]]; then
+          if [[ ! -z "${{ steps.find-clang-windows.outputs.clang_path }}" ]]; then
             MY_CLANG_PATH=${{ steps.find-clang-windows.outputs.clang_path }}
           else
             MY_CLANG_PATH=${{ steps.find-clang-unix.outputs.clang_path }}
