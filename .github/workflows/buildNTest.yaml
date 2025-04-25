@@ -52,6 +52,7 @@ jobs:
             echo "Warning: Clang command not found on Linux or MacOS."
           fi
       - name: Configure CMake
+        shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             MY_CLANG_PATH=${{ steps.find-clang-windows.outputs.CLANG_PATH }}
