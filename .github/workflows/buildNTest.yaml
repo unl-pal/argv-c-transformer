@@ -11,6 +11,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    outputs: 
+      windows-path: ${{ steps.find-clang-windows.outputs.clang_path }}
+      unix-path: ${{ steps.find-clang-unix.outputs.clang_path }}
     steps:
       - uses: actions/checkout@v4
       - name: Get Dependencies Ubuntu
@@ -64,9 +67,11 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            MY_CLANG_PATH=${{ needs.set-up-environments.outputs.find-clang-windows.outputs.clang_path }}
+            # MY_CLANG_PATH=${{ needs.set-up-environments.outputs.find-clang-windows.outputs.clang_path }}
+            MY_CLANG_PATH=${{ needs.set-up-environments.outputs.windows-path }}
           else
-            MY_CLANG_PATH=${{ needs.set-up-environments.outputs.find-clang-unix.outputs.clang_path }}
+            # MY_CLANG_PATH=${{ needs.set-up-environments.outputs.find-clang-unix.outputs.clang_path }}
+            MY_CLANG_PATH=${{ needs.set-up-environments.outputs.unix-path }}
           fi
           cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=$"MY_CLANG_PATH"
       - name: Build
