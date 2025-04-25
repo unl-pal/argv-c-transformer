@@ -8,7 +8,6 @@ jobs:
   build-and-test-on-all-OS:
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -54,6 +53,7 @@ jobs:
           fi
       - name: Configure CMake
         shell: bash
+        needs: [find-clang-unix, find-clang-windows]
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             MY_CLANG_PATH=${{ steps.find-clang-windows.outputs.CLANG_PATH }}
