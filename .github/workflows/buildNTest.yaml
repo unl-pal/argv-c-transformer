@@ -59,14 +59,14 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/checkout@v4
       - name: Configure CMake
         shell: bash
-        needs: [find-clang-unix, find-clang-windows]
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            MY_CLANG_PATH=${{ steps.find-clang-windows.outputs.CLANG_PATH }}
+            MY_CLANG_PATH=${{ needs.set-up-environments.outputs.find-clang-windows.outputs.clang_path }}
           else
-            MY_CLANG_PATH=${{ steps.find-clang-unix.outputs.CLANG_PATH }}
+            MY_CLANG_PATH=${{ needs.set-up-environments.outputs.find-clang-unix.outputs.clang_path }}
           fi
           cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=$"MY_CLANG_PATH"
       - name: Build
