@@ -43,20 +43,28 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-          # Execute PowerShell commands explicitly
-            powershell -NoProfile -Command "
+            echo "Running on Windows..."
+            # Execute PowerShell and capture output with error stream
+            output=$(powershell -NoProfile -Command "
               \$ClangCommand = Get-Command clang
               if (\$ClangCommand) {
+                Write-Output \\"Found Clang: (\$ClangCommand.Path)\\"
                 \$ClangPath = Split-Path -Parent \$ClangCommand.Path
                 Write-Output \\"clang_path=\$ClangPath\\"
               } else {
                 Write-Warning \\"Clang command not found on Windows.\\"
                 Write-Output \\"clang_path=\\"
               }
-            " | while read -r output; do
-              echo "$output" >> "$GITHUB_OUTPUT"
-            done
-          # =$(Get-Command clang | Select-Object -ExpandProperty Source | Split-Path -Parent)"
+            " 2>&1)
+            echo "$output"
+            # Extract the clang_path line if it exists
+            if grep -q "^clang_path=" <<< "$output"; then
+              CLANG_PATH=$(grep "^clang_path=" <<< "$output" | cut -d'=' -f2)
+              echo "Extracted CLANG_PATH: $CLANG_PATH"
+              echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
+            else
+              echo "Warning: Could not extract clang_path from PowerShell output."
+            fi
           else
             CLANG_PATH=$(dirname $(which clang) || true)
             echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
@@ -64,11 +72,6 @@ jobs:
               echo "Warning: Clang command not found on Linux or MacOS."
             fi
           fi
-      # - name: Set reusable strings
-      #   id: strings
-      #   shell: bash
-      #   run: |
-      #     echo "windowsClangDIR=${{ which clang }}" >> "$GITHUB_OUTPUT"
       - name: Configure CMake
         run: |
           cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=${{ steps.find-clang.outputs.CLANG_PATH }}
