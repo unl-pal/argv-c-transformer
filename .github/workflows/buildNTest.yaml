@@ -53,7 +53,8 @@ jobs:
           fi
       - name: Configure CMake
         # if: ${{ success() }}
-        if: steps.find-clang-unix.outcome == 'success' || steps.find-clang-windows.outcome == 'success'
+        # if: (steps.find-clang-unix.status == 'success' && steps.find-clang-windows.status == 'skipped') || (steps.find-clang-windows.status == 'success' && steps.find-clang-unix.status == 'skipped')
+        if: steps.find-clang-unix.status == 'success' || steps.find-clang-windows.status == 'success'
         shell: bash
         run: |
           if [[ ! -z "${{ steps.find-clang-windows.outputs.clang_path }}" ]]; then
