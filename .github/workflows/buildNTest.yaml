@@ -53,7 +53,6 @@ jobs:
             echo "Warning: Clang command not found on Linux or MacOS."
           fi
       - name: Configure CMake
-        needs: [
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
