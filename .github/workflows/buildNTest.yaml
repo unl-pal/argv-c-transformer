@@ -43,14 +43,19 @@ jobs:
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-          powershell_output=$(Get-Command clang 2>&1)
-            if [[ "$powershell_output" ]]; then
-            CLANG_PATH=$(echo "$powershell_output" | Seletct-Object -ExpandProperty Source | Split-Path -Parent)
-              echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
-            else
-              echo "Warning: Clang command not found on Windows."
-              echo "clang_path=" >> "$GITHUB_OUTPUT"
-            fi
+          # Execute PowerShell commands explicitly
+            powershell -NoProfile -Command "
+              \$ClangCommand = Get-Command clang
+              if (\$ClangCommand) {
+                \$ClangPath = Split-Path -Parent \$ClangCommand.Path
+                Write-Output \\"clang_path=\$ClangPath\\"
+              } else {
+                Write-Warning \\"Clang command not found on Windows.\\"
+                Write-Output \\"clang_path=\\"
+              }
+            " | while read -r output; do
+              echo "$output" >> "$GITHUB_OUTPUT"
+            done
           # =$(Get-Command clang | Select-Object -ExpandProperty Source | Split-Path -Parent)"
           else
             CLANG_PATH=$(dirname $(which clang) || true)
