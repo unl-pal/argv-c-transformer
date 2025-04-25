@@ -36,10 +36,10 @@ jobs:
           if ($ClangCommand) {
             $ClangPath = Split-Path -Parent $ClangCommand.Path
             Write-Host "Clang Path: $ClangPath"
-            Write-Output "clang_path=$ClangPath"
+          Write-Output "::set-output name=clang_path::$ClangPath"
           } else {
             Write-Warning "CLang Command Not Found"
-            Write-Output "clang_path="
+          Write-Output "::set-output name=clang_path::"
           }
       - name: Find Clang Prefix Path Unix
         id: find-clang-unix
