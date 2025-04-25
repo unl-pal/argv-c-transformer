@@ -61,7 +61,7 @@ jobs:
         run: |
           echo "${{ steps.find-clang-windows.outputs.clang_path }}"
           if [[ ! -z "${{ steps.find-clang-windows.outputs.clang_path }}" ]]; then
-            MY_CLANG_PATH="\\'${{ steps.find-clang-windows.outputs.clang_path }}\\'"
+            MY_CLANG_PATH="\'${{ steps.find-clang-windows.outputs.clang_path }}\'"
           else
             MY_CLANG_PATH="${{ steps.find-clang-unix.outputs.clang_path }}"
           fi
