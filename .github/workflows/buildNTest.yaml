@@ -13,17 +13,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      # - name: Install Dependencies (if needed)
-      #   run: |
-      #     if [[ "$RUNNER_OS" == "Linux" ]]; then
-      #       sudo apt-get update
-      #       sudo apt-get install -y clang-20 llvm-20 clang-tools-20 libclang-common-20-dev libclang-20-dev libclang1-20 llvm-20-dev
-      #     elif [[ "$RUNNER_OS" == "macOS" ]]; then
-      #       brew upgrade
-      #       brew install llvm
-      #     elif [[ "$RUNNER_OS" == "Windows" ]]; then
-      #       choco install llvm
-      #     fi
       - name: Get Dependencies Ubuntu
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
@@ -38,43 +27,36 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         run: >
           choco install llvm
-      - name: Find Clang Prefix Path
-        id: find-clang
+      - name: Find Clang Prefix Path Windows
+        id: find-clang-windows
+        shell: powershell
+        run: |
+          $ClangCommand = Get-Command clang
+          if ($ClangCommand) {
+            $ClangPath = Split-Path -Parent $ClangCommand.Path
+            Write-Host "Clang Path: $ClangPath"
+            Write-Output "clang_path=$ClangPath"
+          } else {
+            Write-Warning "CLang Command Not Found"
+            Write-Output "clang_path="
+          }
+      - name: Find Clang Prefix Path Unix
+        id: find-clang-unix
         shell: bash
         run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            echo "Running on Windows..."
-            # Execute PowerShell and capture output with error stream
-            output=$(powershell -NoProfile -Command "
-              \$ClangCommand = Get-Command clang
-              if (\$ClangCommand) {
-                Write-Output \\"Found Clang: (\$ClangCommand.Path)\\"
-                \$ClangPath = Split-Path -Parent \$ClangCommand.Path
-                Write-Output \\"clang_path=\$ClangPath\\"
-              } else {
-                Write-Warning \\"Clang command not found on Windows.\\"
-                Write-Output \\"clang_path=\\"
-              }
-            " 2>&1)
-            echo "$output"
-            # Extract the clang_path line if it exists
-            if grep -q "^clang_path=" <<< "$output"; then
-              CLANG_PATH=$(grep "^clang_path=" <<< "$output" | cut -d'=' -f2)
-              echo "Extracted CLANG_PATH: $CLANG_PATH"
-              echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
-            else
-              echo "Warning: Could not extract clang_path from PowerShell output."
-            fi
-          else
-            CLANG_PATH=$(dirname $(which clang) || true)
-            echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
-            if [[ -z "$CLANG_PATH" ]]; then
-              echo "Warning: Clang command not found on Linux or MacOS."
-            fi
+          CLANG_PATH=$(dirname $(which clang) || true)
+          echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
+          if [[ -z "$CLANG_PATH" ]]; then
+            echo "Warning: Clang command not found on Linux or MacOS."
           fi
       - name: Configure CMake
         run: |
-          cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=${{ steps.find-clang.outputs.CLANG_PATH }}
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            MY_CLANG_PATH=${{ steps.find-clang-windows.outputs.CLANG_PATH }}
+          else
+            MY_CLANG_PATH=${{ steps.find-clang-unix.outputs.CLANG_PATH }}
+          fi
+          cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=$"MY_CLANG_PATH"
       - name: Build
         run: |
           ninja -C build
