@@ -5,15 +5,12 @@ on:
   pull_request:
 
 jobs:
-  set-up-environments:
+  build-and-test-on-all-OS:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    outputs: 
-      windows-path: ${{ steps.find-clang-windows.outputs.clang_path }}
-      unix-path: ${{ steps.find-clang-unix.outputs.clang_path }}
     steps:
       - uses: actions/checkout@v4
       - name: Get Dependencies Ubuntu
@@ -54,24 +51,16 @@ jobs:
           if [[ -z "$CLANG_PATH" ]]; then
             echo "Warning: Clang command not found on Linux or MacOS."
           fi
-  build-and-test-on-all-OS:
-    needs: set-up-environments
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
       - name: Configure CMake
+        if: steps.find-clang-unix.outcome == 'success' || steps.find-clang-windows.outcome == 'success'
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            # MY_CLANG_PATH=${{ needs.set-up-environments.outputs.find-clang-windows.outputs.clang_path }}
-            MY_CLANG_PATH=${{ needs.set-up-environments.outputs.windows-path }}
+            MY_CLANG_PATH=${{ steps.find-clang-windows.outputs.clang_path }}
+            # MY_CLANG_PATH=${{ needs.set-up-environments.outputs.windows-path }}
           else
-            # MY_CLANG_PATH=${{ needs.set-up-environments.outputs.find-clang-unix.outputs.clang_path }}
-            MY_CLANG_PATH=${{ needs.set-up-environments.outputs.unix-path }}
+            MY_CLANG_PATH=${{ steps.find-clang-unix.outputs.clang_path }}
+            # MY_CLANG_PATH=${{ needs.set-up-environments.outputs.unix-path }}
           fi
           cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH=$"MY_CLANG_PATH"
       - name: Build
