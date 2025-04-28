@@ -3,10 +3,11 @@
 
 // Target for calling the Filterer Individually
 int main(int argc, char** argv) {
+  Filterer filter;
   if (argc == 4) {
-    Filterer filter;
-    filter.run(argc, argv);
-
+    filter.run(argv[1], argv[2], argv[3]);
+  } else if (argc < 1) {
+    filter.run(argv[1]);
   } else {
   std::cout << "Incorrect Number of Args" << std::endl;
   std::cout << "Please Give the Location of the File or Directory to Filter "

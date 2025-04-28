@@ -140,7 +140,7 @@ void Transformer::parseConfig() {
 }
 
 // Main function should be transfered to a driver for use via the full implementation
-int Transformer::run(std::string filePath, std::string resources) {
+int Transformer::run(std::string resources, std::string filePath) {
   std::filesystem::path path(filePath);
   if (std::filesystem::exists(path)) {
     parseConfig();

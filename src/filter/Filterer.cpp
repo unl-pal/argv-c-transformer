@@ -139,6 +139,7 @@ bool Filterer::checkPotentialFile(std::string fileName,
   }
 }
 
+// Searches through the directory and identifies all c files, adding to array
 int Filterer::getAllCFiles(std::filesystem::path pathObject,
                            std::vector<std::string> &filesToFilter,
                            int numFiles) {
@@ -282,12 +283,15 @@ void Filterer::debugInfo(std::string info) {
 }
 
 /// Main driver for the Filter System
-int Filterer::run(int argc, char **argv) {
-  std::cout << "starting" << std::endl;
-  if (argc == 4) {
-    parseConfigFile(argv[2]);
+int Filterer::run(std::string pathForResources,
+                  std::string fileOrDirToFilter,
+                  std::string propertiesConfigFile) {
 
-    std::filesystem::path pathObject(argv[1]);
+  std::cout << "starting" << std::endl;
+
+    parseConfigFile(propertiesConfigFile);
+
+    std::filesystem::path pathObject(fileOrDirToFilter);
 
     std::vector<std::string> filesToFilter = std::vector<std::string>();
 
@@ -301,7 +305,7 @@ int Filterer::run(int argc, char **argv) {
     // This ensures comments are a part of the parsed AST
     args.push_back("-fparse-all-comments");
     // This tells the AST generator where to find the compiler supplied headers
-    args.push_back(std::string("-resource-dir=") + argv[3]);
+    args.push_back(std::string("-resource-dir=") + pathForResources);
 
     // string indent to use for organizing debug statements
     std::string indent = "    "; // TODO something about this, is it needed?
@@ -415,9 +419,5 @@ int Filterer::run(int argc, char **argv) {
                   << std::endl;
       }
     }
-  } else {
-    std::cout << "Incorrect Number of Args" << std::endl;
-    return 1;
-  }
   return 0;
 }
