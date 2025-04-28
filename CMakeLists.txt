@@ -12,7 +12,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 
 project(
-  MyTransform
+  argv-argc-transformer
   VERSION 0.0.0
   LANGUAGES CXX C
 )

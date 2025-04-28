@@ -9,30 +9,33 @@
   outputs = { self, nixpkgs, utils }: utils.lib.eachDefaultSystem (system:
     let pkgs = nixpkgs.legacyPackages.${system};
     in rec {
-      packages.default = pkgs.clangStdenv.mkDerivation {
-        name = "argv-c-transformer";
+      packages = rec {
+        argv-argc-transformer = pkgs.clangStdenv.mkDerivation {
+          name = "argv-argc-transformer";
 
-        src = ./.;
+          src = ./.;
 
-        nativeBuildInputs = with pkgs; [
-          cmake
-          ninja
-          pkg-config
-          clang
-          gitMinimal
-          llvmPackages.bintools
-        ];
-        buildInputs = with pkgs; [
-          boost
-          clang-tools
-          clang
-          libclang
-          libllvm
-        ];
+          nativeBuildInputs = with pkgs; [
+            cmake
+            ninja
+            pkg-config
+            clang
+            gitMinimal
+            llvmPackages.bintools
+          ];
+          buildInputs = with pkgs; [
+            boost
+            clang-tools
+            clang
+            libclang
+            libllvm
+          ];
+        };
+        default = argv-argc-transformer;
       };
       devShells.default = pkgs.mkShell {
         stdenv = pkgs.clangStdenv;
-        inputsFrom = [ packages.default ];
+        inputsFrom = [ packages.argv-argc-transformer ];
       };
     });
 }
