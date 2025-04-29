@@ -17,6 +17,7 @@
 #include <clang/Basic/IdentifierTable.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceLocation.h>
+#include <clang/Basic/SourceManager.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
@@ -36,10 +37,7 @@ TransformerVisitor::TransformerVisitor(clang::ASTContext *newC, clang::ASTContex
 bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD) {
   clang::TranslationUnitDecl *tempTd = _NewC->getTranslationUnitDecl();
   int size = VerifierFuncs.size();
-  clang::SourceLocation loc = tempTd->getLocation();
-  // RawComment(const SourceManager &SourceMgr, SourceRange SR,
-  //            const CommentOptions &CommentOpts, bool Merged);
-  // const clang::RawComment *RC = (clang::dyn_cast<clang::RawComment>("Transformed"));
+  clang::SourceLocation loc = _M.getLocForStartOfFile(_M.getFileID(tempTd->getLocation()));
   clang::RawComment RC(_M, tempTd->getSourceRange(), clang::CommentOptions({}), false);
   _NewC->addComment(RC);
   for (int i=0; i<size; i++) {
@@ -51,7 +49,7 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
 
     clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
       *_NewC,
-      TD,
+      tempTd,
       loc,
       loc,
       declName,
@@ -62,7 +60,8 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
     newFunction->setReferenced();
     newFunction->setIsUsed();
     tempTd->addDecl(newFunction);
-    _R.InsertTextBefore(newFunction->getBeginLoc(), declName.getAsString());
+    // _R.InsertTextAfter(loc, newFunction->getQualifiedNameAsString());
+    loc = newFunction->getSourceRange().getEnd();
   }
 
   clang::TypedefDecl* newTypeDef = clang::TypedefDecl::Create(*_OldC, _NewC->getTranslationUnitDecl(), loc, loc, &_NewC->Idents.get("bool"), _OldC->getTrivialTypeSourceInfo(_OldC->BoolTy));
@@ -70,12 +69,14 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
   newTypeDef->setIsUsed();
   newTypeDef->setReferenced();
   tempTd->addDecl(newTypeDef);
-  _R.InsertTextBefore(tempTd->decls_begin()->getBeginLoc(), newTypeDef->getNameAsString());
+  // _R.InsertTextAfter(loc, newTypeDef->getNameAsString());
+  loc = newTypeDef->getSourceRange().getEnd();
   // _R.InsertTextAfterToken(loc, newTypeDef->getNameAsString());
   // _R.InsertTextAfterToken(oldLoc, newTypeDef->getNameAsString());
   for (clang::Decl *decl : TD->decls()) {
     tempTd->addDecl(decl);
-    _R.InsertTextBefore(tempTd->getLocation(), decl->getSourceRange().printToString(_NewC->getSourceManager()));
+    // _R.InsertTextAfter(loc, _R.getRewrittenText(decl->getSourceRange()));
+    loc = decl->getSourceRange().getEnd();
   }
   // TD = tempTd;
   // return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);
@@ -106,18 +107,32 @@ bool TransformerVisitor::VisitDeclRefExpr(clang::DeclRefExpr *D) {
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitDeclRefExpr(D);
 }
 
+bool TransformerVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
+  if (!_OldC->getSourceManager().isInMainFile(D->getLocation())) return true;
+  if (D->getStorageClass() == clang::SC_Extern) {
+  //   std::string myType = D->getReturnType().getAsString();
+  //   clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);
+  //   clang::DeclarationName newName(newInfo);
+  }
+  return clang::RecursiveASTVisitor<TransformerVisitor>::VisitFunctionDecl(D);
+  // return true;
+}
+
 // Call Expr is the parent of the function decl ref and the args used
 bool TransformerVisitor::VisitCallExpr(clang::CallExpr *E) {
   if (!_OldC->getSourceManager().isInMainFile(E->getExprLoc())) return true;
   if (clang::FunctionDecl *func = E->getCalleeDecl()->getAsFunction()) {
-    if ((func->isImplicit()) || (!func->isDefined() && !func->isExternC())) {
+    if ((func->isImplicit()) || !func->isDefined()) {
       std::string myType = func->getReturnType().getAsString();
       clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);
       clang::DeclarationName newName(newInfo);
-      func->setDeclName(newName);
-      E->shrinkNumArgs(0);
-      _R.ReplaceText(E->getSourceRange(), newName.getAsString() + "()");
-    }
+      // func->setDeclName(newName);
+      if (func->isLocalExternDecl()) {
+        E->shrinkNumArgs(0);
+        E->getCalleeDecl()->getAsFunction()->setDeclName(newName);
+        _R.ReplaceText(E->getSourceRange(), newName.getAsString() + "()");
+      }
+    } 
   }
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitCallExpr(E);
 }

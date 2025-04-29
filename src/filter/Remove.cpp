@@ -4,6 +4,7 @@
 #include <clang/AST/Type.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/LangStandard.h>
+#include <clang/Basic/Specifiers.h>
 #include <clang/Lex/Preprocessor.h>
 #include <llvm/Support/raw_ostream.h>
 #include <vector>
@@ -29,23 +30,22 @@ bool RemoveFuncVisitor::VisitDecl(clang::Decl *D) {
 bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if(!D) return false;
   if (_mgr.isInMainFile(D->getLocation())) {
+    // TODO Decide on this, If uncommmented then all code provided extern
+    // Functions will be left alone and unhandled
+    // This is good if multiple files are used that may define the function
+    // This does not help if undefined creating later errors and better to be removed
+    // if (D->getStorageClass() == clang::SC_Extern) {
+    //   return true;
+    // }
     for (std::string& name : _toRemove) {
       if (name == D->getNameAsString()) {
-        // llvm::outs() << "Removing Node: " << D->getNameAsString() << "\n";
-        // llvm::outs() << "Removed Node Code\n";
-        if (_C->Comments.empty()) {
-          // llvm::outs() << "There are NO comments in file\n";
-        }
-        if (_C->DeclRawComments.count(D)) {
-          clang::SourceRange commentRange = _C->DeclRawComments.find(D)->second->getSourceRange();
-          _R.ReplaceText(commentRange, "");
-        }
         if (clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D)) {
           _R.ReplaceText(rawComment->getSourceRange(), "");
           // llvm::outs() << "Handled RawComment\n";
         }
-        _R.ReplaceText( D->getSourceRange(), "// === Removed Undesired Function ===\n");
-        return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
+        _R.ReplaceText(D->getSourceRange(), "// === Removed Undesired Function ===\n");
+        // _C->getTranslationUnitDecl()->removeDecl(D);
+        return true;
       }
 
       // Code to Remove nodes as well as text if needed to make comment removal possible
@@ -60,8 +60,6 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         // }
 
     }
-    // _R.InsertTextBefore(D->getSourceRange().getBegin(), "// Keeping Function: \n");
-    // return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
   }
     return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
 }

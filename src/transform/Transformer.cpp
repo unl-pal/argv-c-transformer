@@ -57,7 +57,7 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   // preprocessedPath.replace_extension(".i");
   std::unique_ptr<clang::ASTUnit> newAstUnit =
-    clang::tooling::buildASTFromCodeWithArgs("", args, preprocessedPath.string());
+    clang::tooling::buildASTFromCodeWithArgs("//Modified Code", args, preprocessedPath.string());
     // clang::tooling::buildASTFromCodeWithArgs(*fileContents, std::vector<std::string>({}),
 
   if(!oldAstUnit || !newAstUnit) {
@@ -106,7 +106,7 @@ bool Transformer::transformFile(std::filesystem::path path,
   llvm::raw_fd_ostream srcOutput(llvm::StringRef(srcPath.string()), ec);
   R.setSourceMgr(oldContext.getSourceManager(), newAstUnit->getLangOpts());
   R.InsertTextBefore(oldContext.getTranslationUnitDecl()->getLocation(), "// Benchmark File");
-  R.getEditBuffer(oldContext.getSourceManager().getFileID(oldAstUnit->getStartOfMainFileID())).write(srcOutput);
+  R.getEditBuffer(newContext.getSourceManager().getFileID(newAstUnit->getStartOfMainFileID())).write(srcOutput);
 
   /*oldAstUnit->Save("output.ast");*/
   return true;

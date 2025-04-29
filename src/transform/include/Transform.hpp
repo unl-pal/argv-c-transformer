@@ -16,6 +16,8 @@ public:
 
   bool VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD);
 
+  bool VisitFunctionDecl(clang::FunctionDecl *D);
+
   bool VisitCallExpr(clang::CallExpr *E);
 
   bool VisitDeclRefExpr(clang::DeclRefExpr *D);

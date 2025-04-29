@@ -36,13 +36,18 @@ bool ReGenCodeVisitor::VisitDecl(clang::Decl *D) {
   } else if (D->isFunctionOrFunctionTemplate() || D->getKind() == D->Typedef) {
     if (D->isUsed()) {
       yes = true;
-    } else if (D->isReferenced()) {
-      yes = true;
+    // } else if (D->isReferenced()) {
+      // yes = true;
       // } else if (D->isReferenced()) {
       // yes = true;
     /*} else if (D->Typedef) {*/
     }
   }
+  // if (clang::FunctionDecl *func = D->getAsFunction()) {
+  //   if (func->getFirstDecl() != func) {
+  //   yes = false;
+  //   }
+  // }
   if (yes) {
     D->print(_Output);
     _Output << ";\n";
@@ -53,7 +58,12 @@ bool ReGenCodeVisitor::VisitDecl(clang::Decl *D) {
 bool ReGenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (!D) return false;
   if (_Mgr.isInMainFile(D->getLocation())) {
+    if (D->isLocalExternDecl()) {
+      D->print(_Output);
+      _Output << ";";
+    }
     D->print(_Output);
+    _Output << "\n";
   }
   return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitFunctionDecl(D);
 }

@@ -1,6 +1,9 @@
 #include <string.h>
 #include <stdbool.h>
 
+// comment by local external function
+extern int elsewhere(int x);
+
 // comments for the var decl
 int a0 = 0;
 int a1 = 1;
@@ -38,7 +41,6 @@ int hasInput(int input) {
 
 // comments for main
 int main() {
-
   struct thing myThing;
   struct thing *myThing2 = &myThing;
   myThing.b = true;
@@ -47,6 +49,8 @@ int main() {
   char *s3 = "thing";
 
   int foo = a0 + a1 - a2;
+
+  foo = elsewhere(foo);
 
   if (a0 > a1) {
     a1++;
