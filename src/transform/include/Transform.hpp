@@ -16,11 +16,11 @@ public:
 
   bool VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD);
 
-  bool VisitFunctionDecl(clang::FunctionDecl *D);
-
   bool VisitCallExpr(clang::CallExpr *E);
 
   bool VisitDeclRefExpr(clang::DeclRefExpr *D);
+
+  bool VisitFunctionDecl(clang::FunctionDecl *D);
 
   bool VisitDecl(clang::Decl *D);
 

@@ -3,8 +3,12 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/DeclID.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
+#include <cstdint>
+#include <sys/types.h>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 class RemoveUnusedVisitor : public clang::RecursiveASTVisitor<RemoveUnusedVisitor> {
@@ -20,18 +24,22 @@ public:
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 
   bool RemoveNodes(clang::TranslationUnitDecl *D);
-
+  // bool RemoveNodes();
+  // bool RemoveNodes(clang::ASTContext *newContext);
+  // bool RemoveNodes(clang::Decl *D);
+  bool VisitTypedefNameDecl(clang::TypedefNameDecl *D);
+  bool VisitTypedefDecl(clang::TypedefDecl *D);
   bool VisitRecordDecl(clang::RecordDecl *D);
 
-  bool VisitTypedefDecl(clang::TypedefDecl *D);
+  void Update(clang::ASTContext *C);
 
-  bool VisitTypedefNameDecl(clang::TypedefNameDecl *D);
-
-  // bool RemoveNodes(clang::Decl *D);
+  int ReportRemoves();
 
 private:
   clang::ASTContext *_C;
   clang::SourceManager &_Mgr;
+  // std::unordered_set<clang::Decl*> _ToRemove;
+  // std::unordered_map<ulong, clang::Decl*> _ToRemove;
   std::vector<clang::Decl*> _ToRemove;
   clang::TranslationUnitDecl *_TD;
 

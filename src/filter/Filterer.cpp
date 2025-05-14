@@ -283,8 +283,7 @@ void Filterer::debugInfo(std::string info) {
 }
 
 /// Main driver for the Filter System
-int Filterer::run(std::string pathForResources,
-                  std::string fileOrDirToFilter,
+int Filterer::run(std::string fileOrDirToFilter,
                   std::string propertiesConfigFile) {
 
   std::cout << "starting" << std::endl;
@@ -305,7 +304,7 @@ int Filterer::run(std::string pathForResources,
     // This ensures comments are a part of the parsed AST
     args.push_back("-fparse-all-comments");
     // This tells the AST generator where to find the compiler supplied headers
-    args.push_back(std::string("-resource-dir=") + pathForResources);
+    args.push_back(std::string("-resource-dir=") + std::string(std::getenv("CLANG_RESOURCES")));
 
     // string indent to use for organizing debug statements
     std::string indent = "    "; // TODO something about this, is it needed?

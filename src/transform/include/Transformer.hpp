@@ -10,7 +10,7 @@ public:
   bool transformFile(std::filesystem::path path, std::vector<std::string> &args);
   bool transformAll(std::filesystem::path path, std::vector<std::string> &args);
   void parseConfig();
-  int run(std::string resources, std::string filePath = "filteredFiles");
+  int run(std::string filePath = "filteredFiles");
 
 private:
   struct configs {
