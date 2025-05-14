@@ -95,7 +95,7 @@ bool Transformer::transformFile(std::filesystem::path path,
   //
   // std::filesystem::create_directories(srcPath.parent_path());
   // // newContext.getTranslationUnitDecl()->dumpColor();
-  // std::cout << "Writing File" << std::endl;
+  std::cout << "Writing File" << std::endl;
 
   std::error_code ec;
   std::filesystem::create_directories(preprocessedPath.parent_path());
