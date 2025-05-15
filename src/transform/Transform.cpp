@@ -79,6 +79,9 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
   // _R.ReplaceText(loc, newTypeDef->getNameAsString());
   // _R.InsertTextAfterToken(oldLoc, newTypeDef->getNameAsString());
   for (clang::Decl *decl : TD->decls()) {
+    if (_OldC->DeclRawComments.find(decl) != _OldC->DeclRawComments.end()) {
+      _NewC->addComment(*_OldC->DeclRawComments.at(decl));
+    }
     tempTd->addDecl(decl);
     // TODO This is a MONSTER
     // _R.ReplaceText(loc, _OM.getCharacterData(decl->getLocation()));

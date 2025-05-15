@@ -1,75 +1,77 @@
 #include "include/RegenCode.h"
-#include <clang-c/Index.h>
-#include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
-#include <clang/AST/Expr.h>
-#include <clang/AST/PrettyPrinter.h>
+#include <clang/AST/DeclCXX.h>
 #include <clang/AST/RawCommentList.h>
 #include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/AST/Type.h>
-#include <clang/Basic/CodeGenOptions.h>
 #include <clang/Basic/LLVM.h>
-#include <clang/Basic/LangStandard.h>
-#include <clang/Basic/SourceManager.h>
 #include <clang/Basic/Specifiers.h>
 #include <llvm/Support/raw_ostream.h>
 
 RegenCodeVisitor::RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &output)
     : _C(C),
-  _Mgr(_C->getSourceManager()),
-  _Output(output) {}
+  _M(C->getSourceManager()),
+  _Output(output) {
+  // if (!_C->Comments.empty()) {
+  //   _Comments = _C->DeclRawComments;
+  // }
+}
 
 bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
-  bool yes = false;
-  if (_Mgr.isInMainFile(D->getLocation())) {
-    if (D->hasBody()) {
-      yes = false;
-    } else if (D->getDeclContext()->getParent() &&
-               D->getDeclContext()->isRecord()) {
-      yes = false;
-    } else if (!D->getDeclContext()->isTranslationUnit() &&
-               !D->getParentFunctionOrMethod()) {
-      yes = true;
-    }
-  } else if (D->isFunctionOrFunctionTemplate() || D->getKind() == D->Typedef) {
-    if (D->isUsed()) {
-      yes = true;
-    // } else if (D->isReferenced()) {
-    //   yes = true;
-    /*} else if (D->Typedef) {*/
+  if (!_C->Comments.empty()) {
+    if (auto mapOComments = _C->Comments.getCommentsInFile(_M.getMainFileID())) {
+      // _Output << mapOComments->begin()->second->getRawText(_M) << "\n";
+      // if (D->getID()) {
+        // if (mapOComments->find(D->getID()) != mapOComments->end()) {
+          // _Output << mapOComments->find(D->getID())->second->getRawText(_M);
+          // auto iteratorForComment = _C->DeclRawComments.find(D);
+          // _Output << iteratorForComment->second->getRawText(_M) << "\n";
+        // }
+      // }
+      // const clang::RawComment *comment = _C->DeclRawComments.lookup(D);
+      // _Output << _M.getCharacterData();
+      // llvm::outs() << "Comments are recognized but not printed";
+      // _Output << comment->getSourceRange().printToString(_M);
+      // _Output << comment->getBriefText(*_C);
     }
   }
-  // if (clang::FunctionDecl *func = D->getAsFunction()) {
-  //   if (func->getFirstDecl() != func) {
-  //   yes = false;
-  //   }
-  // }
-  if (yes) {
-    D->print(_Output);
-    _Output << ";\n";
+  auto denseComments = _C->Comments.getCommentsInFile(_M.getMainFileID());
+  if (!denseComments->empty()) {
+    auto i = denseComments->begin();
+    for (const auto i : *_C->Comments.getCommentsInFile(_M.getMainFileID())) {
+      _Output << i.second->getRawText(_M) << "\n";
+      // _Output << i->second->getRawText(_M) << "\n";
+      // i++;
+    }
+    // llvm::outs() << "Comments are recognized but not printed";
   }
+  // D->print(_Output);
+  // _Output << "===============;\n";
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitDecl(D);
 }
 
 bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (!D) return false;
-  if (_Mgr.isInMainFile(D->getLocation())) {
-    if (D->isLocalExternDecl()) {
-      D->print(_Output);
-      _Output << ";";
-    }
-    D->print(_Output);
-    _Output << "\n";
+  if (_C->DeclRawComments.find(D) != _C->DeclRawComments.end()) {
+    const clang::RawComment *comment = _C->DeclRawComments.at(D);
+    _Output << comment->getBriefText(*_C);
   }
+    D->print(_Output);
+  if (D->getAsFunction()->getStorageClass() == clang::SC_Extern) {
+    _Output << ";";
+  }
+    _Output << "\n";
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitFunctionDecl(D);
 }
 
 bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
   if (!D) return false;
-  if (_Mgr.isInMainFile(D->getLocation()) &&
-      !D->getDeclContext()->getParent()) {
+  if (_C->DeclRawComments.find(D) != _C->DeclRawComments.end()) {
+    const clang::RawComment *comment = _C->DeclRawComments.at(D);
+    _Output << comment->getRawText(_M);
+  }
+  if (!D->getDeclContext()->getParent()) {
     D->print(_Output);
     _Output << ";\n";
   }
@@ -78,31 +80,24 @@ bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
 
 bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
-  if (_Mgr.isInMainFile(D->getLocation())) {
-      D->print(_Output);
-    _Output << ";\n";
+  if (_C->DeclRawComments.find(D) != _C->DeclRawComments.end()) {
+    const clang::RawComment *comment = _C->DeclRawComments.at(D);
+    _Output << comment->getRawText(_M);
   }
-  return true;
+  D->print(_Output);
+  _Output << ";\n";
+  return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitRecordDecl(D);
 }
 
-bool RegenCodeVisitor::VisitStmt(clang::Stmt *S) {
-  if (!S) return false;
-  if (_Mgr.isInMainFile(S->getBeginLoc())) {
-    /*S->printPretty(raw_ostream &OS, PrinterHelper *Helper, const PrintingPolicy &Policy)*/
-    /*S->printPretty(llvm::outs(), PrinterHelper *Helper, const PrintingPolicy &Policy)*/
-    /*S->getSourceRange().print(llvm::outs(), mgr);*/
-    /*clang::PrinterHelper *helpME = clang::PrinterHelper(llvm::outs(), mgr);*/
-    /*clang::PrintingPolicy policy = _C->getPrintingPolicy();*/
-    /*if (S->getStmtClass() == clang::comments::FullComment) {*/
-    /*if (S->getStmtClass() == clang::LineComment) {*/
-    /*S->dumpColor();*/
-    /*}*/
-    /*clang::PrinterHelper *helpMe;*/
-    /*helpMe->handledStmt(S, llvm::outs());*/
-    /*S->printPretty(llvm::outs(), 0, policy, 0, "\n", _C);*/
-    /*llvm::outs() << "\n";*/
-  }
-  return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitStmt(S);
+bool RegenCodeVisitor::VisitTypedefDecl(clang::TypedefDecl *D) {
+  D->print(_Output);
+  _Output << ";\n";
+  return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitTypedefDecl(D);
 }
 
- 
+bool RegenCodeVisitor::VisitUnnamedGlobalConstantDecl(
+  clang::UnnamedGlobalConstantDecl *D) {
+  D->print(_Output);
+  _Output << ";\n";
+  return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitUnnamedGlobalConstantDecl(D);
+}
