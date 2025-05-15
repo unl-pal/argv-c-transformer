@@ -30,35 +30,18 @@ bool RemoveFuncVisitor::VisitDecl(clang::Decl *D) {
 bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if(!D) return false;
   if (_mgr.isInMainFile(D->getLocation())) {
-    // TODO Decide on this, If uncommmented then all code provided extern
-    // Functions will be left alone and unhandled
-    // This is good if multiple files are used that may define the function
-    // This does not help if undefined creating later errors and better to be removed
-    // if (D->getStorageClass() == clang::SC_Extern) {
-    //   return true;
-    // }
     for (std::string& name : _toRemove) {
       if (name == D->getNameAsString()) {
         if (clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D)) {
           _R.ReplaceText(rawComment->getSourceRange(), "");
-          // llvm::outs() << "Handled RawComment\n";
         }
-        _R.ReplaceText(D->getSourceRange(), "// === Removed Undesired Function ===\n");
-        // _C->getTranslationUnitDecl()->removeDecl(D);
+        clang::SourceRange range = D->getSourceRange();
+        if (D->getStorageClass() == clang::SC_Extern) {
+          range = clang::SourceRange(D->getOuterLocStart(), D->getEndLoc().getLocWithOffset(1));
+        }
+        _R.ReplaceText(range, "// === Removed Undesired Function ===\n");
         return true;
       }
-
-      // Code to Remove nodes as well as text if needed to make comment removal possible
-        // D->setBody(nullptr);
-        /// TODO remove Node or Just Text?? VV
-        // if (clang::TranslationUnitDecl *TU =
-        //         clang::dyn_cast<clang::TranslationUnitDecl>(
-        //             D->getDeclContext())) {
-        //   // TU->removeDecl(D);
-        // /// TODO remove this?? ^^
-        //   // return false;
-        // }
-
     }
   }
     return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);

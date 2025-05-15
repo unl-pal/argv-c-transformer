@@ -1,4 +1,4 @@
-#include "include/ReGenCode.h"
+#include "include/RegenCode.h"
 #include <clang-c/Index.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
@@ -15,12 +15,12 @@
 #include <clang/Basic/Specifiers.h>
 #include <llvm/Support/raw_ostream.h>
 
-ReGenCodeVisitor::ReGenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &output)
+RegenCodeVisitor::RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &output)
     : _C(C),
   _Mgr(_C->getSourceManager()),
   _Output(output) {}
 
-bool ReGenCodeVisitor::VisitDecl(clang::Decl *D) {
+bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
   bool yes = false;
   if (_Mgr.isInMainFile(D->getLocation())) {
@@ -50,10 +50,10 @@ bool ReGenCodeVisitor::VisitDecl(clang::Decl *D) {
     D->print(_Output);
     _Output << ";\n";
   }
-  return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitDecl(D);
+  return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitDecl(D);
 }
 
-bool ReGenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
+bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (!D) return false;
   if (_Mgr.isInMainFile(D->getLocation())) {
     if (D->isLocalExternDecl()) {
@@ -63,20 +63,20 @@ bool ReGenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
     D->print(_Output);
     _Output << "\n";
   }
-  return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitFunctionDecl(D);
+  return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitFunctionDecl(D);
 }
 
-bool ReGenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
+bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
   if (!D) return false;
   if (_Mgr.isInMainFile(D->getLocation()) &&
       !D->getDeclContext()->getParent()) {
     D->print(_Output);
     _Output << ";\n";
   }
-  return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitVarDecl(D);
+  return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitVarDecl(D);
 }
 
-bool ReGenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
+bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
   if (_Mgr.isInMainFile(D->getLocation())) {
       D->print(_Output);
@@ -85,7 +85,7 @@ bool ReGenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   return true;
 }
 
-bool ReGenCodeVisitor::VisitStmt(clang::Stmt *S) {
+bool RegenCodeVisitor::VisitStmt(clang::Stmt *S) {
   if (!S) return false;
   if (_Mgr.isInMainFile(S->getBeginLoc())) {
     /*S->printPretty(raw_ostream &OS, PrinterHelper *Helper, const PrintingPolicy &Policy)*/
@@ -102,7 +102,7 @@ bool ReGenCodeVisitor::VisitStmt(clang::Stmt *S) {
     /*S->printPretty(llvm::outs(), 0, policy, 0, "\n", _C);*/
     /*llvm::outs() << "\n";*/
   }
-  return clang::RecursiveASTVisitor<ReGenCodeVisitor>::VisitStmt(S);
+  return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitStmt(S);
 }
 
  

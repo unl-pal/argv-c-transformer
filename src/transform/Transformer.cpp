@@ -1,5 +1,5 @@
 #include "include/Transformer.hpp"
-#include "include/ReGenCode.h"
+#include "include/RegenCode.h"
 #include "include/Transform.hpp"
 #include "include/CreateNewAST.hpp"
 #include "include/RemoveUnusedVisitor.hpp"
@@ -55,8 +55,9 @@ bool Transformer::transformFile(std::filesystem::path path,
   }
 
   std::unique_ptr<clang::ASTUnit> oldAstUnit =
-    clang::tooling::buildASTFromCodeWithArgs(*fileContents, args,
-                                             srcPath.string());
+    clang::tooling::buildASTFromCodeWithArgs(*fileContents, args
+                                             // );
+                                             , srcPath.string());
 
   // preprocessedPath.replace_extension(".i");
   std::unique_ptr<clang::ASTUnit> newAstUnit =
@@ -100,8 +101,8 @@ bool Transformer::transformFile(std::filesystem::path path,
   std::error_code ec;
   std::filesystem::create_directories(preprocessedPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(preprocessedPath.string()), ec);
-  ReGenCodeVisitor codeReGenVisitor(&newContext, output);
-  codeReGenVisitor.TraverseAST(newContext);
+  RegenCodeVisitor codeRegenVisitor(&newContext, output);
+  codeRegenVisitor.TraverseAST(newContext);
   // ReGenCodeVisitor codeReGenVisitor(&lastContext, output);
   // codeReGenVisitor.TraverseAST(lastContext);
 

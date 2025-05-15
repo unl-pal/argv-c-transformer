@@ -37,7 +37,9 @@ TransformerVisitor::TransformerVisitor(clang::ASTContext *newC, clang::ASTContex
 bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD) {
   clang::TranslationUnitDecl *tempTd = _NewC->getTranslationUnitDecl();
   int size = VerifierFuncs.size();
-  clang::SourceLocation loc = _M.getLocForStartOfFile(_M.getFileID(tempTd->getLocation()));
+  clang::SourceManager &_OM = _OldC->getSourceManager();
+  // clang::SourceLocation loc = _OM.getLocForStartOfFile(_OM.getFileID(TD->getLocation()));
+  clang::SourceLocation loc = _OM.getIncludeLoc(_OM.getFileID(TD->getLocation()));
   clang::RawComment RC(_M, tempTd->getSourceRange(), clang::CommentOptions({}), false);
   _NewC->addComment(RC);
   for (int i=0; i<size; i++) {
@@ -49,7 +51,8 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
 
     clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
       *_NewC,
-      tempTd,
+      // tempTd,
+      TD,
       loc,
       loc,
       declName,
@@ -59,9 +62,11 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
     );
     newFunction->setReferenced();
     newFunction->setIsUsed();
+    newFunction->setLocation(loc);
     tempTd->addDecl(newFunction);
-    // _R.InsertTextAfter(loc, newFunction->getQualifiedNameAsString());
-    loc = newFunction->getSourceRange().getEnd();
+    // _R.ReplaceText(loc, newFunction->getQualifiedNameAsString());
+    _R.InsertTextAfter(loc, newFunction->getQualifiedNameAsString() + "();\n");
+    // loc = newFunction->getSourceRange().getEnd();
   }
 
   clang::TypedefDecl* newTypeDef = clang::TypedefDecl::Create(*_OldC, _NewC->getTranslationUnitDecl(), loc, loc, &_NewC->Idents.get("bool"), _OldC->getTrivialTypeSourceInfo(_OldC->BoolTy));
@@ -70,13 +75,14 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
   newTypeDef->setReferenced();
   tempTd->addDecl(newTypeDef);
   // _R.InsertTextAfter(loc, newTypeDef->getNameAsString());
-  loc = newTypeDef->getSourceRange().getEnd();
-  // _R.InsertTextAfterToken(loc, newTypeDef->getNameAsString());
+  // loc = newTypeDef->getSourceRange().getEnd();
+  // _R.ReplaceText(loc, newTypeDef->getNameAsString());
   // _R.InsertTextAfterToken(oldLoc, newTypeDef->getNameAsString());
   for (clang::Decl *decl : TD->decls()) {
     tempTd->addDecl(decl);
-    // _R.InsertTextAfter(loc, _R.getRewrittenText(decl->getSourceRange()));
-    loc = decl->getSourceRange().getEnd();
+    // TODO This is a MONSTER
+    // _R.ReplaceText(loc, _OM.getCharacterData(decl->getLocation()));
+    // loc = decl->getSourceRange().getEnd();
   }
   // TD = tempTd;
   // return clang::RecursiveASTVisitor<TransformerVisitor>::VisitTranslationUnitDecl(TD);
@@ -84,7 +90,7 @@ bool TransformerVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD
     for (auto comment : *_OldC->Comments.getCommentsInFile(_M.getFileID(TD->getLocation()))) {
       if (!comment.second->isAttached()) {
         llvm::outs() << "Comment is not Attached\n";
-        _R.ReplaceText(comment.second->getSourceRange(), "");
+        // _R.ReplaceText(comment.second->getSourceRange(), "");
       }
     }
   }
@@ -127,11 +133,11 @@ bool TransformerVisitor::VisitCallExpr(clang::CallExpr *E) {
       clang::IdentifierInfo *newInfo = &_NewC->Idents.get("__VERIFIER_nondet_"+myType);
       clang::DeclarationName newName(newInfo);
       // func->setDeclName(newName);
-      if (func->isLocalExternDecl()) {
+      // if (func->isLocalExternDecl()) {
         E->shrinkNumArgs(0);
         E->getCalleeDecl()->getAsFunction()->setDeclName(newName);
         _R.ReplaceText(E->getSourceRange(), newName.getAsString() + "()");
-      }
+      // }
     } 
   }
   return clang::RecursiveASTVisitor<TransformerVisitor>::VisitCallExpr(E);

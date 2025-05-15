@@ -39,7 +39,8 @@ private:
     "__VERIFIER_nondet_long",
     "__VERIFIER_nondet_longlong",
     "__VERIFIER_nondet_short",
-    "__VERIFIER_nondet_uint"
+    "__VERIFIER_nondet_uint",
+    "__VERIFIER_nondet_void"
   };
   std::vector<clang::CanQualType> ReturnTypes = {
   _NewC->CharTy,
@@ -49,6 +50,7 @@ private:
   _NewC->LongTy,
   _NewC->LongLongTy,
   _NewC->ShortTy,
-  _NewC->UnsignedIntTy
+  _NewC->UnsignedIntTy,
+  _NewC->VoidTy
   };
 };

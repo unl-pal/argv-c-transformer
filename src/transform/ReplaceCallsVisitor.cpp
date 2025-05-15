@@ -17,7 +17,7 @@ bool ReplaceDeadCallsVisitor::VisitDecl(clang::Decl *D) {
 bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   if (!_C->getSourceManager().isInMainFile(E->getExprLoc())) return true;
   if (clang::FunctionDecl *func = E->getCalleeDecl()->getAsFunction()) {
-    if ((func->isImplicit()) || (!func->isDefined() && !func->isExternC())) {
+    if ((func->isImplicit()) || !func->isDefined()) {
       std::string myType = func->getReturnType().getAsString();
       clang::IdentifierInfo *newInfo = &_C->Idents.get("__VERIFIER_nondet_"+myType);
       clang::DeclarationName newName(newInfo);
