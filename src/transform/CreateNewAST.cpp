@@ -1,10 +1,14 @@
 #include "include/CreateNewAST.hpp"
 
+#include <clang/AST/ASTContext.h>
+#include <clang/AST/CanonicalType.h>
+#include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
+#include <string>
 
 // CreateNewAST::CreateNewAST(std::unique_ptr<clang::ASTUnit> *oldUnit,
 //                            std::unique_ptr<clang::ASTUnit> *newUnit)
@@ -13,7 +17,8 @@
 //       _NewC(*_NewU->getASTContext()),
 //       _OldC(*_OldU->getASTContext()) {}
 
-CreateNewAST::CreateNewAST(clang::Rewriter &R) : _R(R) {};
+CreateNewAST::CreateNewAST(clang::Rewriter &R, clang::SourceManagerForFile &SMF)
+    : _R(R), _SMF(SMF) {};
 
 bool CreateNewAST::AddVerifiers(clang::ASTContext *newC, clang::ASTContext *oldC) {
   clang::TranslationUnitDecl *newTD = newC->getTranslationUnitDecl();
@@ -27,49 +32,26 @@ bool CreateNewAST::AddVerifiers(clang::ASTContext *newC, clang::ASTContext *oldC
   newC->LongTy,
   newC->LongLongTy,
   newC->ShortTy,
+  newC->VoidTy,
   newC->UnsignedIntTy
   };
 
-  llvm::outs() << "Adding Verifiers\n";
-  if (newC->Comments.empty()) {
-    llvm::outs() << "No Comments\n";
-    return false;
+  // clang::SourceLocation loc = _SMF.get().getIncludeLoc(FileID FID);
+  // TODO this may solve the other issues with benchmark source and comments
+  clang::SourceLocation loc = _SMF.get().getLocForStartOfFile(newC->getSourceManager().getMainFileID());
+  // _SMF.get().dump();
+  if (loc.isValid()) {
+    llvm::outs() << "Valid Location\n";
   }
-  llvm::outs() << "Adding Verifiers\n";
 
-  // clang::SourceLocation loc;
-  // if (auto allComments = newC->Comments.getCommentsInFile(newC->getSourceManager().getFileID(newTD->getLocation()))) {
-  //   llvm::outs() << "Adding Verifiers\n";
-  //   // llvm::outs() << allComments->count(0);
-  //   auto firstComment = allComments->begin();
-  //   llvm::outs() << "Adding Verifiers\n";
-  //   // llvm::outs() << firstComment << "\n";
-  //   // if (firstComment->first) {
-  //   //   llvm::outs() << "Adding Verifiers\n";
-  //   //   // llvm::outs() << firstComment->second->getRawText(newC->getSourceManager());
-  //   //   if (firstComment->second) {
-  //   //     loc = firstComment->second->getEndLoc();
-  //   //   }
-  //   // llvm::outs() << "Adding Verifiers\n";
-  //   // }
-  //   // if (firstComment->second) {
-  //   //   loc = firstComment->second->getEndLoc();
-  //   // }
-  // }
-
-  clang::SourceLocation loc = oldTD->decls_begin()->getLocation();
-
-    llvm::outs() << "Adding Verifiers\n";
-  if (!loc.isValid()) {
-    llvm::outs() << "No Comment\n";
-    // return false;
-  }
-  // clang::SourceLocation loc = newTD->getLocation();
-  int size = VerifierFuncs.size();
+  int size = ReturnTypes.size();
+  std::string nondetName = "__VERIFIER_nondet_";
   for (int i=0; i<size; i++) {
-    clang::IdentifierInfo *funcName = &newC->Idents.get(VerifierFuncs[i]);
-    clang::DeclarationName declName(funcName);
     clang::QualType returnType = ReturnTypes[i];
+    std::string returnTypeName = returnType.getAsString();
+    std::replace(returnTypeName.begin(), returnTypeName.end(), ' ', '_');
+    clang::IdentifierInfo *funcName = &newC->Idents.get(nondetName + returnTypeName);
+    clang::DeclarationName declName(funcName);
     clang::FunctionProtoType::ExtProtoInfo epi;
     clang::QualType funcQualType = newC->getFunctionType(returnType, clang::ArrayRef<clang::QualType>(), epi);
 

@@ -6,6 +6,7 @@
 #include <ReplaceCallsVisitor.hpp>
 
 #include <clang/Basic/FileManager.h>
+#include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
 #include <filesystem>
@@ -74,19 +75,21 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   clang::Rewriter R;
   R.setSourceMgr(oldContext.getSourceManager(), oldAstUnit->getLangOpts());
-  TransformerVisitor transformerVisitor(&newContext, &oldContext, R);
-  transformerVisitor.TraverseAST(oldContext);
+  // TransformerVisitor transformerVisitor(&newContext, &oldContext, R);
+  // transformerVisitor.TraverseAST(oldContext);
 
-  // clang::Rewriter creatorR;
-  // creatorR.setSourceMgr(newContext.getSourceManager(), newAstUnit->getLangOpts());
-  //
+  clang::Rewriter creatorR;
+  creatorR.setSourceMgr(newContext.getSourceManager(), newAstUnit->getLangOpts());
+
+  clang::SourceManagerForFile SMF(preprocessedPath.string(), *fileContents);
+  CreateNewAST creator(creatorR, SMF);
   // CreateNewAST creator(creatorR);
-  // creator.AddVerifiers(&newContext, &oldContext);
-  // creator.AddBoolDef(&newContext, &oldContext);
-  // creator.AddAllDecl(&newContext, &oldContext);
-  //
-  // ReplaceDeadCallsVisitor replacer(&newContext, R);
-  // replacer.TraverseAST(newContext);
+  creator.AddVerifiers(&newContext, &oldContext);
+  creator.AddBoolDef(&newContext, &oldContext);
+  creator.AddAllDecl(&newContext, &oldContext);
+
+  ReplaceDeadCallsVisitor replacer(&newContext, R);
+  replacer.TraverseAST(newContext);
   //
   // RemoveUnusedVisitor remover(&newContext);
   // std::cout << "Remover Finder" << std::endl;
@@ -96,6 +99,7 @@ bool Transformer::transformFile(std::filesystem::path path,
   //
   // std::filesystem::create_directories(srcPath.parent_path());
   // // newContext.getTranslationUnitDecl()->dumpColor();
+
   std::cout << "Writing File" << std::endl;
 
   std::error_code ec;

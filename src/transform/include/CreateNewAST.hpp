@@ -2,6 +2,7 @@
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
+#include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <string>
@@ -13,7 +14,7 @@ public:
   // CreateNewAST(std::unique_ptr<clang::ASTUnit> *oldUnit,
   //              std::unique_ptr<clang::ASTUnit> *newUnit);
 
-  CreateNewAST(clang::Rewriter &R);
+  CreateNewAST(clang::Rewriter &R, clang::SourceManagerForFile &SMF);
 
   bool AddVerifiers(clang::ASTContext *newC, clang::ASTContext *oldC);
   // void AddVerifiers();
@@ -29,14 +30,5 @@ private:
   // clang::ASTContext *_NewC;
   // clang::ASTContext *_OldC;
   clang::Rewriter _R;
-  std::vector<std::string> VerifierFuncs = {
-    "__VERIFIER_nondet_char",
-    "__VERIFIER_nondet_double",
-    "__VERIFIER_nondet_float",
-    "__VERIFIER_nondet_int",
-    "__VERIFIER_nondet_long",
-    "__VERIFIER_nondet_longlong",
-    "__VERIFIER_nondet_short",
-    "__VERIFIER_nondet_uint"
-  };
+  clang::SourceManagerForFile &_SMF;
 };
