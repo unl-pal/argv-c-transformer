@@ -91,12 +91,12 @@ bool Transformer::transformFile(std::filesystem::path path,
   ReplaceDeadCallsVisitor replacer(&newContext, R);
   replacer.TraverseAST(newContext);
   //
-  // RemoveUnusedVisitor remover(&newContext);
-  // std::cout << "Remover Finder" << std::endl;
-  // remover.TraverseAST(newContext);
-  // std::cout << "Remover Remove" << std::endl;
-  // remover.RemoveNodes(newContext.getTranslationUnitDecl());
-  //
+  RemoveUnusedVisitor remover(&newContext);
+  std::cout << "Remover Finder" << std::endl;
+  remover.TraverseAST(newContext);
+  std::cout << "Remover Remove" << std::endl;
+  remover.RemoveNodes(newContext.getTranslationUnitDecl());
+
   // std::filesystem::create_directories(srcPath.parent_path());
   // // newContext.getTranslationUnitDecl()->dumpColor();
 

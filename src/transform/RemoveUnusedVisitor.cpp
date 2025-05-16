@@ -4,6 +4,7 @@
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/Specifiers.h>
+#include <clang/Sema/Ownership.h>
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 #include <unordered_set>
@@ -25,24 +26,48 @@ bool RemoveUnusedVisitor::RemoveNodes(clang::TranslationUnitDecl *D) {
   llvm::outs() << "Removing " << _ToRemove.size() << " Nodes\n";
   int size = _ToRemove.size();
   for (int i = size-1; i>0; i--) {
-    try {
-      // llvm::outs() << i << "\n";
-      clang::Decl *decl = _ToRemove[i];
-      // llvm::outs() << _ToRemove.size() << "\n";
-      // continue;
-      // for (auto *child : decl->getDeclContext()->decls()) {
-      //
-      // }
-      // if (decl != nullptr) {
-      //   decl->dump();
-      //       decl = NULL; // TODO this does nothing for me.... soooooo... yeah
-      //       llvm::outs() << "I tried buddy\n";
-      // }
-      // _ToRemove[i] = nullptr;
-    } catch (...) {
-      continue;
+    llvm::outs() << i << "\n";
+    if (!_ToRemove[i]) continue;
+    clang::Decl *decl = _ToRemove[i];
+    // This would make it so only funtions could be removed which makes little sense
+    // clang::DeclContextLookupResult result = _TD->lookup(decl->getAsFunction()->getDeclName());
+    // if (result.isSingleResult()) {
+    //   result.front()->getDeclContext()->getParent()->removeDecl(decl);
+    // }
+
+    if (decl->getDeclContext()) {
+      llvm::outs() << "Has context\n";
+      if (decl->getDeclContext()->getParent()) {
+        llvm::outs() << "Has Parent\n";
+        auto parent = decl->getDeclContext()->getParent();
+        decl->getDeclContext()->dumpLookups();
+        parent->dumpLookups();
+        if (parent->Encloses(decl->getDeclContext())) {
+          llvm::outs() << "Parental Controls\n";
+          // parent->removeDecl(decl);
+        }
+      }
     }
   }
+  // if (clang::DeclContext *context = decl->getDeclContext()) {
+  //   if (clang::DeclContext *parent = context->getParent()) {
+  //     parent->removeDecl(decl);
+  //   }
+  // }
+  // if (_TD->Encloses(decl->getDeclContext())) {
+  //   _TD->removeDecl(decl);
+  // }
+  // llvm::outs() << _ToRemove.size() << "\n";
+  // continue;
+  // for (auto *child : decl->getDeclContext()->decls()) {
+  //
+  // }
+  // if (decl != nullptr) {
+  //   decl->dump();
+  //       decl = NULL; // TODO this does nothing for me.... soooooo... yeah
+  //       llvm::outs() << "I tried buddy\n";
+  // }
+  // _ToRemove[i] = nullptr;
   return true;
 }
 
