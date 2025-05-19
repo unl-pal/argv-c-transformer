@@ -22,6 +22,7 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
       // if (_C->getSourceManager().isInMainFile(func->getLocation())) {
         // if ((func->isImplicit() || !func->isDefined()) && func->getStorageClass() != clang::SC_Extern) {
         if ((func->isImplicit() || !func->isDefined()) && !func->isInlineDefinitionExternallyVisible()) {
+        // if ((func->isImplicit() || !func->isDefined())) {
           std::string myType = func->getReturnType().getAsString();
           std::replace(myType.begin(), myType.end(), ' ', '_');
           clang::IdentifierInfo *newInfo = &_C->Idents.get("__VERIFIER_nondet_" + myType);

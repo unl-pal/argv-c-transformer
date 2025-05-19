@@ -67,7 +67,6 @@ bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
   if (_mgr->isInMainFile(VD->getLocation())) {
     for (unsigned int specificType : _T) {
       if (_allTypes || VD->getType()->isSpecificBuiltinType(specificType)) {
-	// llvm::outs() << "Type - " << VD->getType() << ": " << VD->getNameAsString() << "\n";
 	_allFunctions[getDeclParentFuncName(*VD)]->TypeVariables++;
 	break;
       }
@@ -82,7 +81,6 @@ bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   if (_mgr->isInMainFile(FD->getLocation())) {
     _allFunctions.try_emplace(FD->getNameAsString(), new attributes);
     _allFunctions["Program"]->Functions++;
-    /*FD->dumpColor();*/
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitFunctionDecl(FD);
 }
@@ -155,8 +153,6 @@ bool CountNodesVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getOperatorLoc())) {
     std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
-    // if (O->isArithmeticOp()) {
-    // if (std::find(_T.begin(), _T.end(), O->getValueKind()) != _T.end()) {
     for (unsigned int specificType : _T) {
       if (_allTypes || O->getType()->isSpecificBuiltinType(specificType)) {
 	if (O->isArithmeticOp()) {
@@ -184,8 +180,6 @@ bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
     for (unsigned int specificType : _T) {
       if (_allTypes || O->getType()->isSpecificBuiltinType(specificType)) {
 	std::string currentFunc = getStmtParentFuncName(*O);
-	// if (O->isLogicalOp()) { // bool ops (and or etc)
-	// Additive seems to be any mathmatical, subtraction and division included
 	if (O->isAdditiveOp()) {
 	  _allFunctions[currentFunc]->TypeArithmeticOperation++;
 	}
@@ -222,12 +216,6 @@ bool CountNodesVisitor::VisitBinaryConditionalOperator(clang::BinaryConditionalO
     return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryConditionalOperator(O);
 }
 
-// TODO figure out if types could/should be used on the left and right sides
-bool CountNodesVisitor::VisitType(clang::Type *T) {
-  if (!T) return false;
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitType(T);
-}
-
 // count the parameters in the function signiture and check if is an int
 bool CountNodesVisitor::VisitImplicitParamDecl(clang::ImplicitParamDecl *D) {
   std::string funcName = getDeclParentFuncName(*D);
@@ -237,10 +225,6 @@ bool CountNodesVisitor::VisitImplicitParamDecl(clang::ImplicitParamDecl *D) {
     }
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitImplicitParamDecl(D);
-}
-
-bool CountNodesVisitor::VisitBuiltinType(clang::BuiltinType *T) {
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBuiltinType(T);
 }
 
 // Getter for all functions and their attributes

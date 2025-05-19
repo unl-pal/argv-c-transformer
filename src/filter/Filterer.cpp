@@ -1,7 +1,6 @@
 #include "include/Filterer.hpp"
-#include "include/Remove.h"
+#include "include/Remove.hpp"
 
-#include <algorithm>
 #include <clang/AST/Type.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Tooling/Tooling.h>
@@ -306,17 +305,10 @@ int Filterer::run(std::string fileOrDirToFilter,
     // This tells the AST generator where to find the compiler supplied headers
     args.push_back(std::string("-resource-dir=") + std::string(std::getenv("CLANG_RESOURCES")));
 
-    // string indent to use for organizing debug statements
-    std::string indent = "    "; // TODO something about this, is it needed?
-    std::string hello = "// ---------------------------------\n"
-                        "// !! This File Has Been Filtered !!\n"
-                        "// ---------------------------------\n";
-
     /// Loop over all c files in filter list and run through the checker before
     /// creating the AST
     for (std::string fileName : filesToFilter) {
       std::shared_ptr<std::string> contents = std::make_shared<std::string>();
-      *contents += hello;
       if (checkPotentialFile(fileName, contents)) {
         std::filesystem::path oldPath(fileName);
         std::filesystem::path newPath(std::filesystem::current_path() /
@@ -347,7 +339,7 @@ int Filterer::run(std::string fileOrDirToFilter,
         clang::ASTContext &Context = astUnit->getASTContext();
 
         if (config["debug"]) {
-          std::cout << indent << "Diagnostics" << std::endl;
+          std::cout << "Diagnostics" << std::endl;
           astUnit->getDiagnostics();
           Context.PrintStats();
         }
@@ -357,11 +349,11 @@ int Filterer::run(std::string fileOrDirToFilter,
         std::cout << "Creating Counting Visitor" << std::endl;
         CountNodesVisitor countVisitor(&Context, typesRequested);
 
-        std::cout << indent << "Traversing AST" << std::endl;
+        std::cout << "Traversing AST" << std::endl;
         countVisitor.TraverseAST(Context);
 
         if (config["debug"]) {
-          std::cout << indent << "Printing Report" << std::endl;
+          std::cout << "Printing Report" << std::endl;
           countVisitor.PrintReport(fileName);
         }
 
@@ -383,18 +375,21 @@ int Filterer::run(std::string fileOrDirToFilter,
         Rewrite.setSourceMgr(Context.getSourceManager(),
                              astUnit->getLangOpts());
         if (functionsToRemove.size()) {
-          std::cout << indent << "Removing Nodes\n";
+          std::cout << "Removing Nodes\n";
           for (std::string node : functionsToRemove) {
-            std::cout << indent << indent << node + "\n";
+            std::cout << node + "\n";
           }
           std::cout << std::endl;
           RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
                                                    functionsToRemove);
+        // RemoveFunctionsVisitor.TraverseAST(Context);
+        // TODO run for each function name may be the way to go...
+        for (std::string name : functionsToRemove) {
           RemoveFunctionsVisitor.TraverseAST(Context);
+        }
         }
 
         std::cout << "Writing File" << std::endl;
-        Rewrite.InsertTextBefore(Context.getTranslationUnitDecl()->decls_begin()->getBeginLoc(), "// ========== Try Again Filter ==========\n");
         std::error_code ec;
         llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
         Rewrite.getEditBuffer(Context.getSourceManager().getFileID(astUnit->getStartOfMainFileID())).write(output);

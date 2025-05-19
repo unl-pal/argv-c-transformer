@@ -1,4 +1,4 @@
-#include "include/RegenCode.h"
+#include "include/RegenCode.hpp"
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/RecursiveASTVisitor.h>

@@ -6,11 +6,9 @@
 #include <clang/AST/DeclID.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
-#include <cstdint>
 #include <sys/types.h>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
+
 class RemoveUnusedVisitor : public clang::RecursiveASTVisitor<RemoveUnusedVisitor> {
 public:
   RemoveUnusedVisitor(clang::ASTContext *C);
@@ -19,7 +17,7 @@ public:
 
   bool VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD);
 
-  // bool VisitExternCContextDecl(clang::ExternCContextDecl *D);
+  bool VisitExternCContextDecl(clang::ExternCContextDecl *D);
 
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 

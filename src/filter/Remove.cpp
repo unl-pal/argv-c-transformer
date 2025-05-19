@@ -1,4 +1,4 @@
-#include "include/Remove.h"
+#include "include/Remove.hpp"
 
 #include <clang/AST/RawCommentList.h>
 #include <clang/AST/Type.h>
@@ -13,20 +13,6 @@ RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext *C, clang::Rewriter &R,
                                      std::vector<std::string> toRemove)
   : _C(C), _R(R), _mgr(_R.getSourceMgr()), _toRemove(toRemove) {}
 
-bool RemoveFuncVisitor::VisitStmt(clang::Stmt *S) {
-  return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitStmt(S);
-}
-
-bool RemoveFuncVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
-  if (!D) return true;
-  return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitTranslationUnitDecl(D);
-}
-
-bool RemoveFuncVisitor::VisitDecl(clang::Decl *D) {
-  if (!D) return false;
-  return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitDecl(D);
-}
-
 bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if(!D) return false;
   if (_mgr.isInMainFile(D->getLocation())) {
@@ -40,6 +26,8 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
           range = clang::SourceRange(D->getOuterLocStart(), D->getEndLoc().getLocWithOffset(1));
         }
         _R.ReplaceText(range, "// === Removed Undesired Function ===\n");
+        // TODO what if only one node can be removed per run?
+        _C->getTranslationUnitDecl()->removeDecl(D);
         return true;
       }
     }

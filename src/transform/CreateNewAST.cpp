@@ -7,15 +7,7 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Support/raw_ostream.h>
-#include <memory>
 #include <string>
-
-// CreateNewAST::CreateNewAST(std::unique_ptr<clang::ASTUnit> *oldUnit,
-//                            std::unique_ptr<clang::ASTUnit> *newUnit)
-//     : _NewU(newUnit),
-//       _OldU(oldUnit),
-//       _NewC(*_NewU->getASTContext()),
-//       _OldC(*_OldU->getASTContext()) {}
 
 CreateNewAST::CreateNewAST(clang::Rewriter &R, clang::SourceManagerForFile &SMF)
     : _R(R), _SMF(SMF) {};
@@ -77,9 +69,6 @@ bool CreateNewAST::AddVerifiers(clang::ASTContext *newC, clang::ASTContext *oldC
 bool CreateNewAST::AddBoolDef(clang::ASTContext *newC, clang::ASTContext *oldC) {
   clang::TranslationUnitDecl *newTD = newC->getTranslationUnitDecl();
   clang::SourceLocation loc = newTD->getEndLoc();
-  // if (!loc.isValid()) {
-  //   return false;
-  // }
   clang::TypedefDecl* newTypeDef = clang::TypedefDecl::Create(
     *oldC,
     newC->getTranslationUnitDecl(),
@@ -104,10 +93,3 @@ bool CreateNewAST::AddAllDecl(clang::ASTContext *newC, clang::ASTContext *oldC) 
   }
   return true;
 }
-
-// std::unique_ptr<clang::ASTUnit> CreateNewAST::getAST() {
-//   _NewU->setASTContext(_NewC);
-//   std::unique_ptr<clang::ASTUnit> result;
-//   result.swap(_NewU);
-//   return result;
-// }

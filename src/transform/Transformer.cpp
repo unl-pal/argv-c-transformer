@@ -1,6 +1,5 @@
 #include "include/Transformer.hpp"
-#include "include/RegenCode.h"
-#include "include/Transform.hpp"
+#include "include/RegenCode.hpp"
 #include "include/CreateNewAST.hpp"
 #include "include/RemoveUnusedVisitor.hpp"
 #include <ReplaceCallsVisitor.hpp>
@@ -88,9 +87,11 @@ bool Transformer::transformFile(std::filesystem::path path,
   creator.AddBoolDef(&newContext, &oldContext);
   creator.AddAllDecl(&newContext, &oldContext);
 
+  std::cout << "Replace Calls" << std::endl;
   ReplaceDeadCallsVisitor replacer(&newContext, R);
   replacer.TraverseAST(newContext);
-  //
+  newContext.getTranslationUnitDecl()->dumpColor();
+  
   RemoveUnusedVisitor remover(&newContext);
   std::cout << "Remover Finder" << std::endl;
   remover.TraverseAST(newContext);

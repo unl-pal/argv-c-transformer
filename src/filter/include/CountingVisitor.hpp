@@ -65,10 +65,6 @@ public:
 
 	bool VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O);
 
-	bool VisitType(clang::Type *T);
-
-	bool VisitBuiltinType(clang::BuiltinType *T);
-
 	bool VisitImplicitParamDecl(clang::ImplicitParamDecl *D);
 
 	std::unordered_map<std::string, attributes*> ReportAttributes();
