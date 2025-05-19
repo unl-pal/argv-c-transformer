@@ -13,7 +13,7 @@ class RemoveUnusedVisitor : public clang::RecursiveASTVisitor<RemoveUnusedVisito
 public:
   RemoveUnusedVisitor(clang::ASTContext *C);
 
-  bool VisitDecl(clang::Decl *D);
+  // bool VisitDecl(clang::Decl *D);
 
   bool VisitTranslationUnitDecl(clang::TranslationUnitDecl *TD);
 

@@ -22,7 +22,11 @@ public:
 
 	bool VisitTypedefDecl(clang::TypedefDecl *D);
 
-  bool VisitUnnamedGlobalConstantDecl(clang::UnnamedGlobalConstantDecl *D);
+	bool VisitUnnamedGlobalConstantDecl(clang::UnnamedGlobalConstantDecl *D);
+
+	bool VisitParmVarDecl(clang::ParmVarDecl *D);
+
+	bool VisitFieldDecl(clang::FieldDecl *D);
 
 private:
 	clang::ASTContext *_C;

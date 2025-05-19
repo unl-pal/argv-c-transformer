@@ -19,10 +19,7 @@ bool ReplaceDeadCallsVisitor::VisitDecl(clang::Decl *D) {
 bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   if (_C->getSourceManager().isInMainFile(E->getExprLoc())) {
     if (clang::FunctionDecl *func = E->getCalleeDecl()->getAsFunction()) {
-      // if (_C->getSourceManager().isInMainFile(func->getLocation())) {
-        // if ((func->isImplicit() || !func->isDefined()) && func->getStorageClass() != clang::SC_Extern) {
-        if ((func->isImplicit() || !func->isDefined()) && !func->isInlineDefinitionExternallyVisible()) {
-        // if ((func->isImplicit() || !func->isDefined())) {
+        if (((func->isImplicit() || !func->isDefined())) && !func->isInlineDefinitionExternallyVisible()) {
           std::string myType = func->getReturnType().getAsString();
           std::replace(myType.begin(), myType.end(), ' ', '_');
           clang::IdentifierInfo *newInfo = &_C->Idents.get("__VERIFIER_nondet_" + myType);
@@ -31,9 +28,7 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
           E->shrinkNumArgs(0);
           _R.ReplaceText(E->getSourceRange(), newName.getAsString() + "()");
         }
-      // }
     }
   }
   return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::VisitCallExpr(E);
-  // return true;
 }

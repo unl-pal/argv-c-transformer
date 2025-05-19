@@ -93,13 +93,19 @@ bool Transformer::transformFile(std::filesystem::path path,
   newContext.getTranslationUnitDecl()->dumpColor();
   
   RemoveUnusedVisitor remover(&newContext);
-  std::cout << "Remover Finder" << std::endl;
-  remover.TraverseAST(newContext);
-  std::cout << "Remover Remove" << std::endl;
-  remover.RemoveNodes(newContext.getTranslationUnitDecl());
+  std::cout << "Remover Visitor" << std::endl;
+  bool hasUnused = true;
+  while (hasUnused) {
+    hasUnused = remover.TraverseAST(newContext);
+  }
+
+  // std::cout << "Remover Finder" << std::endl;
+  // remover.TraverseAST(newContext);
+  // std::cout << "Remover Remove" << std::endl;
+  // remover.RemoveNodes(newContext.getTranslationUnitDecl());
 
   // std::filesystem::create_directories(srcPath.parent_path());
-  // // newContext.getTranslationUnitDecl()->dumpColor();
+  newContext.getTranslationUnitDecl()->dumpColor();
 
   std::cout << "Writing File" << std::endl;
 

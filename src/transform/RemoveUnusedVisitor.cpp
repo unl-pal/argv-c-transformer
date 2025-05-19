@@ -102,52 +102,54 @@ bool RemoveUnusedVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *T
   return clang::RecursiveASTVisitor<RemoveUnusedVisitor>::VisitTranslationUnitDecl(TD);
 }
 
-bool RemoveUnusedVisitor::VisitDecl(clang::Decl *D) {
-  if (!D) return false;
-  // if (_Mgr.isInMainFile(D->getLocation())) {
-  // if (!D->isUsed() || !_Mgr.isInMainFile(D->getLocation())) {
-  // if (D->isUsed() || D->isReferenced()) {
-  if (!D->isUsed() && !D->isReferenced()) {
-   _ToRemove.push_back(D);
-  // } else if (D->isDefinedOutsideFunctionOrMethod()) {
-  // } else {
-    // if (_C->getTranslationUnitDecl() != D) {
-        // _ToRemove.push_back(D);
-      // }
-    // _ToRemove.push_back(D);
-  }
-  // if (!(D->isUsed()) && !_Mgr.isInExternCSystemHeader(D->getLocation())) {
-  //   if (_C->getTranslationUnitDecl() != D) {
-  //       _ToRemove.push_back(D);
-  //     }
-  //   }
-  return clang::RecursiveASTVisitor<RemoveUnusedVisitor>::VisitDecl(D);
-  // return false;
-}
+// bool RemoveUnusedVisitor::VisitDecl(clang::Decl *D) {
+//   if (!D) return false;
+//   // if (_Mgr.isInMainFile(D->getLocation())) {
+//   // if (!D->isUsed() || !_Mgr.isInMainFile(D->getLocation())) {
+//   // if (D->isUsed() || D->isReferenced()) {
+//   if (!D->isUsed() && !D->isReferenced()) {
+//    _ToRemove.push_back(D);
+//   // } else if (D->isDefinedOutsideFunctionOrMethod()) {
+//   // } else {
+//     // if (_C->getTranslationUnitDecl() != D) {
+//         // _ToRemove.push_back(D);
+//       // }
+//     // _ToRemove.push_back(D);
+//   }
+//   // if (!(D->isUsed()) && !_Mgr.isInExternCSystemHeader(D->getLocation())) {
+//   //   if (_C->getTranslationUnitDecl() != D) {
+//   //       _ToRemove.push_back(D);
+//   //     }
+//   //   }
+//   return clang::RecursiveASTVisitor<RemoveUnusedVisitor>::VisitDecl(D);
+//   // return false;
+// }
 
 bool RemoveUnusedVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (D->field_empty()) {
     // _ToRemove.push_back(D);
     _TD->removeDecl(D); // TODO figure out why delete during recursion does not work
-  return true;
+  return false;
   }
   return clang::RecursiveASTVisitor<RemoveUnusedVisitor>::VisitRecordDecl(D);
 }
 
 bool RemoveUnusedVisitor::VisitTypedefDecl(clang::TypedefDecl *D) {
   if (!D->isUsed() && !D->isReferenced()) {
+  // if (!D->isUsed()) {
     // _ToRemove.push_back(D);
     _TD->removeDecl(D); // TODO figure out why delete during recursion does not work
-  return true;
+  return false;
   }
   return clang::RecursiveASTVisitor<RemoveUnusedVisitor>::VisitTypedefDecl(D);
 }
 
 bool RemoveUnusedVisitor::VisitTypedefNameDecl(clang::TypedefNameDecl *D) {
   if (!D->isUsed() && !D->isReferenced()) {
+  // if (!D->isUsed()) {
     // _ToRemove.push_back(D);
     _TD->removeDecl(D); // TODO figure out why delete during recursion does not work
-  return true;
+  return false;
   }
   return clang::RecursiveASTVisitor<RemoveUnusedVisitor>::VisitTypedefNameDecl(D);
 }
@@ -156,9 +158,10 @@ bool RemoveUnusedVisitor::VisitExternCContextDecl(clang::ExternCContextDecl *D) 
 //   if (!D) return false;
 //   // if (!D->isUsed() || !_Mgr.isInMainFile(D->getLocation())) {
   if (!D->isUsed() && !D->isReferenced()) {
+  // if (!D->isUsed()) {
 //     _ToRemove.push_back(D);
     _TD->removeDecl(D); // TODO figure out why delete during recursion does not work
-  return true;
+  return false;
 //   } else if (D->isDefinedOutsideFunctionOrMethod()) {
 //   } else {
 //   }
@@ -168,14 +171,18 @@ bool RemoveUnusedVisitor::VisitExternCContextDecl(clang::ExternCContextDecl *D) 
 }
 
 bool RemoveUnusedVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
+  if (D->getNameAsString() == "main") {
     // TODO should the ExternCHeader part be removed?
   // if ((!D->isUsed() && !D->isReferenced()) || _Mgr.isInExternCSystemHeader(D->getLocation())) {
+    return clang::RecursiveASTVisitor<RemoveUnusedVisitor>::VisitFunctionDecl(D);
+  }
   if (!D->isUsed() && !D->isReferenced()) {
+  // if (!D->isUsed()) {
       // D->dumpColor();
       // _C->getTranslationUnitDecl()->removeDecl(D);
       // _ToRemove.push_back(D);
     _TD->removeDecl(D); // TODO figure out why delete during recursion does not work
-  return true;
+  return false;
     // }
   }
   return clang::RecursiveASTVisitor<RemoveUnusedVisitor>::VisitFunctionDecl(D);
