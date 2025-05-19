@@ -5,9 +5,7 @@
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Sema/Ownership.h>
-#include <iostream>
 #include <llvm/Support/raw_ostream.h>
-#include <unordered_set>
 #include <vector>
 
 RemoveUnusedVisitor::RemoveUnusedVisitor(clang::ASTContext *C)
@@ -26,7 +24,7 @@ bool RemoveUnusedVisitor::RemoveNodes(clang::TranslationUnitDecl *D) {
   llvm::outs() << "Removing " << _ToRemove.size() << " Nodes\n";
   int size = _ToRemove.size();
   for (int i = size-1; i>0; i--) {
-    llvm::outs() << i << "\n";
+    // llvm::outs() << i << "\n";
     if (!_ToRemove[i]) continue;
     clang::Decl *decl = _ToRemove[i];
     // This would make it so only funtions could be removed which makes little sense
@@ -36,15 +34,16 @@ bool RemoveUnusedVisitor::RemoveNodes(clang::TranslationUnitDecl *D) {
     // }
 
     if (decl->getDeclContext()) {
-      llvm::outs() << "Has context\n";
+      // llvm::outs() << "Has context\n";
       if (decl->getDeclContext()->getParent()) {
-        llvm::outs() << "Has Parent\n";
+        // llvm::outs() << "Has Parent\n";
         auto parent = decl->getDeclContext()->getParent();
-        decl->getDeclContext()->dumpLookups();
-        parent->dumpLookups();
+        // decl->getDeclContext()->dumpLookups();
+        // parent->dumpLookups();
         if (parent->Encloses(decl->getDeclContext())) {
-          llvm::outs() << "Parental Controls\n";
+          // llvm::outs() << "Parental Controls\n";
           // parent->removeDecl(decl);
+          // llvm::outs() << "Removed\n";
         }
       }
     }
