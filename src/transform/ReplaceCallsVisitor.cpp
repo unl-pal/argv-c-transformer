@@ -1,11 +1,7 @@
 #include "include/ReplaceCallsVisitor.hpp"
+
 #include <algorithm>
-#include <clang/AST/ASTContext.h>
-#include <clang/AST/DeclBase.h>
-#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
-#include <clang/Basic/Specifiers.h>
-#include <clang/Rewrite/Core/Rewriter.h>
 
 ReplaceDeadCallsVisitor::ReplaceDeadCallsVisitor(clang::ASTContext *C,
                                                  clang::Rewriter   &R)

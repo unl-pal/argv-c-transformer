@@ -1,10 +1,6 @@
 #include "include/CreateNewAST.hpp"
 
-#include <clang/AST/ASTContext.h>
 #include <clang/AST/CanonicalType.h>
-#include <clang/Basic/SourceManager.h>
-#include <clang/Frontend/ASTUnit.h>
-#include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Support/raw_ostream.h>
 #include <string>

@@ -3,7 +3,6 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/Basic/SourceManager.h>
-#include <clang/Frontend/ASTUnit.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 
 class CreateNewAST {

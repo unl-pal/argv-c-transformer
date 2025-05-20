@@ -5,8 +5,6 @@
 #include <clang/AST/RawCommentList.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
-#include <llvm/ADT/DenseMap.h>
-#include <llvm/Support/raw_ostream.h>
 
 class RegenCodeVisitor : public clang::RecursiveASTVisitor<RegenCodeVisitor> {
 public:
@@ -32,6 +30,6 @@ private:
 	clang::ASTContext *_C;
 	clang::SourceManager &_M;
 	llvm::raw_ostream &_Output;
+	// Comments are NOT implemented at this time but are planned
 	llvm::DenseMap<const clang::Decl*, const clang::RawComment> *_Comments;
-
 };

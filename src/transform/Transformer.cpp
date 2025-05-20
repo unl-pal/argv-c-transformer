@@ -90,22 +90,16 @@ bool Transformer::transformFile(std::filesystem::path path,
   std::cout << "Replace Calls" << std::endl;
   ReplaceDeadCallsVisitor replacer(&newContext, R);
   replacer.TraverseAST(newContext);
-  newContext.getTranslationUnitDecl()->dumpColor();
+  // newContext.getTranslationUnitDecl()->dumpColor();
   
   RemoveUnusedVisitor remover(&newContext);
   std::cout << "Remover Visitor" << std::endl;
-  bool hasUnused = true;
-  while (hasUnused) {
-    hasUnused = remover.TraverseAST(newContext);
+  bool done = false;
+  remover.TraverseAST(newContext);
+  std::cout << "Remover Visitor" << std::endl;
+  while (!done) {
+    done = remover.TraverseAST(newContext);
   }
-
-  // std::cout << "Remover Finder" << std::endl;
-  // remover.TraverseAST(newContext);
-  // std::cout << "Remover Remove" << std::endl;
-  // remover.RemoveNodes(newContext.getTranslationUnitDecl());
-
-  // std::filesystem::create_directories(srcPath.parent_path());
-  newContext.getTranslationUnitDecl()->dumpColor();
 
   std::cout << "Writing File" << std::endl;
 
@@ -114,8 +108,6 @@ bool Transformer::transformFile(std::filesystem::path path,
   llvm::raw_fd_ostream output(llvm::StringRef(preprocessedPath.string()), ec);
   RegenCodeVisitor codeRegenVisitor(&newContext, output);
   codeRegenVisitor.TraverseAST(newContext);
-  // ReGenCodeVisitor codeReGenVisitor(&lastContext, output);
-  // codeReGenVisitor.TraverseAST(lastContext);
 
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream srcOutput(llvm::StringRef(srcPath.string()), ec);

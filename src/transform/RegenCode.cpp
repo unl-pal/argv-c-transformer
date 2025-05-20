@@ -1,21 +1,25 @@
 #include "include/RegenCode.hpp"
-#include <clang/AST/Decl.h>
+
 #include <clang/AST/DeclBase.h>
-#include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/Basic/LLVM.h>
 #include <llvm/Support/raw_ostream.h>
 
+// param *C a pointer to a Context
+// param &output is an output stream to terminal, file, etc.
+// class var _M is a SourceManager derived from the provided context
+//    _M can be used to find info on location which can be used for Rewriters and other uses
 RegenCodeVisitor::RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &output)
     : _C(C),
   _M(C->getSourceManager()),
   _Output(output) {
 }
 
+// Catch all do nothing unless specified
 bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitDecl(D);
 }
 
+// Prints functions and their children with a ';' for externs
 bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (!D) return false;
     D->print(_Output);
@@ -26,53 +30,46 @@ bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitFunctionDecl(D);
 }
 
+// Print globally avaiable variables not parameters or function specific
 bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
   if (!D) return false;
-  // if (!D->getDeclContext()->getParent()) {
   if (D->isDefinedOutsideFunctionOrMethod()) {
-  if (!D->isLocalVarDeclOrParm()) {
-    D->print(_Output);
-    _Output << ";\n";
-  }
+    if (!D->isLocalVarDeclOrParm()) {
+      D->print(_Output);
+      _Output << ";\n";
+    }
   }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitVarDecl(D);
 }
 
+// Print Structs and Unions and their children
 bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
   if (!D->isAnonymousStructOrUnion()) {
-    // if (!D->getParent()) {
       D->print(_Output);
       _Output << ";\n";
-    // }
   }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitRecordDecl(D);
 }
 
+// Print TypeDefs
 bool RegenCodeVisitor::VisitTypedefDecl(clang::TypedefDecl *D) {
-  // if (!D->getParentFunctionOrMethod()) {
-    // if (D->getKind() != clang::Decl::Record) {
       D->print(_Output);
       _Output << ";\n";
-    // }
-  // }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitTypedefDecl(D);
 }
 
+// Parameter Variables are handled in the functions so they are passed over via this function
 bool RegenCodeVisitor::VisitParmVarDecl(clang::ParmVarDecl * D){
-  // if (!D->isLocalVarDeclOrParm()) {
-  //   D->print(_Output);
-  //   _Output << ";";
-  // }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitParmVarDecl(D);
 }
 
+// Field Declarations are handled by the Struct and Union print and are passed over
 bool RegenCodeVisitor::VisitFieldDecl(clang::FieldDecl * D){
-  // if (D->isAnonymousStructOrUnion()) {
-  // }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitFieldDecl(D);
 }
 
+// Print Unnamed Global Constants
 bool RegenCodeVisitor::VisitUnnamedGlobalConstantDecl(
   clang::UnnamedGlobalConstantDecl *D) {
   D->print(_Output);
