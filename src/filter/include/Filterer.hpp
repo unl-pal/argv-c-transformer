@@ -26,8 +26,7 @@ public:
 
   void debugInfo(std::string info);
 
-  int run(std::string pathForResources,
-          std::string fileOrDirToFilter    = "database",
+  int run(std::string fileOrDirToFilter    = "database",
           std::string propertiesConfigFile = "properties.config");
 
 private:

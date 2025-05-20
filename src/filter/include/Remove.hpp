@@ -15,12 +15,6 @@ public:
   RemoveFuncVisitor(clang::ASTContext *C, clang::Rewriter &_R,
                     std::vector<std::string> toRemove);
 
-  bool VisitStmt(clang::Stmt *S);
-
-  bool VisitTranslationUnitDecl(clang::TranslationUnitDecl *D);
-
-  bool VisitDecl(clang::Decl *D);
-
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 
   bool VisitCallExpr(clang::CallExpr *E);

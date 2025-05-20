@@ -4,8 +4,8 @@
 // Target for calling the Filterer Individually
 int main(int argc, char** argv) {
   Filterer filter;
-  if (argc == 4) {
-    filter.run(argv[1], argv[2], argv[3]);
+  if (argc == 3) {
+    filter.run(argv[1], argv[2]);
   } else if (argc < 1) {
     filter.run(argv[1]);
   } else {

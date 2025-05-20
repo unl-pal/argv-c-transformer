@@ -36,8 +36,10 @@ set(SOURCE_FILTER
 
 set(SOURCE_TRANSFORM
   src/transform/Transformer.cpp
-  src/transform/Transform.cpp
-  src/transform/ReGenCode.cpp
+  src/transform/RegenCode.cpp
+  src/transform/CreateNewAST.cpp
+  src/transform/RemoveUnusedVisitor.cpp
+  src/transform/ReplaceCallsVisitor.cpp
 )
 
 # FetchContent_Declare(

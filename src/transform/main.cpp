@@ -3,9 +3,9 @@
 
 /// Main function should be transfered to a driver for use via the full implementation
 int main(int argc, char** argv) {
-  if (argc == 3) {
+  if (argc == 2) {
     Transformer transformer;
-    transformer.run(argv[1], argv[2]);
+    transformer.run(argv[1]);
   } else if (argc > 1 ) {
     Transformer transformer;
     transformer.run(argv[1]);

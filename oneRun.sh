@@ -24,7 +24,7 @@ clangResourceDir="$(clang -print-resource-dir)"
 echo "Using Resource Directory: $clangResourceDir"
 
 echo "=================================== Run Filter ==================================="
-./build/filter samples/Tester/ properties.config
+./build/filter samples/Tester/full.c properties.config
 
 echo "=================================== Run Transform ==================================="
-./build/transform filteredFiles/
+./build/transform filteredFiles/samples/Tester/full.c
