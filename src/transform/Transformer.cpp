@@ -14,6 +14,8 @@
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
+#include <sstream>
+#include <string>
 
 // stream file contents to contents shared pointer or return false if file does not open
 bool Transformer::getFileContents(std::string fileName,

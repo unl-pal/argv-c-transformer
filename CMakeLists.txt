@@ -81,9 +81,9 @@ target_link_libraries(filter PRIVATE LLVM LLVMSupport clang-cpp clang)
 target_link_libraries(transform PRIVATE LLVMSupport clang-cpp clang LLVM)
 target_link_libraries(full PRIVATE LLVMSupport clang-cpp clang LLVM)
 
-set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
-set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
-set_property(TARGET full PROPERTY LINKER_TYPE LLD)
+#set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
+#set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
+#set_property(TARGET full PROPERTY LINKER_TYPE LLD)
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -W4")

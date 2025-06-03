@@ -8,6 +8,8 @@
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 #include <regex>
+#include <sstream>
+#include <string>
 
 Filterer::Filterer(){
   typesRequested = std::vector<unsigned int>();
@@ -297,14 +299,19 @@ int Filterer::run(std::string fileOrDirToFilter,
     /// Check Path exists and get list of files to filter
     int filesFound = getAllCFiles(pathObject, filesToFilter, 0);
     debugInfo("Files Found: " + std::to_string(filesFound));
-
+    std::cout << "Files Found: " << std::to_string(filesFound) << std::endl;
     /// Set args for AST creation
     std::vector<std::string> args = std::vector<std::string>();
+    std::cout << "args: " << std::endl;
     // This ensures comments are a part of the parsed AST
     args.push_back("-fparse-all-comments");
-    // This tells the AST generator where to find the compiler supplied headers
+    std::cout << "push_back: " << std::endl;
+    // This tells the AST generator where to find the compiler supplied headers /usr/local/Cellar/llvm/20.1.5/lib/clang/20
+    //CLANG_RESOURCES="/usr/local/Cellar/llvm/20.1.5/lib/clang/20"
+    //On MAC run "export CLANG_RESOURCES="/usr/local/Cellar/llvm/20.1.5/lib/clang/20"
+    //otherwise the line below gets seg fault
     args.push_back(std::string("-resource-dir=") + std::string(std::getenv("CLANG_RESOURCES")));
-
+    std::cout << "before loop: " << std::endl;
     /// Loop over all c files in filter list and run through the checker before
     /// creating the AST
     for (std::string fileName : filesToFilter) {
