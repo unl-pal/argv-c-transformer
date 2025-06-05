@@ -4,11 +4,11 @@ set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_C_COMPILER clang)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# set(CMAKE_CXX_STANDARD 17)
+# set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "../bin")
-set(CMAKE_C_STANDARD 99)
-set(CMAKE_C_STANDARD_REQUIRED ON)
+# set(CMAKE_C_STANDARD 99)
+# set(CMAKE_C_STANDARD_REQUIRED ON)
 
 
 project(
@@ -24,8 +24,13 @@ find_package(LLVM REQUIRED)
 set(HEADERS_FILTER
   src/filter/include
 )
+
 set(HEADERS_TRANSFORM
   src/transform/include
+)
+
+set(HEADERS_ADD_CODE
+  src/addCode/include
 )
 
 set(SOURCE_FILTER
@@ -40,6 +45,10 @@ set(SOURCE_TRANSFORM
   src/transform/CreateNewAST.cpp
   src/transform/RemoveUnusedVisitor.cpp
   src/transform/ReplaceCallsVisitor.cpp
+)
+
+set(SOURCE_ADD_CODE
+  src/addCode/AddVerifiersTool.cpp
 )
 
 # FetchContent_Declare(
@@ -72,18 +81,17 @@ include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLA
 add_executable(filter src/filter/main.cpp ${SOURCE_FILTER})
 add_executable(transform src/transform/main.cpp ${SOURCE_TRANSFORM})
 add_executable(full src/full/main.cpp ${SOURCE_FILTER} ${SOURCE_TRANSFORM})
+add_executable(addCode ${SOURCE_ADD_CODE})
 
 target_include_directories(filter SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local /usr/lib64 ${HEADERS_FILTER})
 target_include_directories(transform SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM})
 target_include_directories(full SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_TRANSFORM} ${HEADERS_DOWNLOAD} ${HEADERS_FILTER})
+target_include_directories(addCode SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} ${HEADERS_ADD_CODE})
 
 target_link_libraries(filter PRIVATE LLVM LLVMSupport clang-cpp clang)
 target_link_libraries(transform PRIVATE LLVMSupport clang-cpp clang LLVM)
 target_link_libraries(full PRIVATE LLVMSupport clang-cpp clang LLVM)
-
-set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
-set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
-set_property(TARGET full PROPERTY LINKER_TYPE LLD)
+target_link_libraries(addCode PRIVATE LLVMSupport clang-cpp clang LLVM)
 
 if(WIN32)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -W4")
@@ -92,6 +100,10 @@ elseif(APPLE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused")
 
 elseif(UNIX)
+  set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
+  set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
+  set_property(TARGET full PROPERTY LINKER_TYPE LLD)
+  set_property(TARGET addCode PROPERTY LINKER_TYPE LLD)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused")
 
 endif()
