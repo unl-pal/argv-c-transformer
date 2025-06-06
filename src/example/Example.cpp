@@ -6,6 +6,7 @@
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Tooling/CommonOptionsParser.h>
+#include <iostream>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
@@ -56,7 +57,7 @@ bool Action::BeginSourceFileAction(clang::CompilerInstance &Compiler) {
 
 void Action::EndSourceFileAction() {
   clang::ASTFrontendAction::EndSourceFileAction();
-  llvm::outs() << "End Source File Action";
+  llvm::outs() << "End Source File Action\n";
 }
 
 void ConsumerVisitor::HandleTranslationUnit(clang::ASTContext &Context) {
@@ -86,7 +87,7 @@ void ConsumerMatcher::HandleTranslationUnit(
 
 // TODO - LEARN
 // This feels so random and arbitrary, what is this dictating
-static llvm::cl::OptionCategory MyToolCategory("my-tool options");
+static llvm::cl::OptionCategory MyToolCategory("my-tool");
 
 // TODO - LEARN
 // main is currently set to take advantage of the commandline argumensts so that
@@ -106,15 +107,60 @@ static llvm::cl::OptionCategory MyToolCategory("my-tool options");
 int main(int argc, const char** argv) {
   // AddVerifiersTool tool;
 
+  // TODO - LEARN
+  // Set up the sources to be run, are these run together or individually?
+  std::vector<std::string> Sources;
+  Sources.push_back("samples/full.c");
+
+  std::cout << "didn't even try the const array" << std::endl;
+  // char* dirArg = "--extra-arg=-resource-dir=";
+  char* resourceDir = std::getenv("CLANG_RESOURCES");
+  // std::cout << "didn't even try the const array" << std::endl;
+  // char* tempDir = std::strcat(dirArg, resourceDir);
+  // std::cout << "didn't even try the const array" << std::endl;
+  //
+  // char* otherArgV[] = {
+  //   "samples/full.c",
+  //   "--extra-arg=-fparse-all-comments",
+  //   tempDir
+  // };
+
+  std::string extraArgs = " --extra-arg=-fparse-all-comments --extra-arg=\"-resource-dir ";
+  std::string resources = (std::string)(resourceDir);
+  // std::string tempS = extraArgs + resources + "\"";
+  std::string tempS = "";
+  std::cout << "Made Strings" << std::endl;
+  std::cout << "Got length" << std::endl;
+  char** tempChar = (char**)("samples/full.c");
+  for (char c : tempS) {
+    std::cout << c;
+    tempChar += c;
+  }
+  std::cout << std::endl;
+  const char **myV = (const char**)(tempChar);
+
+
+  if (myV != nullptr) {
+    std::cout << "Char** is not null" << std::endl;
+  } else {
+    std::cout << "Failed to Create the argv" << std::endl;
+  }
+  int myC = 1;
+
+  std::cout << "the const array has been created" << std::endl;
+
   // Aguments for this can be preset rather than from commandline
   // -p command specifies build path
   // automatic location for compilation database using source file paths
   llvm::Expected<clang::tooling::CommonOptionsParser> ExpectedParser = clang::tooling::CommonOptionsParser::create(argc, argv, MyToolCategory);
+  // llvm::Expected<clang::tooling::CommonOptionsParser> ExpectedParser = clang::tooling::CommonOptionsParser::create(myC, myV, MyToolCategory);
 
   if (!ExpectedParser) {
     llvm::errs() << ExpectedParser.takeError();
     return 1;
   }
+
+  std::cout << "Expected Parser Made" << std::endl;
 
   // this gets the actual parser from the expected which is done to handle the
   // chance of failure more gracefully I believe and should probably still be
@@ -123,11 +169,6 @@ int main(int argc, const char** argv) {
 
   // OptionsParser.getCompilations() to retrieve CompilationDatabase
   // OptionParser.getSourcePathList() to list input files
-
-  // TODO - LEARN
-  // Set up the sources to be run, are these run together or individually?
-  std::vector<std::string> Sources;
-  Sources.push_back("samples/full.c");
 
   // Give compilations and sources to the tool
   // TODO - LEARN
