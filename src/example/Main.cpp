@@ -1,8 +1,12 @@
 #include "include/Action.hpp"
 
 #include <clang/Tooling/CommonOptionsParser.h>
+#include <clang/Tooling/CompilationDatabase.h>
 #include <clang/Tooling/Tooling.h>
+#include <cstring>
 #include <iostream>
+#include <string>
+#include <vector>
 
 // TODO - LEARN
 // This feels so random and arbitrary, what is this dictating
@@ -14,65 +18,56 @@ static llvm::cl::OptionCategory MyToolCategory("my-tool");
 // the files being kept and are they still a sub part of the clang repo just as
 // a persons local tool?
 //
-// Does clang have to be rebuilt for this tool to work or can we build alongside 
+// Does clang have to be rebuilt for this tool to work or can we build alongside
 // using as a dependency?
 //
-// Many of the guides show how to create these cmd tools as sub parts of the clang/llvm repo. 
+// Many of the guides show how to create these cmd tools as sub parts of the
+// clang/llvm repo.
 //
-// Would doing this method help or hinder us? 
+// Would doing this method help or hinder us?
 //
 // What are the pros and cons of this process?
 //
-int main(int argc, const char** argv) {
-  // AddVerifiersTool tool;
-
+int main() {
   // TODO - LEARN
   // Set up the sources to be run, are these run together or individually?
   std::vector<std::string> Sources;
   Sources.push_back("samples/full.c");
 
   std::cout << "didn't even try the const array" << std::endl;
-  // char* dirArg = "--extra-arg=-resource-dir=";
-  char* resourceDir = std::getenv("CLANG_RESOURCES");
-  // std::cout << "didn't even try the const array" << std::endl;
-  // char* tempDir = std::strcat(dirArg, resourceDir);
-  // std::cout << "didn't even try the const array" << std::endl;
-  //
-  // char* otherArgV[] = {
-  //   "samples/full.c",
-  //   "--extra-arg=-fparse-all-comments",
-  //   tempDir
-  // };
+  std::string resourceDir = std::getenv("CLANG_RESOURCES");
+  std::vector<std::string> args({
+    "clang",
+    "samples/", // I am passing a whole Dir, is that an issue or slow?
+    "-extra-arg=-fparse-all-comments",
+    "-extra-arg=-resource-dir=" + resourceDir,
+    "-extra-arg=-xc"
+  });
 
-  std::string extraArgs = " --extra-arg=-fparse-all-comments --extra-arg=\"-resource-dir ";
-  std::string resources = (std::string)(resourceDir);
-  // std::string tempS = extraArgs + resources + "\"";
-  std::string tempS = "";
-  std::cout << "Made Strings" << std::endl;
-  std::cout << "Got length" << std::endl;
-  char** tempChar = (char**)("samples/full.c");
-  for (char c : tempS) {
-    std::cout << c;
-    tempChar += c;
+  int argc = args.size();
+  char** argv = new char*[argc + 1];
+
+  for (int i=0; i<argc; ++i) {
+    argv[i] = new char[args[i].length() + 1];
+    std::strcpy(argv[i], args[i].c_str());
+    std::cout << "new argv[" << i << "] = " << argv[i] << std::endl;
   }
-  std::cout << std::endl;
-  const char **myV = (const char**)(tempChar);
 
+  argv[argc] = nullptr;
 
-  if (myV != nullptr) {
+  if (argv != nullptr) {
     std::cout << "Char** is not null" << std::endl;
   } else {
     std::cout << "Failed to Create the argv" << std::endl;
   }
-  int myC = 1;
 
   std::cout << "the const array has been created" << std::endl;
 
   // Aguments for this can be preset rather than from commandline
   // -p command specifies build path
   // automatic location for compilation database using source file paths
-  llvm::Expected<clang::tooling::CommonOptionsParser> ExpectedParser = clang::tooling::CommonOptionsParser::create(argc, argv, MyToolCategory);
-  // llvm::Expected<clang::tooling::CommonOptionsParser> ExpectedParser = clang::tooling::CommonOptionsParser::create(myC, myV, MyToolCategory);
+  // llvm::Expected<clang::tooling::CommonOptionsParser> ExpectedParser = clang::tooling::CommonOptionsParser::create(argc, argv, MyToolCategory);
+  llvm::Expected<clang::tooling::CommonOptionsParser> ExpectedParser = clang::tooling::CommonOptionsParser::create(argc, (const char**)(argv), MyToolCategory);
 
   if (!ExpectedParser) {
     llvm::errs() << ExpectedParser.takeError();
@@ -85,6 +80,18 @@ int main(int argc, const char** argv) {
   // chance of failure more gracefully I believe and should probably still be
   // checked at somepoint in the process
   clang::tooling::CommonOptionsParser &OptionsParser = ExpectedParser.get();
+
+  // ATTEMPT TO UNDERSTAND THE COMMAND USED FOR THE PARSER
+  // LOTS OF INFERENCES AND MISSING PARTS
+  // clang::tooling::CompilationDatabase &Database = OptionsParser.getCompilations();
+  // int size = Database.getCompileCommands("samples/full.c").size();
+  // for (int i=0; i<size; i++) {
+  //   std::cout << *Database.getCompileCommands("samples/full.c").data()->CommandLine.data() << std::endl;
+  //   std::cout << Database.getCompileCommands("samples/full.c").data()->Directory.data() << std::endl;
+  //   std::cout << Database.getCompileCommands("samples/full.c").data()->Filename.data() << std::endl;
+  //   std::cout << Database.getCompileCommands("samples/full.c").data()->Heuristic.data() << std::endl;
+  //   std::cout << Database.getCompileCommands("samples/full.c").data()->Output.data() << std::endl;
+  // }
 
   // OptionsParser.getCompilations() to retrieve CompilationDatabase
   // OptionParser.getSourcePathList() to list input files
@@ -99,15 +106,17 @@ int main(int argc, const char** argv) {
 
   // Running of the actual tool, what all is this doing behind the scenes and
   // when are all the parts actually generated?
-  llvm::outs() << Tool.run(
-    clang::tooling::newFrontendActionFactory<Action>().get()) << "\n";
+  //   UNCOMMENT FOR EXAMPLE RUN
+  // llvm::outs() << Tool.run(
+  //   clang::tooling::newFrontendActionFactory<Action>().get()) << "\n";
 
   // Result is: 
   //   0 - Success
   //   1 - Error
   //   2 - Some Files Are Skipped Due to Missing Compiler Commands
-  llvm::outs() << Tool.run(
-    clang::tooling::newFrontendActionFactory<Action>().get()) << "\n";
+  //   UNCOMMENT FOR EXAMPLE RUN
+  // llvm::outs() << Tool.run(
+    // clang::tooling::newFrontendActionFactory<Action>().get()) << "\n";
 
   return 0;
 }
