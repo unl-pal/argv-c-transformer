@@ -45,6 +45,10 @@ set(SOURCE_TRANSFORM
   src/transform/CreateNewAST.cpp
   src/transform/RemoveUnusedVisitor.cpp
   src/transform/ReplaceCallsVisitor.cpp
+  src/transform/ArgsFrontendActionFactory.cpp
+  src/transform/GenerateIncludeAction.cpp
+  src/transform/GenerateIncludeConsumer.cpp
+  src/transform/GenerateIncludeHandler.cpp
 )
 
 set(SOURCE_EXAMPLE

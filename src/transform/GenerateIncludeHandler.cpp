@@ -1,8 +1,8 @@
-#include "include/HandlerFindInclude.hpp"
+#include "include/GenerateIncludeHandler.hpp"
 #include <algorithm>
 
 void
-HandlerFindInclude::run(const clang::ast_matchers::MatchFinder::MatchResult &Result) {
+GenerateIncludeHandler::run(const clang::ast_matchers::MatchFinder::MatchResult &Result) {
   const clang::Decl *decl =
     Result.Nodes.getNodeAs<clang::Decl>("");
   if (decl->isReferenced() || decl->isUsed()) {
@@ -14,6 +14,6 @@ HandlerFindInclude::run(const clang::ast_matchers::MatchFinder::MatchResult &Res
   }
 }
 
-std::vector<std::string> HandlerFindInclude::getAllI() {
+std::vector<std::string> GenerateIncludeHandler::getAllI() {
   return _AllInc;
 }

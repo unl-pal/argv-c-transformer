@@ -2,18 +2,28 @@
 #include "include/RegenCode.hpp"
 #include "include/CreateNewAST.hpp"
 #include "include/RemoveUnusedVisitor.hpp"
-#include <ReplaceCallsVisitor.hpp>
+#include "ReplaceCallsVisitor.hpp"
+#include "GenerateIncludeHandler.hpp"
+#include "GenerateIncludeAction.hpp"
+#include "CodeGeneratorAction.hpp"
+#include "ArgsFrontendActionFactory.hpp"
 
+#include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/FileManager.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Preprocessor.h>
+#include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <llvm/ADT/StringRef.h>
 #include <iostream>
+#include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
+#include <string>
+#include <vector>
 
 // stream file contents to contents shared pointer or return false if file does not open
 bool Transformer::getFileContents(std::string fileName,
@@ -53,6 +63,7 @@ bool Transformer::transformFile(std::filesystem::path path,
       srcPath /= component;
     }
   }
+
 
   std::unique_ptr<clang::ASTUnit> oldAstUnit =
     clang::tooling::buildASTFromCodeWithArgs(*fileContents, args
@@ -115,6 +126,52 @@ bool Transformer::transformFile(std::filesystem::path path,
   R.InsertTextBefore(oldContext.getTranslationUnitDecl()->getLocation(), "// Benchmark File");
   R.getEditBuffer(newContext.getSourceManager().getFileID(newAstUnit->getStartOfMainFileID())).write(srcOutput);
 
+  static llvm::cl::OptionCategory myToolCategory("my-tool");
+
+  clang::IgnoringDiagConsumer diagConsumer;
+
+  std::vector<std::string> sources;
+  sources.push_back(path);
+
+  std::string resourceDir = std::getenv("CLANG_RESOURCES");
+
+  std::vector<std::string> compOptionsArgs({
+    "clang",
+    path.string(),
+    "verifier.c",
+    "-extra-arg=-fparse-all-comments",
+    "-extra-arg=-resource-dir=" + resourceDir,
+    "-extra-arg=-xc"
+  });
+
+  int argc = compOptionsArgs.size();
+
+  char** argv = new char*[argc + 1];
+
+  for (int i=0; i<argc; i++) {
+    argv[i] = new char[compOptionsArgs[i].length() + 1];
+    std::strcpy(argv[i], compOptionsArgs[i].c_str());
+  }
+
+  argv[argc] = nullptr;
+
+  if (argv == nullptr) {
+    return 1;
+  }
+
+  llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser = clang::tooling::CommonOptionsParser::create(argc, (const char**)argv, myToolCategory);
+
+  if (!expectedParser) {
+    llvm::errs() << expectedParser.takeError();
+    return false;
+  }
+
+  clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
+
+  clang::tooling::ClangTool tool(optionsParser.getCompilations(), sources);
+
+  ArgsFrontendFactory factory(output);
+  llvm::outs() << tool.run(&factory) << "\n";
   /*oldAstUnit->Save("output.ast");*/
   return true;
 }
