@@ -13,7 +13,10 @@ GenerateIncludeAction::GenerateIncludeAction(llvm::raw_fd_ostream &output) : _Ou
 std::unique_ptr<clang::ASTConsumer>
 GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
                                          llvm::StringRef          filename) {
-  return std::make_unique<GenerateIncludeConsumer>(_Output); // need the compiler?
+  llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
+  std::unique_ptr<clang::ASTConsumer> result = std::make_unique<GenerateIncludeConsumer>(_Output); // need the compiler?
+  llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
+  return result;
 }
 
 bool GenerateIncludeAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {

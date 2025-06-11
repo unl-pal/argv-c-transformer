@@ -12,7 +12,17 @@ void GenerateIncludeConsumer::HandleTranslationUnit(
   clang::ASTContext &Context) {
   MatchFinder MatchFinder;
   GenerateIncludeHandler        Handler(Context.getSourceManager(), _Output);
-  MatchFinder.addMatcher(decl(unless(clang::ast_matchers::isExpansionInMainFile())), &Handler);
+  llvm::outs() << "Created MAtch Finder and Handler" << "\n";
+  MatchFinder.addMatcher(decl(unless(clang::ast_matchers::isExpansionInMainFile())).bind("includes"), &Handler);
+  llvm::outs() << "Added Matcher" << "\n";
   MatchFinder.matchAST(Context);
+  llvm::outs() << "Ran the matcher" << "\n";
   Handler.getAllI();
+  llvm::outs() << "grabbed all includes" << "\n";
+  std::vector<std::string> allTheIncludes = Handler.getAllI();
+  if (allTheIncludes.size()) {
+    for (std::string i : allTheIncludes) {
+      llvm::outs() << i << "\n";
+    }
+  }
 }

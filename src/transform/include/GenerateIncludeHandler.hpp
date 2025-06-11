@@ -7,10 +7,7 @@
 
 class GenerateIncludeHandler : public clang::ast_matchers::MatchFinder::MatchCallback {
 public:
-  GenerateIncludeHandler(clang::SourceManager &mgr, llvm::raw_fd_ostream &output)
-			: _AllInc(),
-			_Mgr(mgr),
-			_Output(output) {}
+  GenerateIncludeHandler(clang::SourceManager &mgr, llvm::raw_fd_ostream &output);
 
   void run(const clang::ast_matchers::MatchFinder::MatchResult &Result);
 

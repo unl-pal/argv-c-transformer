@@ -170,6 +170,8 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   clang::tooling::ClangTool tool(optionsParser.getCompilations(), sources);
 
+  tool.setDiagnosticConsumer(&diagConsumer);
+
   ArgsFrontendFactory factory(output);
   llvm::outs() << tool.run(&factory) << "\n";
   /*oldAstUnit->Save("output.ast");*/
