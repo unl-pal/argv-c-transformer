@@ -115,16 +115,12 @@ bool Transformer::transformFile(std::filesystem::path path,
   std::cout << "Writing File" << std::endl;
 
   std::error_code ec;
+
   std::filesystem::create_directories(preprocessedPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(preprocessedPath.string()), ec);
-  RegenCodeVisitor codeRegenVisitor(&newContext, output);
-  codeRegenVisitor.TraverseAST(newContext);
 
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream srcOutput(llvm::StringRef(srcPath.string()), ec);
-  R.setSourceMgr(oldContext.getSourceManager(), newAstUnit->getLangOpts());
-  R.InsertTextBefore(oldContext.getTranslationUnitDecl()->getLocation(), "// Benchmark File");
-  R.getEditBuffer(newContext.getSourceManager().getFileID(newAstUnit->getStartOfMainFileID())).write(srcOutput);
 
   static llvm::cl::OptionCategory myToolCategory("my-tool");
 
@@ -139,9 +135,11 @@ bool Transformer::transformFile(std::filesystem::path path,
     "clang",
     path.string(),
     "verifier.c",
+    "--",
     "-extra-arg=-fparse-all-comments",
     "-extra-arg=-resource-dir=" + resourceDir,
-    "-extra-arg=-xc"
+    "-extra-arg=-xc",
+    "-extra-arg=-I"
   });
 
   int argc = compOptionsArgs.size();
@@ -168,13 +166,20 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
 
-  clang::tooling::ClangTool tool(optionsParser.getCompilations(), sources);
+  clang::tooling::ClangTool tool(optionsParser.getCompilations(), optionsParser.getSourcePathList());
 
   tool.setDiagnosticConsumer(&diagConsumer);
 
   ArgsFrontendFactory factory(output);
   llvm::outs() << tool.run(&factory) << "\n";
   /*oldAstUnit->Save("output.ast");*/
+  RegenCodeVisitor codeRegenVisitor(&newContext, output);
+  codeRegenVisitor.TraverseAST(newContext);
+
+  R.setSourceMgr(oldContext.getSourceManager(), newAstUnit->getLangOpts());
+  R.InsertTextBefore(oldContext.getTranslationUnitDecl()->getLocation(), "// Benchmark File");
+  R.getEditBuffer(newContext.getSourceManager().getFileID(newAstUnit->getStartOfMainFileID())).write(srcOutput);
+
   return true;
 }
 

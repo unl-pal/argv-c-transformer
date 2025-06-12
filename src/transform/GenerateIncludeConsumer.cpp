@@ -1,6 +1,7 @@
 #include "GenerateIncludeConsumer.hpp"
 #include "GenerateIncludeHandler.hpp"
 #include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Lex/PreprocessingRecord.h>
 #include <ostream>
 
 using namespace clang::ast_matchers;
@@ -14,6 +15,7 @@ void GenerateIncludeConsumer::HandleTranslationUnit(
   GenerateIncludeHandler        Handler(Context.getSourceManager(), _Output);
   llvm::outs() << "Created MAtch Finder and Handler" << "\n";
   MatchFinder.addMatcher(decl(unless(clang::ast_matchers::isExpansionInMainFile())).bind("includes"), &Handler);
+  // MatchFinder.addMatcher(clang::InclusionDirective().bind("includes"), &Handler);
   llvm::outs() << "Added Matcher" << "\n";
   MatchFinder.matchAST(Context);
   llvm::outs() << "Ran the matcher" << "\n";
