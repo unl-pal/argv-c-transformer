@@ -95,7 +95,7 @@ bool Transformer::transformFile(std::filesystem::path path,
   CreateNewAST creator(creatorR, SMF);
   // CreateNewAST creator(creatorR);
   creator.AddVerifiers(&newContext, &oldContext);
-  creator.AddBoolDef(&newContext, &oldContext);
+  // creator.AddBoolDef(&newContext, &oldContext);
   creator.AddAllDecl(&newContext, &oldContext);
 
   std::cout << "Replace Calls" << std::endl;
@@ -103,14 +103,14 @@ bool Transformer::transformFile(std::filesystem::path path,
   replacer.TraverseAST(newContext);
   // newContext.getTranslationUnitDecl()->dumpColor();
   
-  RemoveUnusedVisitor remover(&newContext);
-  std::cout << "Remover Visitor" << std::endl;
-  bool done = false;
-  remover.TraverseAST(newContext);
-  std::cout << "Remover Visitor" << std::endl;
-  while (!done) {
-    done = remover.TraverseAST(newContext);
-  }
+  // RemoveUnusedVisitor remover(&newContext);
+  // std::cout << "Remover Visitor" << std::endl;
+  // bool done = false;
+  // remover.TraverseAST(newContext);
+  // std::cout << "Remover Visitor" << std::endl;
+  // while (!done) {
+  //   done = remover.TraverseAST(newContext);
+  // }
 
   std::cout << "Writing File" << std::endl;
 

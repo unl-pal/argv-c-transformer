@@ -64,10 +64,11 @@ bool CreateNewAST::AddVerifiers(clang::ASTContext *newC, clang::ASTContext *oldC
 
 bool CreateNewAST::AddBoolDef(clang::ASTContext *newC, clang::ASTContext *oldC) {
   clang::TranslationUnitDecl *newTD = newC->getTranslationUnitDecl();
-  clang::SourceLocation loc = newTD->getEndLoc();
+  // clang::SourceLocation loc = newTD->getEndLoc();
+  clang::SourceLocation loc = _SMF.get().getLocForStartOfFile(newC->getSourceManager().getMainFileID());
   clang::TypedefDecl* newTypeDef = clang::TypedefDecl::Create(
-    *oldC,
-    newC->getTranslationUnitDecl(),
+    *newC,
+    oldC->getTranslationUnitDecl(),
     loc,
     loc,
     &newC->Idents.get("bool"),

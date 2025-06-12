@@ -59,7 +59,7 @@ public:
 
   void EndSourceFileAction() override;
 
-  // void SetOutput(llvm::StringRef filename, std::error_code ec);
+  // bool usesPreprocessorOnly() const override;
 
 private:
   llvm::raw_fd_ostream &_Output;

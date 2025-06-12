@@ -16,12 +16,14 @@ RegenCodeVisitor::RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &o
 // Catch all do nothing unless specified
 bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
+  if (!_M.isInMainFile(D->getLocation())) return true;
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitDecl(D);
 }
 
 // Prints functions and their children with a ';' for externs
 bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (!D) return false;
+  if (!_M.isInMainFile(D->getLocation())) return true;
     D->print(_Output);
   if (D->getAsFunction()->getStorageClass() == clang::SC_Extern) {
     _Output << ";";
@@ -33,6 +35,7 @@ bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
 // Print globally avaiable variables not parameters or function specific
 bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
   if (!D) return false;
+  if (!_M.isInMainFile(D->getLocation())) return true;
   if (D->isDefinedOutsideFunctionOrMethod()) {
     if (!D->isLocalVarDeclOrParm()) {
       D->print(_Output);
@@ -45,7 +48,9 @@ bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
 // Print Structs and Unions and their children
 bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
+  if (!_M.isInMainFile(D->getLocation())) return true;
   if (!D->isAnonymousStructOrUnion()) {
+    D->dump();
       D->print(_Output);
       _Output << ";\n";
   }
@@ -54,6 +59,7 @@ bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
 
 // Print TypeDefs
 bool RegenCodeVisitor::VisitTypedefDecl(clang::TypedefDecl *D) {
+  if (!_M.isInMainFile(D->getLocation())) return true;
       D->print(_Output);
       _Output << ";\n";
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitTypedefDecl(D);
@@ -72,6 +78,7 @@ bool RegenCodeVisitor::VisitFieldDecl(clang::FieldDecl * D){
 // Print Unnamed Global Constants
 bool RegenCodeVisitor::VisitUnnamedGlobalConstantDecl(
   clang::UnnamedGlobalConstantDecl *D) {
+  if (!_M.isInMainFile(D->getLocation())) return true;
   D->print(_Output);
   _Output << ";\n";
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitUnnamedGlobalConstantDecl(D);

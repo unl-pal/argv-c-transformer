@@ -56,36 +56,28 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
 
   llvm::outs() << "Added Callbacks for: " << filename << "\n";
-  // return nullptr;
-  // TODO see about using this to keep commments
+  // TODO implement a comment handler in code regen
   // pp.addCommentHandler(CommentHandler *Handler)
 
   llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
   std::unique_ptr<clang::ASTConsumer> result = std::make_unique<GenerateIncludeConsumer>(_Output); // need the compiler?
   // TODO see if needed
-  llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
+  // llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
   return result;
   // return nullptr;
 }
 
+// bool GenerateIncludeAction::usesPreprocessorOnly() const {
+//   return 1;
+// }
+
 bool GenerateIncludeAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action\n";
-  // compiler.printDiagnosticStats();
-  // clang::Preprocessor &pp = compiler.getPreprocessor();
-  // pp.PrintStats();
-  // pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), _Output));
-  // GenerateIncludeConsumer consumer(_Output);
-  // consumer.HandleTranslationUnit(compiler.getASTContext());
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
   llvm::outs() << "Post Begin Source File Action\n";
   return result;
-  // return true;
 }
 
 void GenerateIncludeAction::EndSourceFileAction() {
   llvm::outs() << "Ending Source File Action\n";
 }
-
-// llvm::raw_fd_ostream GenerateIncludeAction::SetOutput(llvm::StringRef filename, std::error_code ec) {
-//   return llvm::raw_fd_ostream(filename, ec);
-// }
