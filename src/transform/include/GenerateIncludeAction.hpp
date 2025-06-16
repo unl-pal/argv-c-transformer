@@ -1,5 +1,6 @@
 #pragma once
 
+#include <GenerateIncludeConsumer.hpp>
 #include <clang/AST/ASTConsumer.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -10,34 +11,29 @@
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
 #include <set>
-#include <string>
-#include <unordered_set>
-#include <vector>
 
 class IncludeFinder : public clang::PPCallbacks {
 public:
 
-  void InclusionDirective(clang::SourceLocation HashLoc,
-                          const clang::Token & IncludeTok,
-                          llvm::StringRef FileName,
-                          bool IsAngled,
-                          clang::CharSourceRange FilenameRange,
-                          clang::OptionalFileEntryRef File,
-                          llvm::StringRef SearchPath,
-                          llvm::StringRef RelativePath,
-                          const clang::Module * SuggestedModule,
-                          bool ModuleImported,
-                          clang::SrcMgr::CharacteristicKind FileType) override;
-
   // Constructor to get the SourceManager
   IncludeFinder(clang::SourceManager &SM, llvm::raw_fd_ostream &output);
 
+  void InclusionDirective(clang::SourceLocation HashLoc,
+        const clang::Token & IncludeTok,
+        llvm::StringRef FileName,
+        bool IsAngled,
+        clang::CharSourceRange FilenameRange,
+        clang::OptionalFileEntryRef File,
+        llvm::StringRef SearchPath,
+        llvm::StringRef RelativePath,
+        const clang::Module * SuggestedModule,
+        bool ModuleImported,
+        clang::SrcMgr::CharacteristicKind FileType) override;
 
 private:
   clang::SourceManager &_Mgr;
   llvm::raw_fd_ostream &_Output;
   std::set<llvm::StringRef> _AlreadyIncluded;
-  // std::unordered_set<std::string> _AllStandardHeaders;
   std::set<llvm::StringRef> _AllStandardHeaders = {
     "assert.h",    "complex.h",  "ctype.h",   "errno.h",     "fenv.h",
     "float.h",     "inttypes.h", "iso646.h",  "limits.h",    "locale.h",
@@ -51,6 +47,7 @@ private:
 class GenerateIncludeAction : public clang::ASTFrontendAction {
 public:
   GenerateIncludeAction(llvm::raw_fd_ostream &output);
+
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &compiler,
                     llvm::StringRef          filename) override;

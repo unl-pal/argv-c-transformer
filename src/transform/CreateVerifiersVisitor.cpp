@@ -6,9 +6,14 @@
 #include <llvm/Support/raw_ostream.h>
 #include <string>
 
+/* 
+ * UNTESTED CODE FOR ADDING THE VERIFIERS TO THE AST WITHOUT 
+ * THE NEED FOR 2 AST's
+ */
+
 CreateVerifiersVisitor::CreateVerifiersVisitor(clang::ASTContext           *c,
-                                               clang::SourceManagerForFile &smf,
-                                               llvm::raw_fd_ostream &output)
+      clang::SourceManagerForFile &smf,
+      llvm::raw_fd_ostream &output)
     : _C(c), _SMF(smf), _Output(output) {}
 
 bool CreateVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {

@@ -13,8 +13,9 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
-#include <vector>
 
+// Overriden function for handling InclusionDirectives such as
+// import and include statements when found by the Preprocessor
 void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc,
                         const clang::Token & IncludeTok,
                         llvm::StringRef FileName,
@@ -41,15 +42,19 @@ void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc,
       llvm::outs() << ") at " << HashLoc.printToString(_Mgr) << "\n";
     }
   }
-  // if (FileType == clang::SrcMgr::C_ExternCSystem) {
-  // }
 }
 
+// Constructor for the IncludeFinder that sets up the source manager and output
+// stream for regenerating the source code
 IncludeFinder::IncludeFinder(clang::SourceManager &SM, llvm::raw_fd_ostream &output)
       : _Mgr(SM), _Output(output) {}
 
+// Constructor for GenerateIncludeAction that sets up the output stream for
+// regenerating source code
 GenerateIncludeAction::GenerateIncludeAction(llvm::raw_fd_ostream &output) : _Output(output) {}
 
+// Overridden function that uses a ConsumerMultiplexer instead of a single
+// ASTConsumer to run many consumers, handlers and visitors over the same AST
 std::unique_ptr<clang::ASTConsumer>
 GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
                                          llvm::StringRef          filename) {
@@ -64,34 +69,29 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   // pp.addCommentHandler(CommentHandler *Handler)
 
   llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
-  // std::unique_ptr<clang::MultiplexConsumer> result;
-  // result->Initialize(compiler.getASTContext());
 
-  std::vector<std::unique_ptr<clang::ASTConsumer>> tempV = std::vector<std::unique_ptr<clang::ASTConsumer>>();
-  tempV.push_back(std::make_unique<GenerateIncludeConsumer>(_Output));
+  // Multiplexor of all consumers that will be run over the same AST
+  std::unique_ptr<clang::MultiplexConsumer> result =
+    std::make_unique<clang::MultiplexConsumer>((
+      std::make_unique<GenerateIncludeConsumer>(_Output)
+    // TODO Implement the next set of consumers to be run over this tree
+      // std::make_unique<GenerateVerifiersConsumer>(_Output);
+      // std::make_unique<ReplaceDeadCallsConsumer>();
+      // std::make_unique<GenerateComplexTypeStringsConsumer>();
+      // std::make_unique<RegenCodeConsumer>();
+    ));
 
-  // tempV.push_back(std::make_unique<GenerateVerifiersConsumer>(_Output));
-  // tempV.push_back(std::make_unique<ReplaceDeadCallsConsumer>());
-  // tempV.push_back(std::make_unique<GenerateComplexTypeStringsConsumer>());
-  // tempV.push_back(std::make_unique<RegenCodeConsumer>());
-
-  // auto result =
-  // std::unique_ptr<clang::MultiplexConsumer> result =
-  // std::unique_ptr<clang::ASTConsumer> result =
-    // std::make_unique<clang::MultiplexConsumer>(tempV);
-
-  std::unique_ptr<clang::ASTConsumer> result = std::make_unique<GenerateIncludeConsumer>(_Output);
-
-  // TODO see if needed
+  // Debug statement for when debug levels are implemented
   // llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
   return result;
-  // return nullptr;
 }
 
+// May be needed or implemented later to force only the preprocessor to run on code
 // bool GenerateIncludeAction::usesPreprocessorOnly() const {
 //   return 1;
 // }
 
+// Function that runs before any of the consumers but after preprocessor steps
 bool GenerateIncludeAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action\n";
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
@@ -99,6 +99,7 @@ bool GenerateIncludeAction::BeginSourceFileAction(clang::CompilerInstance &compi
   return result;
 }
 
+// Function that runs after all of the consumers but before the AST is cleaned up
 void GenerateIncludeAction::EndSourceFileAction() {
   llvm::outs() << "Ending Source File Action\n";
 }

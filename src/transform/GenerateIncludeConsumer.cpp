@@ -6,6 +6,11 @@
 
 using namespace clang::ast_matchers;
 
+/*
+ * THIS CODE MAY NO LONGER BE NEEDED BUT IS BEING KEPT AS REFERENCE MATERIAL
+ * UNTIL OTHER EXAMPLES AND CODE EXIST
+ */
+
 // clang::ast_matchers::MatchFinder::MatchCallback::onStartOfTranslationUnit
 
 GenerateIncludeConsumer::GenerateIncludeConsumer(llvm::raw_fd_ostream &output) :
