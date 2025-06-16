@@ -18,6 +18,7 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (_mgr.isInMainFile(D->getLocation())) {
     for (std::string& name : _toRemove) {
       if (name == D->getNameAsString()) {
+        llvm::outs() << name << "\n";
         if (clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D)) {
           _R.ReplaceText(rawComment->getSourceRange(), "");
         }

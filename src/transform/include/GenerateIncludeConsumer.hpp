@@ -6,7 +6,7 @@
 class GenerateIncludeConsumer : public clang::ASTConsumer {
 public:
 	GenerateIncludeConsumer(llvm::raw_fd_ostream &output);
-  void HandleTranslationUnit(clang::ASTContext &Context) override;
+	void HandleTranslationUnit(clang::ASTContext &Context) override;
 
 private:
 	llvm::raw_fd_ostream &_Output;

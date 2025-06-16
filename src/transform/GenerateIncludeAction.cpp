@@ -1,15 +1,19 @@
 #include "GenerateIncludeAction.hpp"
 #include "GenerateIncludeConsumer.hpp"
+#include <RegenCode.hpp>
+#include <ReplaceCallsVisitor.hpp>
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/TemplateName.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/CompilerInstance.h>
+#include <clang/Frontend/MultiplexConsumer.h>
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Lex/PPCallbacks.h>
 #include <clang/Lex/Preprocessor.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
+#include <vector>
 
 void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc,
                         const clang::Token & IncludeTok,
@@ -60,7 +64,24 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   // pp.addCommentHandler(CommentHandler *Handler)
 
   llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
-  std::unique_ptr<clang::ASTConsumer> result = std::make_unique<GenerateIncludeConsumer>(_Output); // need the compiler?
+  // std::unique_ptr<clang::MultiplexConsumer> result;
+  // result->Initialize(compiler.getASTContext());
+
+  std::vector<std::unique_ptr<clang::ASTConsumer>> tempV = std::vector<std::unique_ptr<clang::ASTConsumer>>();
+  tempV.push_back(std::make_unique<GenerateIncludeConsumer>(_Output));
+
+  // tempV.push_back(std::make_unique<GenerateVerifiersConsumer>(_Output));
+  // tempV.push_back(std::make_unique<ReplaceDeadCallsConsumer>());
+  // tempV.push_back(std::make_unique<GenerateComplexTypeStringsConsumer>());
+  // tempV.push_back(std::make_unique<RegenCodeConsumer>());
+
+  // auto result =
+  // std::unique_ptr<clang::MultiplexConsumer> result =
+  // std::unique_ptr<clang::ASTConsumer> result =
+    // std::make_unique<clang::MultiplexConsumer>(tempV);
+
+  std::unique_ptr<clang::ASTConsumer> result = std::make_unique<GenerateIncludeConsumer>(_Output);
+
   // TODO see if needed
   // llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
   return result;
