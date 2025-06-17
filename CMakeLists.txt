@@ -45,10 +45,13 @@ set(SOURCE_TRANSFORM
   src/transform/CreateNewAST.cpp
   src/transform/RemoveUnusedVisitor.cpp
   src/transform/ReplaceCallsVisitor.cpp
+  src/transform/ReplaceDeadCallsConsumer.cpp
   src/transform/ArgsFrontendActionFactory.cpp
   src/transform/GenerateIncludeAction.cpp
   src/transform/GenerateIncludeConsumer.cpp
   src/transform/GenerateIncludeHandler.cpp
+  src/transform/AddVerifiersConsumer.cpp
+  src/transform/CreateVerifiersVisitor.cpp
 )
 
 set(SOURCE_EXAMPLE

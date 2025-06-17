@@ -24,11 +24,15 @@ bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
 bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (!D) return false;
   if (!_M.isInMainFile(D->getLocation())) return true;
-    D->print(_Output);
   if (D->getAsFunction()->getStorageClass() == clang::SC_Extern) {
-    _Output << ";";
-  }
+    if (!D->getName().starts_with("__VERIFIER_nondet_")) {
+      D->print(_Output);
+      _Output << ";\n";
+    }
+  } else {
+    D->print(_Output);
     _Output << "\n";
+  }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitFunctionDecl(D);
 }
 

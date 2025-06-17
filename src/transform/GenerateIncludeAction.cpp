@@ -1,7 +1,10 @@
 #include "GenerateIncludeAction.hpp"
 #include "GenerateIncludeConsumer.hpp"
-#include <RegenCode.hpp>
-#include <ReplaceCallsVisitor.hpp>
+#include "AddVerifiersConsumer.hpp"
+#include "ReplaceCallsVisitor.hpp"
+#include "ReplaceDeadCallsConsumer.hpp"
+#include "RegenCode.hpp"
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/TemplateName.h>
 #include <clang/Basic/SourceManager.h>
@@ -13,6 +16,7 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
+#include <vector>
 
 // Overriden function for handling InclusionDirectives such as
 // import and include statements when found by the Preprocessor
@@ -28,18 +32,20 @@ void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc,
                         bool ModuleImported,
                         clang::SrcMgr::CharacteristicKind FileType) {
   // SearchPath == clang::DefaultArguments
-  if (_AllStandardHeaders.count(FileName)) {
-    if (!_AlreadyIncluded.count(FileName)) {
-      _AlreadyIncluded.emplace(FileName);
-      llvm::outs() << "Found include directive: " << FileName << " (";
-      if (IsAngled) {
-        llvm::outs() << "<>";
-        _Output << "#include <" << FileName << ">\n";
-      } else {
-        llvm::outs() << "\"\"";
-        _Output << "#include \"" << FileName << "\"\n";
+  if (_Mgr.isInMainFile(HashLoc)) {
+    if (_AllStandardHeaders.count(FileName)) {
+      if (!_AlreadyIncluded.count(FileName)) {
+        _AlreadyIncluded.emplace(FileName);
+        llvm::outs() << "Found include directive: " << FileName << " (";
+        if (IsAngled) {
+          llvm::outs() << "<>";
+          _Output << "#include <" << FileName << ">\n";
+        } else {
+          llvm::outs() << "\"\"";
+          _Output << "#include \"" << FileName << "\"\n";
+        }
+        llvm::outs() << ") at " << HashLoc.printToString(_Mgr) << "\n";
       }
-      llvm::outs() << ") at " << HashLoc.printToString(_Mgr) << "\n";
     }
   }
 }
@@ -70,13 +76,17 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 
   llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
 
+  std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
+
+  neededTypes->emplace(compiler.getASTContext().IntTy);
+
   // Multiplexor of all consumers that will be run over the same AST
   std::unique_ptr<clang::MultiplexConsumer> result =
     std::make_unique<clang::MultiplexConsumer>((
-      std::make_unique<GenerateIncludeConsumer>(_Output)
-    // TODO Implement the next set of consumers to be run over this tree
-      // std::make_unique<GenerateVerifiersConsumer>(_Output);
-      // std::make_unique<ReplaceDeadCallsConsumer>();
+      std::make_unique<GenerateIncludeConsumer>(_Output),
+      std::make_unique<ReplaceDeadCallsConsumer>(neededTypes),
+      std::make_unique<AddVerifiersConsumer>(_Output, neededTypes)
+      // TODO Implement the next set of consumers to be run over this tree
       // std::make_unique<GenerateComplexTypeStringsConsumer>();
       // std::make_unique<RegenCodeConsumer>();
     ));

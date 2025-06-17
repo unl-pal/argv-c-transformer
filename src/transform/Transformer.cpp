@@ -99,8 +99,8 @@ bool Transformer::transformFile(std::filesystem::path path,
   creator.AddAllDecl(&newContext, &oldContext);
 
   std::cout << "Replace Calls" << std::endl;
-  ReplaceDeadCallsVisitor replacer(&newContext, R);
-  replacer.TraverseAST(newContext);
+  // ReplaceDeadCallsVisitor replacer(&newContext, R);
+  // replacer.TraverseAST(newContext);
   // newContext.getTranslationUnitDecl()->dumpColor();
   
   // RemoveUnusedVisitor remover(&newContext);
