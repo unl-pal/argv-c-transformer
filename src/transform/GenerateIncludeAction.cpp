@@ -5,6 +5,7 @@
 #include "ReplaceDeadCallsConsumer.hpp"
 #include "RegenCode.hpp"
 
+#include <GenerateCodeConsumer.hpp>
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/TemplateName.h>
 #include <clang/Basic/SourceManager.h>
@@ -70,6 +71,9 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   // pp.getPreprocessorOpts();
   pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
 
+  // compiler.createASTContext();
+  compiler.getASTContext().getTranslationUnitDecl()->dumpColor();
+
   llvm::outs() << "Added Callbacks for: " << filename << "\n";
   // TODO implement a comment handler in code regen
   // pp.addCommentHandler(CommentHandler *Handler)
@@ -78,18 +82,17 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 
   std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
 
-  neededTypes->emplace(compiler.getASTContext().IntTy);
+  // neededTypes->emplace(compiler.getASTContext().IntTy);
+
+  std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
+  tempVector.emplace_back(std::make_unique<GenerateIncludeConsumer>(_Output));
+  tempVector.emplace_back(std::make_unique<ReplaceDeadCallsConsumer>(neededTypes));
+  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(_Output, neededTypes));
+  tempVector.emplace_back(std::make_unique<GenerateCodeConsumer>(_Output));
 
   // Multiplexor of all consumers that will be run over the same AST
   std::unique_ptr<clang::MultiplexConsumer> result =
-    std::make_unique<clang::MultiplexConsumer>((
-      std::make_unique<GenerateIncludeConsumer>(_Output),
-      std::make_unique<ReplaceDeadCallsConsumer>(neededTypes),
-      std::make_unique<AddVerifiersConsumer>(_Output, neededTypes)
-      // TODO Implement the next set of consumers to be run over this tree
-      // std::make_unique<GenerateComplexTypeStringsConsumer>();
-      // std::make_unique<RegenCodeConsumer>();
-    ));
+    std::make_unique<clang::MultiplexConsumer>(std::move(tempVector));
 
   // Debug statement for when debug levels are implemented
   // llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
@@ -104,6 +107,7 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 // Function that runs before any of the consumers but after preprocessor steps
 bool GenerateIncludeAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action\n";
+  // compiler.createASTContext();
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
   llvm::outs() << "Post Begin Source File Action\n";
   return result;

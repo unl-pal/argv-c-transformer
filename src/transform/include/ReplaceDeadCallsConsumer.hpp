@@ -9,7 +9,7 @@ class ReplaceDeadCallsConsumer : public clang::ASTConsumer {
 public:
   ReplaceDeadCallsConsumer(std::set<clang::QualType> *neededTypes);
 
-  virtual void HandleTranslationUnit(clang::ASTContext &Context) override;
+  void HandleTranslationUnit(clang::ASTContext &Context) override;
 
 private:
   std::set<clang::QualType> *_NeededTypes;

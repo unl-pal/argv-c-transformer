@@ -48,9 +48,9 @@ class GenerateIncludeAction : public clang::ASTFrontendAction {
 public:
   GenerateIncludeAction(llvm::raw_fd_ostream &output);
 
-  std::unique_ptr<clang::ASTConsumer>
-  CreateASTConsumer(clang::CompilerInstance &compiler,
-                    llvm::StringRef          filename) override;
+  virtual std::unique_ptr<clang::ASTConsumer>
+  CreateASTConsumer(clang::CompilerInstance &Compiler,
+                    llvm::StringRef          Filename) override;
 
   bool BeginSourceFileAction(clang::CompilerInstance &compiler) override;
 

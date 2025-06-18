@@ -69,5 +69,6 @@ bool CreateVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D
     loc = newFunction->getEndLoc();
     _Output << "extern "  << newFunction->getReturnType() << " " << newFunction->getNameAsString() << "();\n";
   }
+  // D->dump();
   return true;
 }

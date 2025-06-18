@@ -10,21 +10,25 @@ class RegenCodeVisitor : public clang::RecursiveASTVisitor<RegenCodeVisitor> {
 public:
 	RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &output);
 
-	bool VisitDecl(clang::Decl *D);
+	virtual bool VisitTranslationUnitDecl(clang::TranslationUnitDecl *D);
 
-	bool VisitFunctionDecl(clang::FunctionDecl *D);
+	virtual bool VisitDecl(clang::Decl *D);
 
-	bool VisitVarDecl(clang::VarDecl *D);
+	virtual bool VisitFunctionDecl(clang::FunctionDecl *D);
 
-	bool VisitRecordDecl(clang::RecordDecl *D);
+	virtual bool VisitVarDecl(clang::VarDecl *D);
 
-	bool VisitTypedefDecl(clang::TypedefDecl *D);
+	virtual bool VisitRecordDecl(clang::RecordDecl *D);
 
-	bool VisitUnnamedGlobalConstantDecl(clang::UnnamedGlobalConstantDecl *D);
+	virtual bool VisitTypedefDecl(clang::TypedefDecl *D);
 
-	bool VisitParmVarDecl(clang::ParmVarDecl *D);
+	virtual bool VisitUnnamedGlobalConstantDecl(clang::UnnamedGlobalConstantDecl *D);
 
-	bool VisitFieldDecl(clang::FieldDecl *D);
+	virtual bool VisitParmVarDecl(clang::ParmVarDecl *D);
+
+	virtual bool VisitFieldDecl(clang::FieldDecl *D);
+
+	bool shouldTraversePostOrder();
 
 private:
 	clang::ASTContext *_C;

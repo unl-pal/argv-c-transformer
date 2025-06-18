@@ -11,5 +11,10 @@ AddVerifiersConsumer::AddVerifiersConsumer(llvm::raw_fd_ostream &output, std::se
 void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   CreateVerifiersVisitor Visitor(&Context, _Output, _NeededTypes);
   llvm::outs() << "Running the Handle TU in AddVerifiersConsumer\n";
+    if (!Context.getTranslationUnitDecl()) {
+    llvm::outs() << "Context is blank\n";
+  }
+  // Context.getTranslationUnitDecl()->dumpDeclContext();
+
   Visitor.HandleTranslationUnit(Context.getTranslationUnitDecl());
 }

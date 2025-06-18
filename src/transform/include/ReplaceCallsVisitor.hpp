@@ -12,11 +12,13 @@ class ReplaceDeadCallsVisitor : public clang::RecursiveASTVisitor<ReplaceDeadCal
 public:
   ReplaceDeadCallsVisitor(clang::ASTContext *C, std::set<clang::QualType> *neededTypes);
 
-  virtual bool HandleTranslationUnit(clang::TranslationUnitDecl *D);
+  virtual bool VisitTranslationUnit(clang::TranslationUnitDecl *D);
 
-  bool VisitDecl(clang::Decl *D);
+  virtual bool VisitDecl(clang::Decl *D);
 
-  bool VisitCallExpr(clang::CallExpr *E);
+  virtual bool VisitCallExpr(clang::CallExpr *E);
+
+  bool shouldTraversePostOrder();
 
 private:
   clang::ASTContext *_C;

@@ -11,6 +11,8 @@ public:
 
   std::unique_ptr<clang::FrontendAction> create() override;
 
+  bool runInvocation(std::shared_ptr<clang::CompilerInvocation> Invocation, clang::FileManager *Files, std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps, clang::DiagnosticConsumer *DiagConsumer) override;
+
 private:
   llvm::raw_fd_ostream &_Output;
 };

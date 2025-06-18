@@ -16,19 +16,25 @@ ReplaceDeadCallsVisitor::ReplaceDeadCallsVisitor(clang::ASTContext *C, std::set<
   llvm::outs() << "Created the ReplaceDeadCallsVisitor\n";
 };
 
-bool ReplaceDeadCallsVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
+bool ReplaceDeadCallsVisitor::VisitTranslationUnit(clang::TranslationUnitDecl *D) {
   llvm::outs() << "Handling ReplaceDeadCallsVisitor" << "\n";
+  // D->dumpDeclContext();
   // return ReplaceDeadCallsVisitor::VisitDecl(D);
-  return true;
-  // clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::VisitTranslationUnitDecl(C.getTranslationUnitDecl());
+  // return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::VisitTranslationUnitDecl(D);
+  return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::TraverseDecl(D);
+  // return true;
 }
 
 bool ReplaceDeadCallsVisitor::VisitDecl(clang::Decl *D) {
-  return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::VisitDecl(D);
+  // llvm::outs() << "Found a DECL\n";
+  return true;
+  // return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::VisitDecl(D);
+  // return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::TraverseDecl(D);
 }
 
 // Call Expr is the parent of the function decl ref and the args used
 bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
+  // llvm::outs() << "Found a Call\n";
   if (_C->getSourceManager().isInMainFile(E->getExprLoc())) {
     if (clang::FunctionDecl *func = E->getCalleeDecl()->getAsFunction()) {
       if (((func->isImplicit() || !func->isDefined())) && !func->isInlineDefinitionExternallyVisible()) {
@@ -38,14 +44,21 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
         clang::IdentifierInfo *newInfo = &_C->Idents.get("__VERIFIER_nondet_" + myType);
         clang::DeclarationName newName(newInfo);
         func->setDeclName(newName);
-        llvm::outs() << newName.getAsString() << "\n";
+        // llvm::outs() << newName.getAsString() << "\n";
         _NeededTypes->emplace(funcType);
         // E->getReferencedDeclOfCallee()
         E->shrinkNumArgs(0);
         E->setCallee(clang::CallExpr::Create(*_C, E, {}, funcType, clang::ExprValueKind::VK_LValue, E->getRParenLoc(), clang::FPOptionsOverride::FPOptionsOverride::getFromOpaqueInt(clang::StorageClass::SC_Extern)));
         // clang::CallExpr::Create(const ASTContext &Ctx, Expr *Fn, ArrayRef<Expr *> Args, QualType Ty, ExprValueKind VK, SourceLocation RParenLoc, FPOptionsOverride FPFeatures)
+        // llvm::outs() << func->getNameAsString() << "\n";
       }
     }
   }
-  return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::VisitCallExpr(E);
+  // return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::TraverseStmt(E);
+  // return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::VisitCallExpr(E);
+  return true;
+}
+
+bool ReplaceDeadCallsVisitor::shouldTraversePostOrder() {
+  return true;
 }

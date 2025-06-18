@@ -9,17 +9,25 @@
 #include "ArgsFrontendActionFactory.hpp"
 
 #include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/DiagnosticIDs.h>
+#include <clang/Basic/DiagnosticOptions.h>
 #include <clang/Basic/FileManager.h>
+#include <clang/Basic/FileSystemOptions.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Frontend/CompilerInvocation.h>
+#include <clang/Frontend/TextDiagnosticPrinter.h>
 #include <clang/Lex/Preprocessor.h>
+#include <clang/Serialization/PCHContainerOperations.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <llvm/ADT/IntrusiveRefCntPtr.h>
 #include <llvm/ADT/StringRef.h>
 #include <iostream>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/VirtualFileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
 #include <string>
@@ -131,10 +139,12 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   std::string resourceDir = std::getenv("CLANG_RESOURCES");
 
+  std::cout << "Setting Comp Options" << std::endl;
+
   std::vector<std::string> compOptionsArgs({
     "clang",
     path.string(),
-    "verifier.c",
+    // "verifier.c",
     "--",
     "-extra-arg=-fparse-all-comments",
     "-extra-arg=-resource-dir=" + resourceDir,
@@ -157,6 +167,8 @@ bool Transformer::transformFile(std::filesystem::path path,
     return 1;
   }
 
+  std::cout << "Setting Up Common Options Parser" << std::endl;
+
   llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser = clang::tooling::CommonOptionsParser::create(argc, (const char**)argv, myToolCategory);
 
   if (!expectedParser) {
@@ -166,15 +178,50 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
 
+  std::cout << "Building the Tool" << std::endl;
+
   clang::tooling::ClangTool tool(optionsParser.getCompilations(), optionsParser.getSourcePathList());
 
+  std::cout << "Diagnostic Options" << std::endl;
+
+  llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs> diagId(new clang::DiagnosticIDs());
+  clang::DiagnosticOptions *diagOptions = new clang::DiagnosticOptions();
+  llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> diagOpt(diagOptions);
+  // clang::TextDiagnosticPrinter *diagPrinter = new clang::TextDiagnosticPrinter(llvm::errs(), diagOptions);
+  std::cout << "Diagnostic Engine" << std::endl;
+  clang::DiagnosticsEngine diagEngine(diagId, diagOpt);
   tool.setDiagnosticConsumer(&diagConsumer);
 
+  std::cout << "FileSystemOptions" << std::endl;
+  const clang::FileSystemOptions fileSysOpts;
+  clang::FileManager *manager = new clang::FileManager(fileSysOpts);
+
+  std::cout << "Factory" << std::endl;
+
   ArgsFrontendFactory factory(output);
+
+  std::cout << "Compiler Invocation" << std::endl;
+
+  clang::CompilerInvocation compiler;
+  std::shared_ptr<clang::CompilerInvocation> ci = std::make_shared<clang::CompilerInvocation>();
+  clang::CompilerInvocation::CreateFromArgs(*ci, (const char*)(argv), diagEngine);
+  // factory.runInvocation(std::shared_ptr<CompilerInvocation> Invocation, FileManager *Files, std::shared_ptr<PCHContainerOperations> PCHContainerOps, DiagnosticConsumer *DiagConsumer)
+
+  std::cout << "Swap to shared ptr" << std::endl;
+
+
+  std::cout << "Run the Invocation" << std::endl;
+
+  // std::cout << ci.get()->getCodeGenOpts() << std::endl;
+  // std::cout << manager.get << std::endl;
+  // factory.runInvocation(ci, manager, std::make_shared<clang::PCHContainerOperations>(), &diagConsumer);
+
+  std::cout << "Run the Tool" << std::endl;
+
   llvm::outs() << tool.run(&factory) << "\n";
   /*oldAstUnit->Save("output.ast");*/
-  RegenCodeVisitor codeRegenVisitor(&newContext, output);
-  codeRegenVisitor.TraverseAST(newContext);
+  // RegenCodeVisitor codeRegenVisitor(&newContext, output);
+  // codeRegenVisitor.TraverseAST(newContext);
 
   R.setSourceMgr(oldContext.getSourceManager(), newAstUnit->getLangOpts());
   R.InsertTextBefore(oldContext.getTranslationUnitDecl()->getLocation(), "// Benchmark File");

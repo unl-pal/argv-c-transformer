@@ -1,6 +1,8 @@
 #include "include/RegenCode.hpp"
 
+#include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <llvm/Support/raw_ostream.h>
 
 // param *C a pointer to a Context
@@ -13,11 +15,20 @@ RegenCodeVisitor::RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &o
   _Output(output) {
 }
 
+bool RegenCodeVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
+  // return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitTranslationUnitDecl(D);
+  // return clang::RecursiveASTVisitor<RegenCodeVisitor>::TraverseTranslationUnitDecl(D);
+  return clang::RecursiveASTVisitor<RegenCodeVisitor>::TraverseDecl(D);
+  // return true;
+}
+
 // Catch all do nothing unless specified
 bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
   if (!_M.isInMainFile(D->getLocation())) return true;
+  D->dumpColor();
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitDecl(D);
+  // return true;
 }
 
 // Prints functions and their children with a ';' for externs
@@ -86,4 +97,9 @@ bool RegenCodeVisitor::VisitUnnamedGlobalConstantDecl(
   D->print(_Output);
   _Output << ";\n";
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitUnnamedGlobalConstantDecl(D);
+}
+
+bool RegenCodeVisitor::shouldTraversePostOrder() {
+  // return true;
+  return false;
 }

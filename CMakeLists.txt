@@ -47,6 +47,7 @@ set(SOURCE_TRANSFORM
   src/transform/ReplaceCallsVisitor.cpp
   src/transform/ReplaceDeadCallsConsumer.cpp
   src/transform/ArgsFrontendActionFactory.cpp
+  src/transform/GenerateCodeConsumer.cpp
   src/transform/GenerateIncludeAction.cpp
   src/transform/GenerateIncludeConsumer.cpp
   src/transform/GenerateIncludeHandler.cpp
