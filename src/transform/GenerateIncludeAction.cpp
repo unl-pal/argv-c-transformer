@@ -1,22 +1,13 @@
 #include "GenerateIncludeAction.hpp"
 #include "GenerateIncludeConsumer.hpp"
 #include "AddVerifiersConsumer.hpp"
-#include "ReplaceCallsVisitor.hpp"
 #include "ReplaceDeadCallsConsumer.hpp"
-#include "RegenCode.hpp"
-
 #include <GenerateCodeConsumer.hpp>
-#include <clang/AST/ASTConsumer.h>
+
 #include <clang/AST/TemplateName.h>
 #include <clang/Basic/SourceManager.h>
-#include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/MultiplexConsumer.h>
-#include <clang/Frontend/FrontendAction.h>
-#include <clang/Lex/PPCallbacks.h>
 #include <clang/Lex/Preprocessor.h>
-#include <llvm/ADT/StringRef.h>
-#include <llvm/Support/raw_ostream.h>
-#include <memory>
 #include <vector>
 
 // Overriden function for handling InclusionDirectives such as
@@ -67,11 +58,8 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
                                          llvm::StringRef          filename) {
   llvm::outs() << "Creating Ast Consumer for: " << filename << "\n";
   clang::Preprocessor &pp = compiler.getPreprocessor();
-  // pp.PrintStats();
-  // pp.getPreprocessorOpts();
   pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
 
-  // compiler.createASTContext();
   compiler.getASTContext().getTranslationUnitDecl()->dumpColor();
 
   llvm::outs() << "Added Callbacks for: " << filename << "\n";
@@ -81,8 +69,6 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
 
   std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
-
-  // neededTypes->emplace(compiler.getASTContext().IntTy);
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(std::make_unique<GenerateIncludeConsumer>(_Output));
@@ -107,7 +93,6 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 // Function that runs before any of the consumers but after preprocessor steps
 bool GenerateIncludeAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action\n";
-  // compiler.createASTContext();
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
   llvm::outs() << "Post Begin Source File Action\n";
   return result;

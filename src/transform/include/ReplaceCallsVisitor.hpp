@@ -5,7 +5,6 @@
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Type.h>
-#include <clang/Rewrite/Core/Rewriter.h>
 #include <set>
 
 class ReplaceDeadCallsVisitor : public clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor> {

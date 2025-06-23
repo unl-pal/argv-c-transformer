@@ -6,8 +6,6 @@
 
 class Transformer {
 public:
-  bool getFileContents(std::string fileName, std::shared_ptr<std::string> contents);
-
   bool transformFile(std::filesystem::path path, std::vector<std::string> &args);
 
   bool transformAll(std::filesystem::path path, std::vector<std::string> &args);
