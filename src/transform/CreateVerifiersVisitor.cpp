@@ -18,7 +18,11 @@
  */
 
 CreateVerifiersVisitor::CreateVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output, std::set<clang::QualType> *neededTypes)
-    : _C(c), _Output(output), _NeededTypes(neededTypes) {}
+    : _C(c), _Output(output), _NeededTypes(neededTypes) {
+  for (clang::QualType type : *_NeededTypes) {
+    type->dump();
+  }
+}
 
 // TODO fix the double run due to including the Verifiers file
 bool CreateVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
@@ -68,7 +72,9 @@ bool CreateVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D
     D->addDecl(newFunction);
     loc = newFunction->getEndLoc();
     _Output << "extern "  << newFunction->getReturnType() << " " << newFunction->getNameAsString() << "();\n";
+    llvm::outs() << "Function: " << newFunction->getNameAsString() << " was created\n";
   }
   // D->dump();
-  return true;
+  // return true;
+  return false;
 }

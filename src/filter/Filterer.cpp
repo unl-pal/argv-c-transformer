@@ -287,131 +287,135 @@ int Filterer::run(std::string fileOrDirToFilter,
 
   std::cout << "starting" << std::endl;
 
-    parseConfigFile(propertiesConfigFile);
+  parseConfigFile(propertiesConfigFile);
 
-    std::filesystem::path pathObject(fileOrDirToFilter);
+  std::filesystem::path pathObject(fileOrDirToFilter);
 
-    std::vector<std::string> filesToFilter = std::vector<std::string>();
+  std::vector<std::string> filesToFilter = std::vector<std::string>();
 
-    std::cout << "Path: " << pathObject.string() << std::endl;
-    /// Check Path exists and get list of files to filter
-    int filesFound = getAllCFiles(pathObject, filesToFilter, 0);
-    debugInfo("Files Found: " + std::to_string(filesFound));
+  std::cout << "Path: " << pathObject.string() << std::endl;
+  /// Check Path exists and get list of files to filter
+  int filesFound = getAllCFiles(pathObject, filesToFilter, 0);
+  debugInfo("Files Found: " + std::to_string(filesFound));
 
-    /// Set args for AST creation
-    std::vector<std::string> args = std::vector<std::string>();
-    // This ensures comments are a part of the parsed AST
-    args.push_back("-fparse-all-comments");
-    // This tells the AST generator where to find the compiler supplied headers
-    args.push_back(std::string("-resource-dir=") + std::string(std::getenv("CLANG_RESOURCES")));
+  /// Set args for AST creation
+  std::vector<std::string> args = std::vector<std::string>();
+  // This ensures comments are a part of the parsed AST
+  args.push_back("-fparse-all-comments");
+  // This tells the AST generator where to find the compiler supplied headers
+  args.push_back(std::string("-resource-dir=") + std::string(std::getenv("CLANG_RESOURCES")));
 
-    /// Loop over all c files in filter list and run through the checker before
-    /// creating the AST
-    for (std::string fileName : filesToFilter) {
-      std::shared_ptr<std::string> contents = std::make_shared<std::string>();
-      if (checkPotentialFile(fileName, contents)) {
-        std::filesystem::path oldPath(fileName);
-        std::filesystem::path newPath(std::filesystem::current_path() /
-                                      "filteredFiles");
-        /// set up the new path in filteredFiles to keep directory structure
-        // prevent writing outside the project directory for now
-        for (const std::filesystem::path &component : oldPath) {
-          if (component.string() != "..") {
-            newPath /= component;
-          }
+  /// Loop over all c files in filter list and run through the checker before
+  /// creating the AST
+  for (std::string fileName : filesToFilter) {
+    std::shared_ptr<std::string> contents = std::make_shared<std::string>();
+    if (checkPotentialFile(fileName, contents)) {
+      std::filesystem::path oldPath(fileName);
+      std::filesystem::path newPath(std::filesystem::current_path() /
+                                    "filteredFiles");
+      /// set up the new path in filteredFiles to keep directory structure
+      // prevent writing outside the project directory for now
+      for (const std::filesystem::path &component : oldPath) {
+        if (component.string() != "..") {
+          newPath /= component;
         }
-
-        /// Use args and file content to generate
-        std::cout << "Creating astUnit for: " << fileName << std::endl;
-
-        std::unique_ptr<clang::ASTUnit> astUnit =
-          clang::tooling::buildASTFromCodeWithArgs(*contents, args,
-                                                   newPath.string());
-        if (config["debug"]) {
-          std::cout << *contents << std::endl;
-        }
-
-        if (!astUnit) {
-          std::cerr << "Failed to build AST for: " << fileName << std::endl;
-          continue;
-        }
-
-        clang::ASTContext &Context = astUnit->getASTContext();
-
-        if (config["debug"]) {
-          std::cout << "Diagnostics" << std::endl;
-          astUnit->getDiagnostics();
-          Context.PrintStats();
-        }
-
-        std::cout << "Main File Name: " << astUnit->getMainFileName().str()
-                  << std::endl;
-        std::cout << "Creating Counting Visitor" << std::endl;
-        CountNodesVisitor countVisitor(&Context, typesRequested);
-
-        std::cout << "Traversing AST" << std::endl;
-        countVisitor.TraverseAST(Context);
-
-        if (config["debug"]) {
-          std::cout << "Printing Report" << std::endl;
-          countVisitor.PrintReport(fileName);
-        }
-
-        std::unordered_map<std::string, CountNodesVisitor::attributes*> functions = countVisitor.ReportAttributes();
-        std::vector<std::string> functionsToRemove = filterFunctions(functions);
-
-        // If all funtions besides the global 'function', Program, which holds
-        // all variables and declarations made outside of functions are removed
-        // then do not add the file
-        if (functions.size() && functions.size() - functionsToRemove.size() <= 1) {
-          std::cout << "No Potential Funtions In: " << fileName << std::endl;
-          std::cout << "Moving to Next Potential File" << std::endl;
-          continue;
-        }
-
-        std::filesystem::create_directories(newPath.parent_path());
-
-        clang::Rewriter Rewrite;
-        Rewrite.setSourceMgr(Context.getSourceManager(),
-                             astUnit->getLangOpts());
-        if (functionsToRemove.size()) {
-          std::cout << "Removing Nodes\n";
-          for (std::string node : functionsToRemove) {
-            std::cout << node + "\n";
-          }
-          std::cout << std::endl;
-          RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
-                                                   functionsToRemove);
-        // RemoveFunctionsVisitor.TraverseAST(Context);
-        // TODO run for each function name may be the way to go...
-        for (std::string name : functionsToRemove) {
-          RemoveFunctionsVisitor.TraverseAST(Context);
-        }
-        }
-
-        std::cout << "Writing File" << std::endl;
-        std::error_code ec;
-        llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
-        Rewrite.getEditBuffer(Context.getSourceManager().getFileID(astUnit->getStartOfMainFileID())).write(output);
-        std::cout << "Finished Rewrite step" << std::endl;
-
-
-        if (config["debug"] && std::filesystem::exists(newPath)) {
-          std::ifstream file(newPath.string());
-          std::stringstream buffer;
-
-          if (file.is_open()) {
-            buffer << file.rdbuf();
-            const std::string fileContents = buffer.str();
-            std::cout << fileContents << std::endl;
-          } else {
-            file.close();
-          }
-        }
-      } else {
-        std::cerr << "File: " << fileName << " Does Not Meet Criteria"
-                  << std::endl;
       }
+
+      /// Use args and file content to generate
+      std::cout << "Creating astUnit for: " << fileName << std::endl;
+
+      std::unique_ptr<clang::ASTUnit> astUnit =
+        clang::tooling::buildASTFromCodeWithArgs(*contents, args,
+                                                 newPath.string());
+      if (config["debug"]) {
+        std::cout << *contents << std::endl;
+      }
+
+      if (!astUnit) {
+        std::cerr << "Failed to build AST for: " << fileName << std::endl;
+        continue;
+      }
+
+      clang::ASTContext &Context = astUnit->getASTContext();
+
+      if (config["debug"]) {
+        std::cout << "Diagnostics" << std::endl;
+        astUnit->getDiagnostics();
+        Context.PrintStats();
+      }
+
+      std::cout << "Main File Name: " << astUnit->getMainFileName().str()
+        << std::endl;
+      std::cout << "Creating Counting Visitor" << std::endl;
+      CountNodesVisitor countVisitor(&Context, typesRequested);
+
+      std::cout << "Traversing AST" << std::endl;
+      countVisitor.TraverseAST(Context);
+
+      if (config["debug"]) {
+        std::cout << "Printing Report" << std::endl;
+        countVisitor.PrintReport(fileName);
+      }
+
+      std::unordered_map<std::string, CountNodesVisitor::attributes*> functions = countVisitor.ReportAttributes();
+      std::vector<std::string> functionsToRemove = filterFunctions(functions);
+
+      // If all funtions besides the global 'function', Program, which holds
+      // all variables and declarations made outside of functions are removed
+      // then do not add the file
+      if (functions.size() && functions.size() - functionsToRemove.size() <= 1) {
+        std::cout << "No Potential Funtions In: " << fileName << std::endl;
+        std::cout << "Moving to Next Potential File" << std::endl;
+        continue;
+      }
+
+      std::filesystem::create_directories(newPath.parent_path());
+
+      clang::Rewriter Rewrite;
+      Rewrite.setSourceMgr(Context.getSourceManager(),
+                           astUnit->getLangOpts());
+      if (functionsToRemove.size()) {
+        std::cout << "Removing Nodes\n";
+        for (std::string node : functionsToRemove) {
+          std::cout << node + "\n";
+        }
+        std::cout << std::endl;
+        RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
+                                                 functionsToRemove);
+        // RemoveFunctionsVisitor.TraverseAST(Context);
+        bool done = false;
+        while (!done) {
+          done = RemoveFunctionsVisitor.TraverseAST(Context);
+        }
+        // // TODO run for each function name may be the way to go...
+        // for (std::string name : functionsToRemove) {
+        //   RemoveFunctionsVisitor.TraverseAST(Context);
+        // }
+      }
+
+      std::cout << "Writing File" << std::endl;
+      std::error_code ec;
+      llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
+      Rewrite.getEditBuffer(Context.getSourceManager().getFileID(astUnit->getStartOfMainFileID())).write(output);
+      std::cout << "Finished Rewrite step" << std::endl;
+
+
+      if (config["debug"] && std::filesystem::exists(newPath)) {
+        std::ifstream file(newPath.string());
+        std::stringstream buffer;
+
+        if (file.is_open()) {
+          buffer << file.rdbuf();
+          const std::string fileContents = buffer.str();
+          std::cout << fileContents << std::endl;
+        } else {
+          file.close();
+        }
+      }
+    } else {
+      std::cerr << "File: " << fileName << " Does Not Meet Criteria"
+        << std::endl;
     }
+  }
   return 0;
 }

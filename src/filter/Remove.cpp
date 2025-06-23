@@ -28,8 +28,13 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         }
         _R.ReplaceText(range, "// === Removed Undesired Function ===\n");
         // TODO what if only one node can be removed per run?
+        clang::Decl *decl = clang::dyn_cast<clang::Decl>(D);
+        if (decl) {
+          
+        }
         _C->getTranslationUnitDecl()->removeDecl(D);
-        return true;
+        return false;
+        // return true;
       }
     }
   }
