@@ -1,4 +1,4 @@
-#include "include/Remove.hpp"
+#include "include/RemoveVisitor.hpp"
 
 #include <clang/AST/RawCommentList.h>
 #include <clang/AST/Type.h>
@@ -6,12 +6,13 @@
 #include <clang/Basic/LangStandard.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Lex/Preprocessor.h>
+#include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/raw_ostream.h>
-#include <vector>
 
-RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext *C, clang::Rewriter &R,
+RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext       *C,
+                                     clang::Rewriter rewriter,
                                      std::vector<std::string> toRemove)
-  : _C(C), _R(R), _mgr(_R.getSourceMgr()), _toRemove(toRemove) {}
+    : _C(C), _mgr(_C->getSourceManager()), _Rewriter(rewriter), _toRemove(toRemove) {}
 
 bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if(!D) return false;
@@ -20,13 +21,13 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
       if (name == D->getNameAsString()) {
         llvm::outs() << name << "\n";
         if (clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D)) {
-          _R.ReplaceText(rawComment->getSourceRange(), "");
+          _Rewriter.ReplaceText(rawComment->getSourceRange(), "");
         }
         clang::SourceRange range = D->getSourceRange();
         if (D->getStorageClass() == clang::SC_Extern) {
           range = clang::SourceRange(D->getOuterLocStart(), D->getEndLoc().getLocWithOffset(1));
         }
-        _R.ReplaceText(range, "// === Removed Undesired Function ===\n");
+        _Rewriter.ReplaceText(range, "// === Removed Undesired Function ===\n");
         // TODO what if only one node can be removed per run?
         clang::Decl *decl = clang::dyn_cast<clang::Decl>(D);
         if (decl) {

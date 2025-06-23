@@ -1,8 +1,9 @@
 #include "include/Filterer.hpp"
-#include "include/Remove.hpp"
+#include "include/RemoveVisitor.hpp"
 
 #include <clang/AST/Type.h>
 #include <clang/Lex/Preprocessor.h>
+#include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/Tooling.h>
 #include <fstream>
 #include <iostream>

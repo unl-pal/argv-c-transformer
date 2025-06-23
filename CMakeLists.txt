@@ -34,9 +34,13 @@ set(HEADERS_EXAMPLE
 )
 
 set(SOURCE_FILTER
+  src/filter/CountingConsumer.cpp
   src/filter/CountingVisitor.cpp
+  src/filter/FilterAction.cpp
   src/filter/Filterer.cpp
-  src/filter/Remove.cpp
+  src/filter/FrontendFactoryWithArgs.cpp
+  src/filter/RemoveConsumer.cpp
+  src/filter/RemoveVisitor.cpp
 )
 
 set(SOURCE_TRANSFORM
