@@ -1,5 +1,6 @@
 #include "ArgsFrontendActionFactory.hpp"
-#include <GenerateIncludeAction.hpp>
+#include "TransformAction.hpp"
+
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Support/raw_ostream.h>
@@ -12,7 +13,7 @@ ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_fd_ostream &output)
 
 // overridden create method necessary to out put our frontend action
 std::unique_ptr<clang::FrontendAction> ArgsFrontendFactory::create() {
-  return std::make_unique<GenerateIncludeAction>(_Output);
+  return std::make_unique<TransformAction>(_Output);
 }
 
 bool ArgsFrontendFactory::runInvocation(std::shared_ptr<clang::CompilerInvocation> Invocation, clang::FileManager *Files, std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps, clang::DiagnosticConsumer *DiagConsumer) {

@@ -19,10 +19,6 @@ GenerateIncludeConsumer::GenerateIncludeConsumer(llvm::raw_fd_ostream &output) :
 
 void GenerateIncludeConsumer::HandleTranslationUnit(
   clang::ASTContext &Context) {
-  llvm::outs() << "Running the Handle TU of Generate Includes\n";
-  if (!Context.getTranslationUnitDecl()) {
-    llvm::outs() << "Context is blank\n";
-  }
   // Context.getTranslationUnitDecl()->dumpDeclContext();
   // ## SAVING FOR EXAMPLE SAKE BUT WILL NOT BE USED FOR NOW ##
   // MatchFinder MatchFinder;

@@ -1,8 +1,8 @@
-#include "GenerateIncludeAction.hpp"
+#include "TransformAction.hpp"
 #include "GenerateIncludeConsumer.hpp"
 #include "AddVerifiersConsumer.hpp"
 #include "ReplaceDeadCallsConsumer.hpp"
-#include <GenerateCodeConsumer.hpp>
+#include "GenerateCodeConsumer.hpp"
 
 #include <clang/AST/TemplateName.h>
 #include <clang/Basic/SourceManager.h>
@@ -28,15 +28,15 @@ void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc,
     if (_AllStandardHeaders.count(FileName)) {
       if (!_AlreadyIncluded.count(FileName)) {
         _AlreadyIncluded.emplace(FileName);
-        llvm::outs() << "Found include directive: " << FileName << " (";
+        // llvm::outs() << "Found include directive: " << FileName << " (";
         if (IsAngled) {
-          llvm::outs() << "<>";
+          // llvm::outs() << "<>";
           _Output << "#include <" << FileName << ">\n";
         } else {
           llvm::outs() << "\"\"";
           _Output << "#include \"" << FileName << "\"\n";
         }
-        llvm::outs() << ") at " << HashLoc.printToString(_Mgr) << "\n";
+        // llvm::outs() << ") at " << HashLoc.printToString(_Mgr) << "\n";
       }
     }
   }
@@ -49,24 +49,22 @@ IncludeFinder::IncludeFinder(clang::SourceManager &SM, llvm::raw_fd_ostream &out
 
 // Constructor for GenerateIncludeAction that sets up the output stream for
 // regenerating source code
-GenerateIncludeAction::GenerateIncludeAction(llvm::raw_fd_ostream &output) : _Output(output) {}
+TransformAction::TransformAction(llvm::raw_fd_ostream &output) : _Output(output) {}
 
 // Overridden function that uses a ConsumerMultiplexer instead of a single
 // ASTConsumer to run many consumers, handlers and visitors over the same AST
 std::unique_ptr<clang::ASTConsumer>
-GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
+TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
                                          llvm::StringRef          filename) {
-  llvm::outs() << "Creating Ast Consumer for: " << filename << "\n";
+  // llvm::outs() << "Creating Ast Consumer for: " << filename << "\n";
   clang::Preprocessor &pp = compiler.getPreprocessor();
   pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
 
-  compiler.getASTContext().getTranslationUnitDecl()->dumpColor();
-
-  llvm::outs() << "Added Callbacks for: " << filename << "\n";
+  // llvm::outs() << "Added Callbacks for: " << filename << "\n";
   // TODO implement a comment handler in code regen
   // pp.addCommentHandler(CommentHandler *Handler)
 
-  llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
+  // llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
 
   std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
 
@@ -91,14 +89,11 @@ GenerateIncludeAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 // }
 
 // Function that runs before any of the consumers but after preprocessor steps
-bool GenerateIncludeAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
-  llvm::outs() << "Begin Source File Action\n";
+bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
-  llvm::outs() << "Post Begin Source File Action\n";
   return result;
 }
 
 // Function that runs after all of the consumers but before the AST is cleaned up
-void GenerateIncludeAction::EndSourceFileAction() {
-  llvm::outs() << "Ending Source File Action\n";
+void TransformAction::EndSourceFileAction() {
 }

@@ -8,9 +8,9 @@
 #include <llvm/Support/raw_ostream.h>
 #include <set>
 
-class CreateVerifiersVisitor : public clang::RecursiveASTVisitor<CreateVerifiersVisitor> {
+class AddVerifiersVisitor : public clang::RecursiveASTVisitor<AddVerifiersVisitor> {
 public:
-  CreateVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output, std::set<clang::QualType> *neededTypes);
+  AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output, std::set<clang::QualType> *neededTypes);
 
   virtual bool HandleTranslationUnit(clang::TranslationUnitDecl *D);
 

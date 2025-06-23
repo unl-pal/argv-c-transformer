@@ -18,8 +18,6 @@ RegenCodeVisitor::RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &o
 // Catch all do nothing unless specified
 bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
-  if (_M.isInMainFile(D->getLocation())) {
-  }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitDecl(D);
 }
 
@@ -57,7 +55,6 @@ bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
   if (!_M.isInMainFile(D->getLocation())) return true;
   if (!D->isAnonymousStructOrUnion()) {
-    D->dump();
       D->print(_Output);
       _Output << ";\n";
   }

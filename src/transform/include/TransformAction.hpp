@@ -44,9 +44,9 @@ private:
     "wchar.h",     "wctype.h"};
 };
 
-class GenerateIncludeAction : public clang::ASTFrontendAction {
+class TransformAction : public clang::ASTFrontendAction {
 public:
-  GenerateIncludeAction(llvm::raw_fd_ostream &output);
+  TransformAction(llvm::raw_fd_ostream &output);
 
   virtual std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &Compiler,
