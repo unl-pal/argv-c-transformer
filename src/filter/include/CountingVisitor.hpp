@@ -35,9 +35,11 @@ public:
 		int WhileLoops = 0;
 	};
 
-	CountNodesVisitor(clang::ASTContext *C, std::vector<unsigned int> T);
+  CountNodesVisitor(
+    clang::ASTContext *C, const std::vector<unsigned int> &T,
+    std::unordered_map<std::string, CountNodesVisitor::attributes *> *allFunctions);
 
-	std::string getStmtParentFuncName(const clang::Stmt &S);
+  std::string getStmtParentFuncName(const clang::Stmt &S);
 
 	std::string getDeclParentFuncName(const clang::Decl &D);
 
@@ -75,7 +77,7 @@ private:
 	clang::ASTContext *_C;
 	clang::SourceManager *_mgr;
 	std::map<std::string, int> _values;
-	std::unordered_map<std::string, attributes*> _allFunctions;
-	std::vector<unsigned int> _T;
+	std::unordered_map<std::string, attributes*> *_allFunctions;
+	const std::vector<unsigned int> &_T;
 	bool _allTypes;
 };

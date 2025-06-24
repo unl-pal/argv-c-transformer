@@ -1,14 +1,21 @@
 #include "include/Filterer.hpp"
-#include "include/RemoveVisitor.hpp"
+#include "FrontendFactoryWithArgs.hpp"
 
+#include <algorithm>
 #include <clang/AST/Type.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
+#include <cstdlib>
+#include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <regex>
+#include <string>
 
 Filterer::Filterer(){
   typesRequested = std::vector<unsigned int>();
@@ -33,17 +40,17 @@ void Filterer::parseConfigFile(std::string configFile) {
         std::string key = match[1];
         std::string value = match[2];
         // Add the value to the config if the key is a member of the map
-        if (config.count(key)) {
+        if (config->count(key)) {
           try {
             int i = std::stoi(value);
-            config[key] = i;
+            config->at(key) = i;
           } catch (...) {
           } 
           // For true false values convert to 1s and 0s
           if (value == "false" || value == "False") {
-            config[key] = 0;
+            config->at(key) = 0;
           } else if (value == "true" || value == "True") {
-            config[key] = 1;
+            config->at(key) = 1;
           }
         }
         // For types go through all given types and add only supported types to the list
@@ -80,7 +87,7 @@ void Filterer::parseConfigFile(std::string configFile) {
     }
     file.close();
     std::cout << "Using Config Settings:" << std::endl;
-    for (std::pair item : config) {
+    for (std::pair item : *config) {
       std::cout << "Property: " << item.first << "=" << item.second << std::endl;
     }
     std::cout << "For Types: " << std::endl;
@@ -112,7 +119,7 @@ bool Filterer::checkPotentialFile(std::string fileName,
       if (std::regex_search(line, match, pattern)) {
         if (std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) !=
             stdLibNames.end()) {
-        } else if (!config["useNonStdHeaders"]) {
+        } else if (!config->at("useNonStdHeaders")) {
           file.close();
           return false;
         }
@@ -123,10 +130,10 @@ bool Filterer::checkPotentialFile(std::string fileName,
       buffer << line << std::endl;
     }
     file.close();
-    if (count < config["minFileLoC"]) {
+    if (count < config->at("minFileLoC")) {
       *contents = "";
       return false;
-    } else if (count > config["maxFileLoC"]) {
+    } else if (count > config->at("maxFileLoC")) {
       *contents = "";
       return false;
     } else {
@@ -144,7 +151,7 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
                            std::vector<std::string> &filesToFilter,
                            int numFiles) {
   if (!std::filesystem::exists(pathObject)) {
-    if (config["debug"]) {
+    if (config->at("debug")) {
       std::cout << "Path: " << " Does Not Exist" << std::endl;
     }
     return 0;
@@ -152,21 +159,21 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   if (std::filesystem::is_regular_file(pathObject)) {
     if (pathObject.has_extension()) {
       if (pathObject.extension() == ".c") {
-        if (config["debug"]) {
+        if (config->at("debug")) {
           std::cout << "File: " << pathObject.filename()
                     << " Added To Filter List" << std::endl;
         }
         filesToFilter.push_back(pathObject.string());
         return 1;
       } else {
-        if (config["debug"]) {
+        if (config->at("debug")) {
           std::cout << "File: " << pathObject.filename() << " is Not a C File"
                     << std::endl;
         }
         return 0;
       }
     } else {
-      if (config["debug"]) {
+      if (config->at("debug")) {
         std::cout << "File: " << pathObject.filename() << " Has No Extension"
                   << std::endl;
       }
@@ -179,7 +186,7 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
     }
     return numFiles;
   } else {
-    if (config["debug"]) {
+    if (config->at("debug")) {
       std::cout << "Path: " << pathObject.filename() << " Ignored" << std::endl;
     }
     return 0;
@@ -197,77 +204,77 @@ std::vector<std::string> Filterer::filterFunctions(
     CountNodesVisitor::attributes *attr = func.second;
     if (key == "Program" || key == "main") {
       continue;
-    } else if (attr->ForLoops > config["maxForLoops"]) {
+    } else if (attr->ForLoops > config->at("maxForLoops")) {
       functionsToRemove.push_back(key);
-    } else if (attr->WhileLoops > config["maxWhileLoops"]) {
+    } else if (attr->WhileLoops > config->at("maxWhileLoops")) {
       functionsToRemove.push_back(key);
-    } else if (attr->CallFunc > config["maxCallFunc"]) {
+    } else if (attr->CallFunc > config->at("maxCallFunc")) {
       functionsToRemove.push_back(key);
-    } else if (attr->Functions > config["maxFunctions"]) {
+    } else if (attr->Functions > config->at("maxFunctions")) {
       functionsToRemove.push_back(key);
-    } else if (attr->IfStmt > config["maxIfStmt"]) {
+    } else if (attr->IfStmt > config->at("maxIfStmt")) {
       functionsToRemove.push_back(key);
-    } else if (attr->Param > config["maxParam"]) {
+    } else if (attr->Param > config->at("maxParam")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeArithmeticOperation > config["maxTypeArithmeticOperation"]) {
+    } else if (attr->TypeArithmeticOperation > config->at("maxTypeArithmeticOperation")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeCompareOperation > config["maxTypeCompareOperation"]) {
+    } else if (attr->TypeCompareOperation > config->at("maxTypeCompareOperation")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeComparisons > config["maxTypeComparisons"]) {
+    } else if (attr->TypeComparisons > config->at("maxTypeComparisons")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeIfStmt > config["maxTypeIfStmt"]) {
+    } else if (attr->TypeIfStmt > config->at("maxTypeIfStmt")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeParameters > config["maxTypeParameters"]) {
+    } else if (attr->TypeParameters > config->at("maxTypeParameters")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypePostfix > config["maxTypePostfix"]) {
+    } else if (attr->TypePostfix > config->at("maxTypePostfix")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypePrefix > config["maxTypePrefix"]) {
+    } else if (attr->TypePrefix > config->at("maxTypePrefix")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeUnaryOperation > config["maxTypeUnaryOperation"]) {
+    } else if (attr->TypeUnaryOperation > config->at("maxTypeUnaryOperation")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeVariableReference > config["maxTypeVariableReference"]) {
+    } else if (attr->TypeVariableReference > config->at("maxTypeVariableReference")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeVariables > config["maxTypeVariables"]) {
+    } else if (attr->TypeVariables > config->at("maxTypeVariables")) {
       functionsToRemove.push_back(key);
-    } else if (attr->ForLoops < config["minForLoops"]) {
+    } else if (attr->ForLoops < config->at("minForLoops")) {
       functionsToRemove.push_back(key);
-    } else if (attr->CallFunc < config["minCallFunc"]) {
+    } else if (attr->CallFunc < config->at("minCallFunc")) {
       functionsToRemove.push_back(key);
-    } else if (attr->ForLoops < config["minForLoops"]) {
+    } else if (attr->ForLoops < config->at("minForLoops")) {
       functionsToRemove.push_back(key);
-    } else if (attr->Functions < config["minFunctions"]) {
+    } else if (attr->Functions < config->at("minFunctions")) {
       functionsToRemove.push_back(key);
-    } else if (attr->IfStmt < config["minIfStmt"]) {
+    } else if (attr->IfStmt < config->at("minIfStmt")) {
       functionsToRemove.push_back(key);
-    } else if (attr->Param < config["minParam"]) {
+    } else if (attr->Param < config->at("minParam")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeArithmeticOperation < config["minTypeArithmeticOperation"]) {
+    } else if (attr->TypeArithmeticOperation < config->at("minTypeArithmeticOperation")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeCompareOperation < config["minTypeCompareOperation"]) {
+    } else if (attr->TypeCompareOperation < config->at("minTypeCompareOperation")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeComparisons < config["minTypeComparisons"]) {
+    } else if (attr->TypeComparisons < config->at("minTypeComparisons")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeIfStmt < config["minTypeIfStmt"]) {
+    } else if (attr->TypeIfStmt < config->at("minTypeIfStmt")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeParameters < config["minTypeParameters"]) {
+    } else if (attr->TypeParameters < config->at("minTypeParameters")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypePostfix < config["minTypePostfix"]) {
+    } else if (attr->TypePostfix < config->at("minTypePostfix")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypePrefix < config["minTypePrefix"]) {
+    } else if (attr->TypePrefix < config->at("minTypePrefix")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeUnaryOperation < config["minTypeUnaryOperation"]) {
+    } else if (attr->TypeUnaryOperation < config->at("minTypeUnaryOperation")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeVariableReference < config["minTypeVariableReference"]) {
+    } else if (attr->TypeVariableReference < config->at("minTypeVariableReference")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeVariables < config["minTypeVariables"]) {
+    } else if (attr->TypeVariables < config->at("minTypeVariables")) {
       functionsToRemove.push_back(key);
-    } else if (attr->WhileLoops < config["minWhileLoops"]) {
+    } else if (attr->WhileLoops < config->at("minWhileLoops")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeCompareOperation < config["minTypeCompareOperation"]) {
+    } else if (attr->TypeCompareOperation < config->at("minTypeCompareOperation")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeArithmeticOperation < config["minTypeArithmeticOperation"]) {
+    } else if (attr->TypeArithmeticOperation < config->at("minTypeArithmeticOperation")) {
       functionsToRemove.push_back(key);
-    } else if (attr->TypeIfStmt < config["minTypeIfStmt"]) {
+    } else if (attr->TypeIfStmt < config->at("minTypeIfStmt")) {
       functionsToRemove.push_back(key);
     }
   }
@@ -277,7 +284,7 @@ std::vector<std::string> Filterer::filterFunctions(
 // Debug statement creator for filterer, not fully implemented in the file nor
 // with the severity  flag value
 void Filterer::debugInfo(std::string info) {
-  if (config["debug"]) {
+  if (config->at("debug")) {
     std::cout << info << std::endl;
   }
 }
@@ -299,12 +306,10 @@ int Filterer::run(std::string fileOrDirToFilter,
   int filesFound = getAllCFiles(pathObject, filesToFilter, 0);
   debugInfo("Files Found: " + std::to_string(filesFound));
 
-  /// Set args for AST creation
-  std::vector<std::string> args = std::vector<std::string>();
   // This ensures comments are a part of the parsed AST
-  args.push_back("-fparse-all-comments");
+  // args.push_back("-fparse-all-comments");
   // This tells the AST generator where to find the compiler supplied headers
-  args.push_back(std::string("-resource-dir=") + std::string(std::getenv("CLANG_RESOURCES")));
+  // args.push_back(std::string("-resource-dir=") + std::string(std::getenv("CLANG_RESOURCES")));
 
   /// Loop over all c files in filter list and run through the checker before
   /// creating the AST
@@ -323,85 +328,155 @@ int Filterer::run(std::string fileOrDirToFilter,
       }
 
       /// Use args and file content to generate
-      std::cout << "Creating astUnit for: " << fileName << std::endl;
+      // std::cout << "Creating astUnit for: " << fileName << std::endl;
+      std::filesystem::create_directories(newPath.parent_path());
 
-      std::unique_ptr<clang::ASTUnit> astUnit =
-        clang::tooling::buildASTFromCodeWithArgs(*contents, args,
-                                                 newPath.string());
-      if (config["debug"]) {
+      std::error_code ec;
+      llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
+
+      // std::filesystem::copy_file(oldPath, newPath);
+      output << *contents;
+
+      output.close();
+
+      llvm::outs() << "Setting Up Common Options Parser\n";
+
+      static llvm::cl::OptionCategory myToolCategory("filterer");
+
+      clang::IgnoringDiagConsumer diagConsumer;
+
+      std::string resourceDir = std::getenv("CLANG_RESOURCES");
+
+      /// Set args for AST creation
+      std::vector<std::string> args = std::vector<std::string>({
+        "clang",
+        newPath.string(),
+        "--",
+        "-extra-arg=-fparse-all-comments",
+        "-extra-arg=-resource-dir=" + resourceDir,
+        "-extra-arg=-xc",
+        "-extra-arg=-I"
+      });
+
+      int argc = args.size();
+
+      char** argv = new char*[argc + 1];
+
+      for (int i=0; i<argc; i++) {
+        // argv[i] = new char[args[i].length()];
+        argv[i] = new char[args[i].length() + 1];
+        std::strcpy(argv[i], args[i].c_str());
+      }
+
+      argv[argc] = nullptr;
+
+      if (argv == nullptr) {
+        return 1;
+      }
+
+      llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
+        clang::tooling::CommonOptionsParser::create(argc, (const char **)argv,
+                                                    myToolCategory);
+      if (!expectedParser) {
+        llvm::errs() << expectedParser.takeError();
+        return 1;
+      }
+
+      clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
+
+      llvm::outs() << "Building the Tool\n";
+
+      clang::tooling::ClangTool tool(optionsParser.getCompilations(),
+                                     optionsParser.getSourcePathList());
+
+      llvm::outs() << "Diagnostic Options\n";
+
+      tool.setDiagnosticConsumer(&diagConsumer);
+
+      llvm::outs() << "Creating Factory\n";
+
+      FrontendFactoryWithArgs factory(config, typesRequested);
+
+      llvm::outs() << "Run the Tool\n";
+
+      llvm::outs() << tool.run(&factory) << "\n";
+
+      // std::unique_ptr<clang::ASTUnit> astUnit =
+      //   clang::tooling::buildASTFromCodeWithArgs(*contents, args,
+      //                                            newPath.string());
+      if (config->at("debug")) {
         std::cout << *contents << std::endl;
       }
 
-      if (!astUnit) {
-        std::cerr << "Failed to build AST for: " << fileName << std::endl;
-        continue;
-      }
+      // if (!astUnit) {
+      //   std::cerr << "Failed to build AST for: " << fileName << std::endl;
+      //   continue;
+      // }
 
-      clang::ASTContext &Context = astUnit->getASTContext();
+      // clang::ASTContext &Context = astUnit->getASTContext();
 
-      if (config["debug"]) {
-        std::cout << "Diagnostics" << std::endl;
-        astUnit->getDiagnostics();
-        Context.PrintStats();
-      }
+      // if (config->at("debug")) {
+      //   std::cout << "Diagnostics" << std::endl;
+      //   astUnit->getDiagnostics();
+      //   Context.PrintStats();
+      // }
 
-      std::cout << "Main File Name: " << astUnit->getMainFileName().str()
-        << std::endl;
-      std::cout << "Creating Counting Visitor" << std::endl;
-      CountNodesVisitor countVisitor(&Context, typesRequested);
+      // std::cout << "Main File Name: " << astUnit->getMainFileName().str()
+        // << std::endl;
+      // std::cout << "Creating Counting Visitor" << std::endl;
+      // CountNodesVisitor countVisitor(&Context, typesRequested);
 
-      std::cout << "Traversing AST" << std::endl;
-      countVisitor.TraverseAST(Context);
+      // std::cout << "Traversing AST" << std::endl;
+      // countVisitor.TraverseAST(Context);
 
-      if (config["debug"]) {
-        std::cout << "Printing Report" << std::endl;
-        countVisitor.PrintReport(fileName);
-      }
+      // if (config->at("debug")) {
+        // std::cout << "Printing Report" << std::endl;
+        // countVisitor.PrintReport(fileName);
+      // }
 
-      std::unordered_map<std::string, CountNodesVisitor::attributes*> functions = countVisitor.ReportAttributes();
-      std::vector<std::string> functionsToRemove = filterFunctions(functions);
+      // TODO incorporate into the filterAction
+      // std::unordered_map<std::string, CountNodesVisitor::attributes*> functions = countVisitor.ReportAttributes();
+      // std::vector<std::string> functionsToRemove = filterFunctions(functions);
 
       // If all funtions besides the global 'function', Program, which holds
       // all variables and declarations made outside of functions are removed
       // then do not add the file
-      if (functions.size() && functions.size() - functionsToRemove.size() <= 1) {
-        std::cout << "No Potential Funtions In: " << fileName << std::endl;
-        std::cout << "Moving to Next Potential File" << std::endl;
-        continue;
-      }
+      // if (functions.size() && functions.size() - functionsToRemove.size() <= 1) {
+        // std::cout << "No Potential Funtions In: " << fileName << std::endl;
+        // std::cout << "Moving to Next Potential File" << std::endl;
+        // continue;
+      // }
 
-      std::filesystem::create_directories(newPath.parent_path());
+      // std::filesystem::create_directories(newPath.parent_path());
 
-      clang::Rewriter Rewrite;
-      Rewrite.setSourceMgr(Context.getSourceManager(),
-                           astUnit->getLangOpts());
-      if (functionsToRemove.size()) {
-        std::cout << "Removing Nodes\n";
-        for (std::string node : functionsToRemove) {
-          std::cout << node + "\n";
-        }
-        std::cout << std::endl;
-        RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
-                                                 functionsToRemove);
+      // clang::Rewriter Rewrite;
+      // Rewrite.setSourceMgr(Context.getSourceManager(),
+                           // astUnit->getLangOpts());
+      // if (functionsToRemove.size()) {
+      //   std::cout << "Removing Nodes\n";
+      //   for (std::string node : functionsToRemove) {
+      //     std::cout << node + "\n";
+      //   }
+      //   std::cout << std::endl;
+      //   RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
+      //                                            functionsToRemove);
         // RemoveFunctionsVisitor.TraverseAST(Context);
-        bool done = false;
-        while (!done) {
-          done = RemoveFunctionsVisitor.TraverseAST(Context);
-        }
+        // bool done = false;
+        // while (!done) {
+          // done = RemoveFunctionsVisitor.TraverseAST(Context);
+        // }
         // // TODO run for each function name may be the way to go...
         // for (std::string name : functionsToRemove) {
         //   RemoveFunctionsVisitor.TraverseAST(Context);
         // }
-      }
+      // }
 
-      std::cout << "Writing File" << std::endl;
-      std::error_code ec;
-      llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
-      Rewrite.getEditBuffer(Context.getSourceManager().getFileID(astUnit->getStartOfMainFileID())).write(output);
-      std::cout << "Finished Rewrite step" << std::endl;
+      // std::cout << "Writing File" << std::endl;
+      // Rewrite.getEditBuffer(Context.getSourceManager().getFileID(astUnit->getStartOfMainFileID())).write(output);
+      // std::cout << "Finished Rewrite step" << std::endl;
 
 
-      if (config["debug"] && std::filesystem::exists(newPath)) {
+      if (config->at("debug") && std::filesystem::exists(newPath)) {
         std::ifstream file(newPath.string());
         std::stringstream buffer;
 

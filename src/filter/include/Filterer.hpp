@@ -44,7 +44,7 @@ private:
   std::vector<std::string> typeNames;
 
   /// Map of Valid Config Settings with Default Values
-  std::map<std::string, int> config = {
+  std::map<std::string, int> *config = new std::map<std::string, int>({
     {"debug", 1},
     {"debugLevel", 0},
     {"maxCallFunc", 99999},
@@ -82,5 +82,5 @@ private:
     {"minTypeVariables", 0},
     {"minWhileLoops", 0},
     {"useNonStdHeaders", 0}
-  };
+  });
 };

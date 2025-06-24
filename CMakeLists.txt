@@ -38,6 +38,7 @@ set(SOURCE_FILTER
   src/filter/CountingVisitor.cpp
   src/filter/FilterAction.cpp
   src/filter/Filterer.cpp
+  src/filter/FilterFunctionsConsumer.cpp
   src/filter/FrontendFactoryWithArgs.cpp
   src/filter/RemoveConsumer.cpp
   src/filter/RemoveVisitor.cpp

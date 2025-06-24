@@ -52,7 +52,7 @@ bool Transformer::transformFile(std::filesystem::path path,
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
 
-  static llvm::cl::OptionCategory myToolCategory("my-tool");
+  static llvm::cl::OptionCategory myToolCategory("transformer");
 
   clang::IgnoringDiagConsumer diagConsumer;
 
@@ -94,14 +94,15 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   if (!expectedParser) {
     llvm::errs() << expectedParser.takeError();
-    return false;
+    return 1;
   }
 
   clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
 
   std::cout << "Building the Tool" << std::endl;
 
-  clang::tooling::ClangTool tool(optionsParser.getCompilations(), optionsParser.getSourcePathList());
+  clang::tooling::ClangTool tool(optionsParser.getCompilations(),
+                                 optionsParser.getSourcePathList());
 
   std::cout << "Diagnostic Options" << std::endl;
 

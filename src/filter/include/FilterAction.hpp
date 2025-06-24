@@ -6,13 +6,14 @@
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Lex/PPCallbacks.h>
 #include <clang/Lex/Token.h>
+#include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
 
 class FilterAction : public clang::ASTFrontendAction {
 public:
-  FilterAction(llvm::raw_fd_ostream &output);
+  FilterAction(std::map<std::string, int> *config, const std::vector<unsigned int> &types);
 
   virtual std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &Compiler,
@@ -25,6 +26,8 @@ public:
   // bool usesPreprocessorOnly() const override;
 
 private:
-  llvm::raw_fd_ostream &_Output;
+  std::map<std::string, int> *_Config;
+  const std::vector<unsigned int> &_Types; 
+  clang::Rewriter _Rewriter;
 };
 

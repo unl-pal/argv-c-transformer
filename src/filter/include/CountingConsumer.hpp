@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CountingVisitor.hpp"
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Type.h>
@@ -9,10 +11,12 @@
 
 class CountingConsumer : public clang::ASTConsumer {
 public:
-  CountingConsumer(std::vector<unsigned int> types);
+  CountingConsumer(const std::vector<unsigned int> &types,
+   std::unordered_map<std::string, CountNodesVisitor::attributes *> *toFilter);
 
   void HandleTranslationUnit(clang::ASTContext &Context);
 
 private:
-  std::vector<unsigned int> _Types;
+  const std::vector<unsigned int> &_Types;
+  std::unordered_map<std::string, CountNodesVisitor::attributes *> *_ToFilter;
 };
