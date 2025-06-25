@@ -10,32 +10,28 @@
 #include <llvm/Support/raw_ostream.h>
 
 RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext       *C,
-                                     clang::Rewriter rewriter,
+                                     clang::Rewriter &rewriter,
                                      std::vector<std::string> toRemove)
-    : _C(C), _mgr(_C->getSourceManager()), _Rewriter(rewriter), _toRemove(toRemove) {}
+    : _C(C), _mgr(rewriter.getSourceMgr()), _Rewriter(rewriter), _toRemove(toRemove) {
+}
 
 bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if(!D) return false;
   if (_mgr.isInMainFile(D->getLocation())) {
     for (std::string& name : _toRemove) {
       if (name == D->getNameAsString()) {
-        llvm::outs() << name << "\n";
         if (clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D)) {
-          _Rewriter.ReplaceText(rawComment->getSourceRange(), "");
+          // _Rewriter.ReplaceText(rawComment->getSourceRange(), "");
+          _Rewriter.RemoveText(rawComment->getSourceRange());
         }
         clang::SourceRange range = D->getSourceRange();
         if (D->getStorageClass() == clang::SC_Extern) {
           range = clang::SourceRange(D->getOuterLocStart(), D->getEndLoc().getLocWithOffset(1));
         }
+        // _Rewriter.RemoveText(range);
         _Rewriter.ReplaceText(range, "// === Removed Undesired Function ===\n");
-        // TODO what if only one node can be removed per run?
-        clang::Decl *decl = clang::dyn_cast<clang::Decl>(D);
-        if (decl) {
-          
-        }
         _C->getTranslationUnitDecl()->removeDecl(D);
         return false;
-        // return true;
       }
     }
   }
@@ -63,4 +59,9 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
     }
   }
   return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitCallExpr(E);
+}
+
+bool RemoveFuncVisitor::shouldTraversePostOrder() {
+  return true;
+  // return false;
 }

@@ -66,7 +66,7 @@ bool Transformer::transformFile(std::filesystem::path path,
   std::vector<std::string> compOptionsArgs({
     "clang",
     path.string(),
-    "--",
+    // "--",
     "-extra-arg=-fparse-all-comments",
     "-extra-arg=-resource-dir=" + resourceDir,
     "-extra-arg=-xc",
@@ -116,7 +116,9 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   llvm::outs() << tool.run(&factory) << "\n";
 
-  return true;
+  output.close();
+
+  return 0;
 }
 
 // Recursive algorithm for traversing the file structure and searching for 

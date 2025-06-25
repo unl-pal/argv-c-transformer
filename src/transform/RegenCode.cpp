@@ -2,6 +2,7 @@
 
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/RawCommentList.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -18,6 +19,11 @@ RegenCodeVisitor::RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &o
 // Catch all do nothing unless specified
 bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
+  if (!D->getParentFunctionOrMethod()) {
+    if (clang::RawComment * rawComment = _C->getRawCommentForDeclNoCache(D)) {
+      _Output << rawComment->getRawText(_M) << "\n";
+    }
+  }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitDecl(D);
 }
 
@@ -32,7 +38,7 @@ bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
     }
   } else {
     D->print(_Output);
-    _Output << "\n";
+    // _Output << "\n";
   }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitFunctionDecl(D);
 }

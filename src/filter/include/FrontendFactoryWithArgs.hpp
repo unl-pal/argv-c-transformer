@@ -10,7 +10,8 @@
 class FrontendFactoryWithArgs : public clang::tooling::FrontendActionFactory {
 public:
   FrontendFactoryWithArgs( std::map<std::string, int>    *_Config,
-                          const std::vector<unsigned int> &_Types);
+                          const std::vector<unsigned int> &_Types,
+                          llvm::raw_fd_ostream &output);
 
   std::unique_ptr<clang::FrontendAction> create() override;
 
@@ -20,4 +21,5 @@ private:
   clang::Rewriter _Rewriter;
   std::map<std::string, int> *_Config;
   const std::vector<unsigned int> &_Types;
+  llvm::raw_fd_ostream &_Output;
 };

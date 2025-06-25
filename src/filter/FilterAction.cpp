@@ -10,6 +10,7 @@
 #include <clang/Frontend/MultiplexConsumer.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <llvm/Support/raw_ostream.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -17,7 +18,10 @@
 
 // Constructor for GenerateIncludeAction that sets up the output stream for
 // regenerating source code
-FilterAction::FilterAction(std::map<std::string, int> *config, const std::vector<unsigned int> &types) : _Config(config), _Types(types), _Rewriter() {
+FilterAction::FilterAction(std::map<std::string, int>      *config,
+                           const std::vector<unsigned int> &types,
+                           llvm::raw_fd_ostream            &output)
+    : _Config(config), _Types(types), _Rewriter(), _Output(output) {
   llvm::outs() << "Created FilterAction" << "\n";
 }
 
@@ -29,18 +33,13 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 
   llvm::outs() << "Created ASTConsumer" << "\n";
   compiler.createASTContext();
-  // clang::Rewriter rewriter;
   // _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
-  llvm::outs() << "Created Rewriter" << "\n";
-  _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
+  // llvm::outs() << "Created Rewriter" << "\n";
 
   std::unordered_map<std::string, CountNodesVisitor::attributes *> *toFilter =
     new std::unordered_map<std::string, CountNodesVisitor::attributes *>();
   std::vector<std::string> *toRemove = new std::vector<std::string>();
-  // llvm::outs() << toRemove->size() << "\n";
   llvm::outs() << "Created To Filter and Remove Vars" << "\n";
-
-  // clang::ASTContext *context = &(compiler.getASTContext());
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(std::make_unique<CountingConsumer>(_Types, toFilter));
@@ -75,6 +74,6 @@ bool FilterAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
 // Function that runs after all of the consumers but before the AST is cleaned up
 void FilterAction::EndSourceFileAction() {
   llvm::outs() << "End Source File Action" << "\n";
-  _Rewriter.overwriteChangedFiles();
-  // _Rewriter.getEditBuffer(Context.getSourceManager().getFileID(astUnit->getStartOfMainFileID())).write(output);
+  // _Rewriter.overwriteChangedFiles();
+  _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }

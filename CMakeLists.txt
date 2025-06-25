@@ -120,7 +120,7 @@ elseif(UNIX)
   set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
   set_property(TARGET full PROPERTY LINKER_TYPE LLD)
   set_property(TARGET example PROPERTY LINKER_TYPE LLD)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused -fcolor-diagnostics")
 
 endif()
 

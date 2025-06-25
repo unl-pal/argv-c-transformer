@@ -13,7 +13,10 @@
 
 class FilterAction : public clang::ASTFrontendAction {
 public:
-  FilterAction(std::map<std::string, int> *config, const std::vector<unsigned int> &types);
+  FilterAction(std::map<std::string, int>      *config,
+               const std::vector<unsigned int> &types,
+               // clang::Rewriter                 &rewriter,
+               llvm::raw_fd_ostream            &output);
 
   virtual std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &Compiler,
@@ -28,6 +31,8 @@ public:
 private:
   std::map<std::string, int> *_Config;
   const std::vector<unsigned int> &_Types; 
+  // clang::Rewriter &_Rewriter;
   clang::Rewriter _Rewriter;
+  llvm::raw_fd_ostream &_Output;
 };
 

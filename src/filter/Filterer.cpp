@@ -329,15 +329,6 @@ int Filterer::run(std::string fileOrDirToFilter,
 
       /// Use args and file content to generate
       // std::cout << "Creating astUnit for: " << fileName << std::endl;
-      std::filesystem::create_directories(newPath.parent_path());
-
-      std::error_code ec;
-      llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
-
-      // std::filesystem::copy_file(oldPath, newPath);
-      output << *contents;
-
-      output.close();
 
       llvm::outs() << "Setting Up Common Options Parser\n";
 
@@ -350,10 +341,12 @@ int Filterer::run(std::string fileOrDirToFilter,
       /// Set args for AST creation
       std::vector<std::string> args = std::vector<std::string>({
         "clang",
-        newPath.string(),
-        "--",
+        // newPath.string(),
+        oldPath.string(),
+        // "--",
         "-extra-arg=-fparse-all-comments",
         "-extra-arg=-resource-dir=" + resourceDir,
+        "-extra-arg=-Wdocumentation",
         "-extra-arg=-xc",
         "-extra-arg=-I"
       });
@@ -363,7 +356,6 @@ int Filterer::run(std::string fileOrDirToFilter,
       char** argv = new char*[argc + 1];
 
       for (int i=0; i<argc; i++) {
-        // argv[i] = new char[args[i].length()];
         argv[i] = new char[args[i].length() + 1];
         std::strcpy(argv[i], args[i].c_str());
       }
@@ -373,6 +365,11 @@ int Filterer::run(std::string fileOrDirToFilter,
       if (argv == nullptr) {
         return 1;
       }
+
+      std::filesystem::create_directories(newPath.parent_path());
+
+      std::error_code ec;
+      llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
 
       llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
         clang::tooling::CommonOptionsParser::create(argc, (const char **)argv,
@@ -395,11 +392,13 @@ int Filterer::run(std::string fileOrDirToFilter,
 
       llvm::outs() << "Creating Factory\n";
 
-      FrontendFactoryWithArgs factory(config, typesRequested);
+      FrontendFactoryWithArgs factory(config, typesRequested, output);
 
       llvm::outs() << "Run the Tool\n";
 
       llvm::outs() << tool.run(&factory) << "\n";
+
+      output.close();
 
       // std::unique_ptr<clang::ASTUnit> astUnit =
       //   clang::tooling::buildASTFromCodeWithArgs(*contents, args,
@@ -407,6 +406,7 @@ int Filterer::run(std::string fileOrDirToFilter,
       if (config->at("debug")) {
         std::cout << *contents << std::endl;
       }
+
 
       // if (!astUnit) {
       //   std::cerr << "Failed to build AST for: " << fileName << std::endl;

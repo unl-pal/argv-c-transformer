@@ -9,11 +9,11 @@
 
 class RemoveConsumer : public clang::ASTConsumer {
 public:
-  RemoveConsumer(clang::Rewriter rewriter, std::vector<std::string> *toRemove);
+  RemoveConsumer(clang::Rewriter &rewriter, std::vector<std::string> *toRemove);
 
   void HandleTranslationUnit(clang::ASTContext &Context);
 
 private:
-  clang::Rewriter _Rewriter;
+  clang::Rewriter &_Rewriter;
   std::vector<std::string> *_toRemove;
 };
