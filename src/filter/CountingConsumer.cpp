@@ -1,4 +1,3 @@
-#include "CountingVisitor.hpp"
 #include "CountingConsumer.hpp"
 
 #include <llvm/Support/raw_ostream.h>

@@ -1,23 +1,19 @@
-#include "FilterAction.hpp"
 #include "CountingConsumer.hpp"
+#include "CountingVisitor.hpp"
+#include "FilterAction.hpp"
+#include "FilterFunctionsConsumer.hpp"
 #include "RemoveConsumer.hpp"
 
-#include <CountingVisitor.hpp>
-#include <FilterFunctionsConsumer.hpp>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/TemplateName.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/MultiplexConsumer.h>
 #include <clang/Lex/Preprocessor.h>
-#include <clang/Rewrite/Core/Rewriter.h>
-#include <llvm/Support/raw_ostream.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 
-// Constructor for GenerateIncludeAction that sets up the output stream for
-// regenerating source code
 FilterAction::FilterAction(std::map<std::string, int>      *config,
                            const std::vector<unsigned int> &types,
                            llvm::raw_fd_ostream            &output)
@@ -25,8 +21,6 @@ FilterAction::FilterAction(std::map<std::string, int>      *config,
   llvm::outs() << "Created FilterAction" << "\n";
 }
 
-// Overridden function that uses a ConsumerMultiplexer instead of a single
-// ASTConsumer to run many consumers, handlers and visitors over the same AST
 std::unique_ptr<clang::ASTConsumer>
 FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
                                 llvm::StringRef          filename) {
@@ -61,7 +55,6 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 //   return 1;
 // }
 
-// Function that runs before any of the consumers but after preprocessor steps
 bool FilterAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action" << "\n";
   _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
@@ -69,7 +62,6 @@ bool FilterAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   return result;
 }
 
-// Function that runs after all of the consumers but before the AST is cleaned up
 void FilterAction::EndSourceFileAction() {
   llvm::outs() << "End Source File Action" << "\n";
   // _Rewriter.overwriteChangedFiles();

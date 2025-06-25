@@ -8,18 +8,30 @@
 
 class Filterer {
 public:
+  /// Constructor for the Filterer Object
   Filterer();
 
+  /// Parse the config file creating the config map used by the rest of the
+  /// filter steps
   void parseConfigFile(std::string configFile);
 
+  /// Using the filename and contents this function iterates through the file
+  /// and adds to the contents pointer as needed returning true on a file that
+  /// has potential for our tool or false on a undesirable file. The contents
+  /// are only populated in the case of the file being desireable
   bool checkPotentialFile(std::string                  fileName,
                           std::shared_ptr<std::string> contents);
 
+  /// Finds all C files in a path 
+  /// single file path or dir are both acceptable
   int getAllCFiles(std::filesystem::path     pathObject,
                    std::vector<std::string> &filesToFilter, int numFiles = 0);
 
+  /// Debugger that is only partially implemented and not ready for use
   void debugInfo(std::string info);
 
+  /// Main driver for the rest of the code creating the filter tool and running
+  /// it on each file found in the path that has potential
   int run(std::string fileOrDirToFilter    = "database",
           std::string propertiesConfigFile = "properties.config");
 
@@ -34,7 +46,7 @@ private:
     "string.h",    "tgmath.h",   "threads.h", "time.h",      "uchar.h",
     "wchar.h",     "wctype.h"};
 
-  std::vector<unsigned int>         typesRequested;
+  std::vector<unsigned int> typesRequested;
   std::vector<std::string> typeNames;
 
   /// Map of Valid Config Settings with Default Values

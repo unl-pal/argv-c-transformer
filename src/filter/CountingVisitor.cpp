@@ -8,7 +8,6 @@
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
 
-// Visitor for counting propeties and functions in a file
 CountNodesVisitor::CountNodesVisitor(clang::ASTContext *C,
   const std::vector<unsigned int> &T,
   std::unordered_map<std::string, CountNodesVisitor::attributes*> *allFunctions)
@@ -22,7 +21,6 @@ CountNodesVisitor::CountNodesVisitor(clang::ASTContext *C,
   _allFunctions->try_emplace("Program", new attributes);
 }
 
-// Take Advantage of built in Decl get Parent function
 std::string CountNodesVisitor::getDeclParentFuncName(const clang::Decl &D) {
   std::string currentFunc = "Program";
   if (const clang::DeclContext *parentFuncContext = D.getParentFunctionOrMethod()) {
@@ -36,8 +34,6 @@ std::string CountNodesVisitor::getDeclParentFuncName(const clang::Decl &D) {
   return currentFunc;
 }
 
-// Stmt does not have get parent function so recurse to decl and use built in
-// from there
 std::string CountNodesVisitor::getStmtParentFuncName(const clang::Stmt &S) {
   clang::DynTypedNodeList parents = _C->getParents(S);
   if (parents.size()) {
@@ -54,16 +50,11 @@ std::string CountNodesVisitor::getStmtParentFuncName(const clang::Stmt &S) {
   return "Program";
 }
 
-// Base Visit Decl, currently used as catch all for unhandled decl types
 bool CountNodesVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
     return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitDecl(D);
 }
 
-// Visits variable declarations and checks if in main file before adding to the
-// count of variables for the function or program as a whole if defined outside
-// of a function
-// can use the defined outside function to check if part of overall
 bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
   if (!VD) return false;
   if (_mgr->isInMainFile(VD->getLocation())) {
@@ -77,7 +68,6 @@ bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitVarDecl(VD);
 }
 
-// Visit function declarations and add to the map of functions and attributes
 bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   if (!FD) return false;
   // FD->dumpColor();
@@ -88,9 +78,6 @@ bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitFunctionDecl(FD);
 }
 
-// Visit a declaration reference expression checking for type of variable
-// referenced rather than what specfic variable was referenced
-// DeclRefExpr is an Expression not Declaration
 bool CountNodesVisitor::VisitDeclRefExpr(clang::DeclRefExpr *S) {
   if (_mgr->isInMainFile(S->getLocation())) {
     for (unsigned int specificType : _T) {
@@ -102,7 +89,6 @@ bool CountNodesVisitor::VisitDeclRefExpr(clang::DeclRefExpr *S) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitDeclRefExpr(S);
 }
 
-// Base visit statement call, need to separate out the specific calls if possible
 bool CountNodesVisitor::VisitStmt(clang::Stmt *S) {
   if (!S) return false;
   if (_mgr->isInMainFile(S->getBeginLoc())) {
@@ -116,8 +102,6 @@ bool CountNodesVisitor::VisitStmt(clang::Stmt *S) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitStmt(S);
 }
 
-// check if 'if' statement is in main file, is a part of a function and add to
-// current function count
 bool CountNodesVisitor::VisitIfStmt(clang::IfStmt *If) {
   if (!If) return false;
   if (_mgr->isInMainFile(If->getIfLoc())) {
@@ -132,7 +116,6 @@ bool CountNodesVisitor::VisitIfStmt(clang::IfStmt *If) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitIfStmt(If);
 }
 
-// Visit for loops and add to the function count of for loops
 bool CountNodesVisitor::VisitForStmt(clang::ForStmt *F) {
   if (!F) return false;
   if (_mgr->isInMainFile(F->getForLoc())) {
@@ -141,7 +124,6 @@ bool CountNodesVisitor::VisitForStmt(clang::ForStmt *F) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitForStmt(F);
 }
 
-// Visit while loops and add to the function count of while loops
 bool CountNodesVisitor::VisitWhileStmt(clang::WhileStmt *W) {
   if (!W) return false;
   if (_mgr->isInMainFile(W->getWhileLoc())) {
@@ -150,8 +132,6 @@ bool CountNodesVisitor::VisitWhileStmt(clang::WhileStmt *W) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitWhileStmt(W);
 }
 
-// check for operations that involve only one variable or literal
-// TODO match the argv on this
 bool CountNodesVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getOperatorLoc())) {
@@ -174,9 +154,6 @@ bool CountNodesVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitUnaryOperator(O);
 }
 
-// Visit binary operations, operations with a left and right side, and add to
-// the count of total binary operations then check if is a comparison binary
-// operation
 bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getOperatorLoc())) {
@@ -196,8 +173,6 @@ bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryOperator(O);
 }
 
-// Visit conditional operator adding to the parent function count of
-// conditional operations
 bool CountNodesVisitor::VisitConditionalOperator(clang::ConditionalOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getExprLoc())) {
@@ -210,7 +185,6 @@ bool CountNodesVisitor::VisitConditionalOperator(clang::ConditionalOperator *O) 
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitConditionalOperator(O);
 }
 
-// Visit conditional operators that have a left and right side then add to the count
 bool CountNodesVisitor::VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O) {
   if (!O) return false;
   if (_mgr->isInMainFile(O->getExprLoc())) {
@@ -219,7 +193,6 @@ bool CountNodesVisitor::VisitBinaryConditionalOperator(clang::BinaryConditionalO
     return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryConditionalOperator(O);
 }
 
-// count the parameters in the function signiture and check if is an int
 bool CountNodesVisitor::VisitImplicitParamDecl(clang::ImplicitParamDecl *D) {
   std::string funcName = getDeclParentFuncName(*D);
   for (unsigned int specificType : _T) {
@@ -230,13 +203,11 @@ bool CountNodesVisitor::VisitImplicitParamDecl(clang::ImplicitParamDecl *D) {
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitImplicitParamDecl(D);
 }
 
-// Getter for all functions and their attributes
 std::unordered_map<std::string, CountNodesVisitor::attributes *>
 CountNodesVisitor::ReportAttributes() {
   return *_allFunctions;
 }
 
-// Outdated debugging print statement for the report
 void CountNodesVisitor::PrintReport(std::string fileName) {
   std::cout << fileName << std::endl;
   for (const std::pair<std::string, attributes*> func : *_allFunctions) {

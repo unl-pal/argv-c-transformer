@@ -1,9 +1,7 @@
-#include "FilterFunctionsConsumer.hpp"
 #include "CountingVisitor.hpp"
+#include "FilterFunctionsConsumer.hpp"
 
-#include <clang/AST/ASTContext.h>
 #include <llvm/Support/raw_ostream.h>
-#include <string>
 
 FilterFunctionsConsumer::FilterFunctionsConsumer(
   std::unordered_map<std::string, CountNodesVisitor::attributes *> *toFilter,
