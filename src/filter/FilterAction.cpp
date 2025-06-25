@@ -33,8 +33,6 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 
   llvm::outs() << "Created ASTConsumer" << "\n";
   compiler.createASTContext();
-  // _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
-  // llvm::outs() << "Created Rewriter" << "\n";
 
   std::unordered_map<std::string, CountNodesVisitor::attributes *> *toFilter =
     new std::unordered_map<std::string, CountNodesVisitor::attributes *>();

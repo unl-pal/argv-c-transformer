@@ -19,7 +19,6 @@ CountNodesVisitor::CountNodesVisitor(clang::ASTContext *C,
   _T(T),
   _allTypes(!T.size())
 {
-  // _allFunctions = std::unordered_map<std::string, CountNodesVisitor::attributes*>();
   _allFunctions->try_emplace("Program", new attributes);
 }
 

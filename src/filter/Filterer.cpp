@@ -194,93 +194,6 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   return 0;
 }
 
-// Checks that the function has all necessary properties to continue or adds to
-// the list of functions to remove
-std::vector<std::string> Filterer::filterFunctions(
-  std::unordered_map<std::string, CountNodesVisitor::attributes *> functions) {
-  std::vector<std::string> functionsToRemove;
-  for (std::pair<std::string, CountNodesVisitor::attributes*> func : functions) {
-    std::string key = func.first;
-    CountNodesVisitor::attributes *attr = func.second;
-    if (key == "Program" || key == "main") {
-      continue;
-    } else if (attr->ForLoops > config->at("maxForLoops")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->WhileLoops > config->at("maxWhileLoops")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->CallFunc > config->at("maxCallFunc")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->Functions > config->at("maxFunctions")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->IfStmt > config->at("maxIfStmt")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->Param > config->at("maxParam")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeArithmeticOperation > config->at("maxTypeArithmeticOperation")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeCompareOperation > config->at("maxTypeCompareOperation")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeComparisons > config->at("maxTypeComparisons")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeIfStmt > config->at("maxTypeIfStmt")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeParameters > config->at("maxTypeParameters")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypePostfix > config->at("maxTypePostfix")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypePrefix > config->at("maxTypePrefix")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeUnaryOperation > config->at("maxTypeUnaryOperation")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeVariableReference > config->at("maxTypeVariableReference")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeVariables > config->at("maxTypeVariables")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->ForLoops < config->at("minForLoops")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->CallFunc < config->at("minCallFunc")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->ForLoops < config->at("minForLoops")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->Functions < config->at("minFunctions")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->IfStmt < config->at("minIfStmt")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->Param < config->at("minParam")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeArithmeticOperation < config->at("minTypeArithmeticOperation")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeCompareOperation < config->at("minTypeCompareOperation")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeComparisons < config->at("minTypeComparisons")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeIfStmt < config->at("minTypeIfStmt")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeParameters < config->at("minTypeParameters")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypePostfix < config->at("minTypePostfix")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypePrefix < config->at("minTypePrefix")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeUnaryOperation < config->at("minTypeUnaryOperation")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeVariableReference < config->at("minTypeVariableReference")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeVariables < config->at("minTypeVariables")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->WhileLoops < config->at("minWhileLoops")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeCompareOperation < config->at("minTypeCompareOperation")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeArithmeticOperation < config->at("minTypeArithmeticOperation")) {
-      functionsToRemove.push_back(key);
-    } else if (attr->TypeIfStmt < config->at("minTypeIfStmt")) {
-      functionsToRemove.push_back(key);
-    }
-  }
-  return functionsToRemove;
-}
-
 // Debug statement creator for filterer, not fully implemented in the file nor
 // with the severity  flag value
 void Filterer::debugInfo(std::string info) {
@@ -306,11 +219,6 @@ int Filterer::run(std::string fileOrDirToFilter,
   int filesFound = getAllCFiles(pathObject, filesToFilter, 0);
   debugInfo("Files Found: " + std::to_string(filesFound));
 
-  // This ensures comments are a part of the parsed AST
-  // args.push_back("-fparse-all-comments");
-  // This tells the AST generator where to find the compiler supplied headers
-  // args.push_back(std::string("-resource-dir=") + std::string(std::getenv("CLANG_RESOURCES")));
-
   /// Loop over all c files in filter list and run through the checker before
   /// creating the AST
   for (std::string fileName : filesToFilter) {
@@ -327,9 +235,6 @@ int Filterer::run(std::string fileOrDirToFilter,
         }
       }
 
-      /// Use args and file content to generate
-      // std::cout << "Creating astUnit for: " << fileName << std::endl;
-
       llvm::outs() << "Setting Up Common Options Parser\n";
 
       static llvm::cl::OptionCategory myToolCategory("filterer");
@@ -341,9 +246,7 @@ int Filterer::run(std::string fileOrDirToFilter,
       /// Set args for AST creation
       std::vector<std::string> args = std::vector<std::string>({
         "clang",
-        // newPath.string(),
         oldPath.string(),
-        // "--",
         "-extra-arg=-fparse-all-comments",
         "-extra-arg=-resource-dir=" + resourceDir,
         "-extra-arg=-Wdocumentation",
@@ -400,81 +303,9 @@ int Filterer::run(std::string fileOrDirToFilter,
 
       output.close();
 
-      // std::unique_ptr<clang::ASTUnit> astUnit =
-      //   clang::tooling::buildASTFromCodeWithArgs(*contents, args,
-      //                                            newPath.string());
       if (config->at("debug")) {
         std::cout << *contents << std::endl;
       }
-
-
-      // if (!astUnit) {
-      //   std::cerr << "Failed to build AST for: " << fileName << std::endl;
-      //   continue;
-      // }
-
-      // clang::ASTContext &Context = astUnit->getASTContext();
-
-      // if (config->at("debug")) {
-      //   std::cout << "Diagnostics" << std::endl;
-      //   astUnit->getDiagnostics();
-      //   Context.PrintStats();
-      // }
-
-      // std::cout << "Main File Name: " << astUnit->getMainFileName().str()
-        // << std::endl;
-      // std::cout << "Creating Counting Visitor" << std::endl;
-      // CountNodesVisitor countVisitor(&Context, typesRequested);
-
-      // std::cout << "Traversing AST" << std::endl;
-      // countVisitor.TraverseAST(Context);
-
-      // if (config->at("debug")) {
-        // std::cout << "Printing Report" << std::endl;
-        // countVisitor.PrintReport(fileName);
-      // }
-
-      // TODO incorporate into the filterAction
-      // std::unordered_map<std::string, CountNodesVisitor::attributes*> functions = countVisitor.ReportAttributes();
-      // std::vector<std::string> functionsToRemove = filterFunctions(functions);
-
-      // If all funtions besides the global 'function', Program, which holds
-      // all variables and declarations made outside of functions are removed
-      // then do not add the file
-      // if (functions.size() && functions.size() - functionsToRemove.size() <= 1) {
-        // std::cout << "No Potential Funtions In: " << fileName << std::endl;
-        // std::cout << "Moving to Next Potential File" << std::endl;
-        // continue;
-      // }
-
-      // std::filesystem::create_directories(newPath.parent_path());
-
-      // clang::Rewriter Rewrite;
-      // Rewrite.setSourceMgr(Context.getSourceManager(),
-                           // astUnit->getLangOpts());
-      // if (functionsToRemove.size()) {
-      //   std::cout << "Removing Nodes\n";
-      //   for (std::string node : functionsToRemove) {
-      //     std::cout << node + "\n";
-      //   }
-      //   std::cout << std::endl;
-      //   RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
-      //                                            functionsToRemove);
-        // RemoveFunctionsVisitor.TraverseAST(Context);
-        // bool done = false;
-        // while (!done) {
-          // done = RemoveFunctionsVisitor.TraverseAST(Context);
-        // }
-        // // TODO run for each function name may be the way to go...
-        // for (std::string name : functionsToRemove) {
-        //   RemoveFunctionsVisitor.TraverseAST(Context);
-        // }
-      // }
-
-      // std::cout << "Writing File" << std::endl;
-      // Rewrite.getEditBuffer(Context.getSourceManager().getFileID(astUnit->getStartOfMainFileID())).write(output);
-      // std::cout << "Finished Rewrite step" << std::endl;
-
 
       if (config->at("debug") && std::filesystem::exists(newPath)) {
         std::ifstream file(newPath.string());

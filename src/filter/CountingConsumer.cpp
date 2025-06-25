@@ -9,10 +9,5 @@ CountingConsumer::CountingConsumer(const std::vector<unsigned int> &types,
 
 void CountingConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   CountNodesVisitor Visitor(&Context, _Types, _ToFilter);
-  // Context.getTranslationUnitDecl()->dumpColor();
   Visitor.TraverseTranslationUnitDecl(Context.getTranslationUnitDecl());
-  // Visitor.PrintReport("unknown");
-  // for (auto &entry : *_ToFilter) {
-  //   llvm::outs() << entry.first << "\n";
-  // }
 }

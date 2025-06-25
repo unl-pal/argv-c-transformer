@@ -7,11 +7,6 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 
-/*
- * THIS CODE MAY NO LONGER BE NEEDED AT ALL BUT IS BEING KEPT FOR REFERENCE
- * MATERIAL UNTIL OTHER EXAMPLES ARE CREATED
- */
-
 GenerateIncludeHandler::GenerateIncludeHandler(clang::SourceManager &mgr, llvm::raw_fd_ostream &output)
 			: _AllInc(),
 			_Mgr(mgr),

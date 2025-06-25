@@ -16,8 +16,6 @@ public:
 
 	void FilterFunctions();
 
-	// void ParseConfigFile(std::string configFile);
-
 private:
 std::unordered_map<std::string, CountNodesVisitor::attributes*> *_ToFilter;
 std::vector<std::string> *_ToRemove;

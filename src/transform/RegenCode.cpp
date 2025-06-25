@@ -38,7 +38,7 @@ bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
     }
   } else {
     D->print(_Output);
-    // _Output << "\n";
+    _Output << "\n";
   }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitFunctionDecl(D);
 }
@@ -61,8 +61,9 @@ bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
   if (!_M.isInMainFile(D->getLocation())) return true;
   if (!D->isAnonymousStructOrUnion()) {
-      D->print(_Output);
-      _Output << ";\n";
+    D->print(_Output);
+    _Output << ";\n";
+    _Output << "\n";
   }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitRecordDecl(D);
 }

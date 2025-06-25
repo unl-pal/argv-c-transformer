@@ -1,5 +1,4 @@
 #include "include/Transformer.hpp"
-// #include "CodeGeneratorAction.hpp"
 #include "ArgsFrontendActionFactory.hpp"
 
 #include <clang/Basic/Diagnostic.h>
@@ -132,12 +131,10 @@ bool Transformer::transformAll(std::filesystem::path path,
     if (std::filesystem::is_directory(path)) {
       for (const std::filesystem::directory_entry &entry :
            std::filesystem::directory_iterator(path)) {
-        /*std::cout << "Dir " << std::endl;*/
         transformAll(entry.path(), args);
       }
     } else if (std::filesystem::is_regular_file(path)) {
       if (path.has_extension() && path.extension() == ".c") {
-        /*std::cout << "File " << std::endl;*/
         return transformFile(path, args);
       }
     }

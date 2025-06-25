@@ -10,9 +10,6 @@
 
 AddVerifiersVisitor::AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output, std::set<clang::QualType> *neededTypes)
     : _C(c), _Output(output), _NeededTypes(neededTypes) {
-  // for (clang::QualType type : *_NeededTypes) {
-  //   type->dump();
-  // }
 }
 
 bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {

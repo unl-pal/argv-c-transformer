@@ -15,7 +15,6 @@ FilterFunctionsConsumer::FilterFunctionsConsumer(
 void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   llvm::outs() << "Filtering Files\n";
   FilterFunctions();
-  // context.getTranslationUnitDecl()->dumpColor();
 }
 
 void FilterFunctionsConsumer::FilterFunctions() {
@@ -23,14 +22,6 @@ void FilterFunctionsConsumer::FilterFunctions() {
     std::string key = func.first;
     llvm::outs() << "Key: " << key << "\n";
     CountNodesVisitor::attributes *attr = func.second;
-    if (!_Config->size()) {
-      llvm::outs() << "Config exists\n";
-      llvm::outs() << _Config->size() << "\n";
-      // llvm::outs() << _Config->at("minForLoops") << "\n";
-      for (auto &entry : *_Config) {
-        llvm::outs() << entry.first << "\n";
-      }
-    }
     if (key == "Program" || key == "main") {
       continue;
     } else if (attr->ForLoops > _Config->at("maxForLoops")) {

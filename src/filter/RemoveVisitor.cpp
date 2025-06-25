@@ -28,8 +28,8 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         if (D->getStorageClass() == clang::SC_Extern) {
           range = clang::SourceRange(D->getOuterLocStart(), D->getEndLoc().getLocWithOffset(1));
         }
-        // _Rewriter.RemoveText(range);
-        _Rewriter.ReplaceText(range, "// === Removed Undesired Function ===\n");
+        _Rewriter.RemoveText(range);
+        // _Rewriter.ReplaceText(range, "// === Removed Undesired Function ===\n");
         _C->getTranslationUnitDecl()->removeDecl(D);
         return false;
       }
@@ -41,7 +41,6 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
 // TODO CallExpr can be used to also ID the return type for replacing with the
 // correct versions of the verifier
 bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
-  /*if (E->EvaluateAsBooleanCondition(bool &Result, const ASTContext &Ctx)) {*/
   if (!E) return false;
   if (_mgr.isInMainFile(E->getExprLoc())) {
     if (E->getType()->isFunctionType()) {
