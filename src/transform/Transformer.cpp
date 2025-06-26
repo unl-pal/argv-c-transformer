@@ -150,15 +150,14 @@ int Transformer::transformAll(std::filesystem::path path, int count) {
 int Transformer::checkCompilable(std::filesystem::path path) {
   static llvm::cl::OptionCategory myToolCategory("CheckCompiles");
 
-  clang::IgnoringDiagConsumer diagConsumer;
-
   std::string resourceDir = std::getenv("CLANG_RESOURCES");
 
   std::vector<std::string> compOptionsArgs({
     "clang",
     path.string(),
     "verifier.c",
-    "--",
+    "-extra-arg=-w",
+    "-extra-arg=-fsyntax-only",
     "-extra-arg=-fparse-all-comments",
     "-extra-arg=-resource-dir=" + resourceDir,
     "-extra-arg=-xc",
@@ -192,10 +191,14 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   clang::tooling::ClangTool tool(optionsParser.getCompilations(),
                                  optionsParser.getSourcePathList());
 
+  // Show the number of errors only not the errors themselves to avoid clutter
+  clang::DiagnosticConsumer diagConsumer;
   tool.setDiagnosticConsumer(&diagConsumer);
 
-  // SyntaxOnlyAction returns 0 on success
-  if (tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get())) {
+  tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
+
+  // If there are errors do not count the file as compilable
+  if (diagConsumer.getNumErrors()) {
     return 0;
   }
   return 1;
