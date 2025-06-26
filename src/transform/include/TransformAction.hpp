@@ -15,9 +15,11 @@
 class IncludeFinder : public clang::PPCallbacks {
 public:
 
-  // Constructor to get the SourceManager
+  // Constructor to get the SourceManager and output stream to print to
   IncludeFinder(clang::SourceManager &SM, llvm::raw_fd_ostream &output);
 
+  /// Finds and prints the Inclusion statements needed for the code
+  /// Due to being overridded the parameters are needed but are not implemented
   void InclusionDirective(clang::SourceLocation HashLoc,
         const clang::Token & IncludeTok,
         llvm::StringRef FileName,
@@ -46,14 +48,19 @@ private:
 
 class TransformAction : public clang::ASTFrontendAction {
 public:
+  /// Constructor for the Action that handles the transformation of code and
+  /// creates all consumers that will be used for the task
   TransformAction(llvm::raw_fd_ostream &output);
 
+  /// Returns a multiplexor instead to allow many consumers to be created and called
   virtual std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &Compiler,
                     llvm::StringRef          Filename) override;
 
+  /// Runs after the compiler but before the creation of consumers and running of visitors
   bool BeginSourceFileAction(clang::CompilerInstance &compiler) override;
 
+  /// Runs after all consumers but before the AST is destroyed
   void EndSourceFileAction() override;
 
   // bool usesPreprocessorOnly() const override;

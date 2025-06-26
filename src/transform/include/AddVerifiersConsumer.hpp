@@ -9,9 +9,14 @@
 
 class AddVerifiersConsumer : public clang::ASTConsumer {
 public:
+  /// Consumer that launches the visitor that will create the verrifier
+  /// functions and add them to the code file
+  /// @param - output stream to print to
+  /// @param - types that needs verrifiers to be created
   AddVerifiersConsumer(llvm::raw_fd_ostream      &output,
                        std::set<clang::QualType> *neededTypes);
 
+  /// Calls the AddVerifiersVisitor and supplies the needed context
   void HandleTranslationUnit(clang::ASTContext &Context);
 
 private:

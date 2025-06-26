@@ -10,8 +10,13 @@
 
 class AddVerifiersVisitor : public clang::RecursiveASTVisitor<AddVerifiersVisitor> {
 public:
+  /// Creates Verifier functions and writes to the output
+  /// @param - c context of the tree used
+  /// @param - output to be written to
+  /// @param - neededTypes types of verifier functions needed to complete the code
   AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output, std::set<clang::QualType> *neededTypes);
 
+  /// Starts the traversal process
   virtual bool HandleTranslationUnit(clang::TranslationUnitDecl *D);
 
 private:

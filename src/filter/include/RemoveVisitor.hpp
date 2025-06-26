@@ -12,12 +12,19 @@
 
 class RemoveFuncVisitor : public clang::RecursiveASTVisitor<RemoveFuncVisitor> {
 public:
+  /// Constructs a Visitor that removes functions specified in toRemove using
+  /// the rewriter
   RemoveFuncVisitor(clang::ASTContext *C, clang::Rewriter &rewriter, std::vector<std::string> toRemove);
 
+  /// Visits all function declarations checking the name agains the functions to
+  /// remove and handles the function declaration and any associated comments
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 
+  /// Currently not in use but could be implemented to handle Calls to the
+  /// deleted functions
   bool VisitCallExpr(clang::CallExpr *E);
 
+  /// Tells the RecursiveASTVisitor wether to recurse depth or breadth first
   bool shouldTraversePostOrder();
 
 private:

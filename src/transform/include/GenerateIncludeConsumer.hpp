@@ -5,8 +5,12 @@
 
 class GenerateIncludeConsumer : public clang::ASTConsumer {
 public:
+	/// Uses the preprocessor to identify include statements required for the code
 	GenerateIncludeConsumer(llvm::raw_fd_ostream &output);
-	virtual void HandleTranslationUnit(clang::ASTContext &Context) override;
+
+  /// Used to insure the creation of the AST and to provide consistancy with the
+  /// other consumers used
+  virtual void HandleTranslationUnit(clang::ASTContext &Context) override;
 
 private:
 	llvm::raw_fd_ostream &_Output;
