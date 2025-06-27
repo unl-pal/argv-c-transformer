@@ -48,11 +48,6 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   std::cout << "Creating resources for Transformation" << std::endl;
 
-  std::error_code ec;
-
-  std::filesystem::create_directories(srcPath.parent_path());
-  llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
-
   static llvm::cl::OptionCategory myToolCategory("transformer");
 
   clang::IgnoringDiagConsumer diagConsumer;
@@ -107,6 +102,11 @@ bool Transformer::transformFile(std::filesystem::path path) {
   tool.setDiagnosticConsumer(&diagConsumer);
 
   std::cout << "Factory" << std::endl;
+
+  std::error_code ec;
+
+  std::filesystem::create_directories(srcPath.parent_path());
+  llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
 
   ArgsFrontendFactory factory(output);
 

@@ -49,6 +49,7 @@ with open('dataset.csv', newline='') as csv_file:
                     continue
                 location = "database/" + row["repository"]
                 i += 1
+                print(f"Attempting to Clone {location}")
                 if (not os.path.exists(location)):
                     try:
                         print(f"Cloning: {row["repository"]}")
@@ -57,6 +58,9 @@ with open('dataset.csv', newline='') as csv_file:
                         print(f"Finished")
                     except GitError as e:
                         print(f"Error: {e}")
+                else:
+                    print(f"{location} already exists")
+
 
 end = time.time()
 

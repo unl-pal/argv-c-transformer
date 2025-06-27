@@ -19,6 +19,7 @@ GenerateIncludeConsumer::GenerateIncludeConsumer(llvm::raw_fd_ostream &output) :
 
 void GenerateIncludeConsumer::HandleTranslationUnit(
   clang::ASTContext &Context) {
+    llvm::outs() << "Ran the Includes\n";
   // Context.getTranslationUnitDecl()->dumpDeclContext();
   // ## SAVING FOR EXAMPLE SAKE BUT WILL NOT BE USED FOR NOW ##
   // MatchFinder MatchFinder;

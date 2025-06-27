@@ -16,6 +16,7 @@ void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &context) 
 }
 
 void FilterFunctionsConsumer::FilterFunctions() {
+  if (!_ToFilter->size()) return;
   for (const std::pair<std::string, CountNodesVisitor::attributes*> func : *_ToFilter) {
     std::string key = func.first;
     llvm::outs() << "Key: " << key << "\n";

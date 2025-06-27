@@ -64,7 +64,7 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   // TODO implement a comment handler in code regen
   // pp.addCommentHandler(CommentHandler *Handler)
 
-  // llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
+  llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
 
   std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
 
@@ -79,7 +79,7 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
     std::make_unique<clang::MultiplexConsumer>(std::move(tempVector));
 
   // Debug statement for when debug levels are implemented
-  // llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
+  llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
   return result;
 }
 
@@ -90,10 +90,12 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 
 // Function that runs before any of the consumers but after preprocessor steps
 bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
+  llvm::outs() << "Begin Source File Action" << "\n";
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
   return result;
 }
 
 // Function that runs after all of the consumers but before the AST is cleaned up
 void TransformAction::EndSourceFileAction() {
+  llvm::outs() << "End Source File Action" << "\n";
 }

@@ -46,7 +46,7 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
     std::make_unique<clang::MultiplexConsumer>(std::move(tempVector));
 
   // Debug statement for when debug levels are implemented
-  // llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
+  llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
   return result;
 }
 
