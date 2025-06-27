@@ -9,6 +9,10 @@
 AddVerifiersConsumer::AddVerifiersConsumer(llvm::raw_fd_ostream &output, std::set<clang::QualType> *neededTypes) : _Output(output), _NeededTypes(neededTypes) {}
 
 void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
-  AddVerifiersVisitor Visitor(&Context, _Output, _NeededTypes);
-  Visitor.HandleTranslationUnit(Context.getTranslationUnitDecl());
+  llvm::outs() << "Running the Verifiers\n";
+  if (_NeededTypes->size()) {
+    AddVerifiersVisitor Visitor(&Context, _Output, _NeededTypes);
+    Visitor.HandleTranslationUnit(Context.getTranslationUnitDecl());
+    llvm::outs() << "Ran the Verifiers\n";
+  }
 }

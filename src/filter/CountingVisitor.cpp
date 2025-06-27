@@ -70,7 +70,6 @@ bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
 
 bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   if (!FD) return false;
-  // FD->dumpColor();
   if (_mgr->isInMainFile(FD->getLocation())) {
     _allFunctions->try_emplace(FD->getNameAsString(), new attributes);
     _allFunctions->at("Program")->Functions++;
