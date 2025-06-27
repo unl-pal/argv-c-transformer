@@ -156,12 +156,12 @@ int Transformer::checkCompilable(std::filesystem::path path) {
     "clang",
     path.string(),
     "verifier.c",
-    "-extra-arg=-w",
-    "-extra-arg=-fsyntax-only",
-    "-extra-arg=-fparse-all-comments",
-    "-extra-arg=-resource-dir=" + resourceDir,
     "-extra-arg=-xc",
-    "-extra-arg=-I"
+    "-extra-arg=-I",
+    "-extra-arg=-w",
+    // "-extra-arg=-fsyntax-only",
+    // "-extra-arg=-fparse-all-comments",
+    "-extra-arg=-resource-dir=" + resourceDir,
   });
 
   int argc = compOptionsArgs.size();
@@ -195,7 +195,7 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   clang::DiagnosticConsumer diagConsumer;
   tool.setDiagnosticConsumer(&diagConsumer);
 
-  tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
+  tool.run(clang::tooling::newFrontendActionFactory<clang::PreprocessOnlyAction>().get());
 
   // If there are errors do not count the file as compilable
   if (diagConsumer.getNumErrors()) {
