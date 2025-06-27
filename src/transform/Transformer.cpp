@@ -116,8 +116,8 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   output.close();
 
-  if (!checkCompilable(path)) { // && !configs->keepCompilesOnly) {
-    // std::filesystem::remove(path);
+  if (!checkCompilable(srcPath)) { // TODO implement && !configs->keepCompilesOnly) {
+    // std::filesystem::remove(srcPath); // TODO this can be uses later for keeping only those that compile
     return 0;
   }
 
@@ -154,14 +154,14 @@ int Transformer::checkCompilable(std::filesystem::path path) {
 
   std::vector<std::string> compOptionsArgs({
     "clang",
-    path.string(),
-    "verifier.c",
+    "-extra-arg=-fsyntax-only",
     "-extra-arg=-xc",
     "-extra-arg=-I",
     "-extra-arg=-w",
-    // "-extra-arg=-fsyntax-only",
-    // "-extra-arg=-fparse-all-comments",
     "-extra-arg=-resource-dir=" + resourceDir,
+    "verifier.c",
+    path.string()
+    // "-extra-arg=-fparse-all-comments",
   });
 
   int argc = compOptionsArgs.size();
@@ -195,7 +195,8 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   clang::DiagnosticConsumer diagConsumer;
   tool.setDiagnosticConsumer(&diagConsumer);
 
-  tool.run(clang::tooling::newFrontendActionFactory<clang::PreprocessOnlyAction>().get());
+  // tool.run(clang::tooling::newFrontendActionFactory<clang::PreprocessOnlyAction>().get());
+  tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
 
   // If there are errors do not count the file as compilable
   if (diagConsumer.getNumErrors()) {
