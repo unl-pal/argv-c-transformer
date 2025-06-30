@@ -25,6 +25,7 @@ Filterer::Filterer(std::string configFile){
 };
 
 // Parse the config file for all settings as well as a list of desired types
+/// TODO MAKE THE PARSERS MORE SECURE!!
 void Filterer::parseConfigFile(std::string configFile) {
   std::ifstream file(configFile);
   if (!std::filesystem::exists(configFile)) {

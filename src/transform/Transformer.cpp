@@ -17,7 +17,6 @@
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 #include <cstring>
-#include <filesystem>
 #include <fstream>
 #include <llvm/ADT/IntrusiveRefCntPtr.h>
 #include <llvm/ADT/StringRef.h>
@@ -27,7 +26,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
 #include <regex>
-#include <string>
 #include <vector>
 
 Transformer::Transformer(std::string configFile) : configuration() {
@@ -122,8 +120,10 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   output.close();
 
-  if (!checkCompilable(srcPath)) { // TODO implement && !configs->keepCompilesOnly) {
-    // std::filesystem::remove(srcPath); // TODO this can be uses later for keeping only those that compile
+  if (!checkCompilable(srcPath)) {
+    if (!configuration.keepCompilesOnly) {
+      std::filesystem::remove(srcPath);
+    }
     return 0;
   }
 
@@ -211,6 +211,7 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   return 1;
 }
 
+/// TODO MAKE THE PARSERS MORE SECURE!!
 void Transformer::parseConfig(std::string configFile) {
   std::ifstream file(configFile);
   if (!std::filesystem::exists(configFile)) {
