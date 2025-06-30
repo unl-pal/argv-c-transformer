@@ -34,7 +34,7 @@ void Filterer::parseConfigFile(std::string configFile) {
   }
   if (file.is_open()) {
     std::cout << "Using: " << configFile << " Specified Settings" << std::endl;
-    std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|[\\w\\s,]+)$");
+    std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|[\\w\\s,]+|[\\w/-_.]+)$");
     std::string line;
     std::smatch match;
     while (std::getline(file, line)) {

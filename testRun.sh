@@ -1,7 +1,4 @@
 #!/bin/sh
-
-python3 ./src/download/Downloader.py
-
 set -e
 
 echo "=================================== CMake ==================================="
@@ -20,14 +17,14 @@ rm -r filteredFiles/*
 rm -r preprocessed/*
 rm -r benchmark/*
 
-# set -e
+set -e
 
 echo "=================================== Using Resources ==================================="
 clangResourceDir="$(clang -print-resource-dir)"
 echo "Using Resource Directory: $clangResourceDir"
 
 echo "=================================== Run Filter ==================================="
-./build/filter properties.config
+./build/filter test.config
 
 echo "=================================== Run Transform ==================================="
-./build/transform properties.config
+./build/transform test.config
