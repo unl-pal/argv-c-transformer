@@ -7,10 +7,13 @@
 class Transformer {
 public:
   /// Creates the frontend action to transform a file
-  bool transformFile(std::filesystem::path path, std::vector<std::string> &args);
+  bool transformFile(std::filesystem::path path);
 
   /// Recurses through all files and initializes the transformFile Function
-  bool transformAll(std::filesystem::path path, std::vector<std::string> &args);
+  int transformAll(std::filesystem::path path, int count);
+
+  /// Check that the transformed file compiles without errors
+  int checkCompilable(std::filesystem::path path);
 
   /// Parses the configuration file to determine necessary types and counts and
   /// location of files
@@ -35,5 +38,6 @@ private:
     int maxNumVarString;
     int maxNumVarPoint;
     int maxNumVarStruct;
+    int keepCompilesOnly;
   };
 };

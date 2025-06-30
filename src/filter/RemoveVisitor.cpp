@@ -1,5 +1,7 @@
 #include "include/RemoveVisitor.hpp"
 
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclBase.h>
 #include <clang/AST/RawCommentList.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/LLVM.h>
@@ -20,7 +22,9 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (_mgr.isInMainFile(D->getLocation())) {
     for (std::string& name : _toRemove) {
       if (name == D->getNameAsString()) {
-        if (clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D)) {
+        llvm::outs() << name << "\n";
+        clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D);
+        if (rawComment != nullptr) {
           // _Rewriter.ReplaceText(rawComment->getSourceRange(), "");
           _Rewriter.RemoveText(rawComment->getSourceRange());
         }
@@ -30,8 +34,14 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         }
         _Rewriter.RemoveText(range);
         // _Rewriter.ReplaceText(range, "// === Removed Undesired Function ===\n");
-        _C->getTranslationUnitDecl()->removeDecl(D);
-        return false;
+        if (_C->getTranslationUnitDecl()->containsDecl(D)) {
+          _C->getTranslationUnitDecl()->removeDecl(D);
+        } else {
+          clang::IdentifierInfo *newInfo = &_C->Idents.get("0func");
+          clang::DeclarationName newName(newInfo);
+          D->setDeclName(newName);
+          return false;
+        }
       }
     }
   }

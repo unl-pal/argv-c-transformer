@@ -9,6 +9,8 @@ ReplaceDeadCallsConsumer::ReplaceDeadCallsConsumer(std::set<clang::QualType> *ne
 }
 
 void ReplaceDeadCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
+  llvm::outs() << "Running the ReplaceDeadCalls\n";
   ReplaceDeadCallsVisitor Visitor(&Context, _NeededTypes);
   Visitor.VisitTranslationUnit(Context.getTranslationUnitDecl());
+  llvm::outs() << "Ran the ReplaceDeadCalls\n";
 }

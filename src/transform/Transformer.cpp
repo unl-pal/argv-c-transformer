@@ -7,7 +7,10 @@
 #include <clang/Basic/FileManager.h>
 #include <clang/Basic/FileSystemOptions.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Frontend/ASTUnit.h>
 #include <clang/Frontend/CompilerInvocation.h>
+#include <clang/Frontend/FrontendAction.h>
+#include <clang/Frontend/FrontendActions.h>
 #include <clang/Frontend/TextDiagnosticPrinter.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Serialization/PCHContainerOperations.h>
@@ -21,14 +24,14 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/VirtualFileSystem.h>
 #include <llvm/Support/raw_ostream.h>
+#include <memory>
 #include <string>
 #include <vector>
 
 // Take an individual file and apply all transformations to it by generating 
 // the ast, visitors and regenerating the source code as precompiled .i file
 // returns false if the AST fails to build
-bool Transformer::transformFile(std::filesystem::path path,
-                             std::vector<std::string> &args) {
+bool Transformer::transformFile(std::filesystem::path path) {
   std::cout << "Transforming: " << path.string() << std::endl;
   if (!std::filesystem::exists(path)) return false;
   std::filesystem::path full = std::filesystem::current_path() / path;
@@ -43,20 +46,11 @@ bool Transformer::transformFile(std::filesystem::path path,
     }
   }
 
-
   std::cout << "Creating resources for Transformation" << std::endl;
-
-  std::error_code ec;
-
-  std::filesystem::create_directories(srcPath.parent_path());
-  llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
 
   static llvm::cl::OptionCategory myToolCategory("transformer");
 
   clang::IgnoringDiagConsumer diagConsumer;
-
-  std::vector<std::string> sources;
-  sources.push_back(path);
 
   std::string resourceDir = std::getenv("CLANG_RESOURCES");
 
@@ -84,7 +78,7 @@ bool Transformer::transformFile(std::filesystem::path path,
   argv[argc] = nullptr;
 
   if (argv == nullptr) {
-    return 1;
+    return 0;
   }
 
   std::cout << "Setting Up Common Options Parser" << std::endl;
@@ -93,7 +87,7 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   if (!expectedParser) {
     llvm::errs() << expectedParser.takeError();
-    return 1;
+    return 0;
   }
 
   clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
@@ -109,6 +103,11 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   std::cout << "Factory" << std::endl;
 
+  std::error_code ec;
+
+  std::filesystem::create_directories(srcPath.parent_path());
+  llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
+
   ArgsFrontendFactory factory(output);
 
   std::cout << "Run the Tool" << std::endl;
@@ -117,7 +116,12 @@ bool Transformer::transformFile(std::filesystem::path path,
 
   output.close();
 
-  return 0;
+  if (!checkCompilable(srcPath)) { // TODO implement && !configs->keepCompilesOnly) {
+    // std::filesystem::remove(srcPath); // TODO this can be uses later for keeping only those that compile
+    return 0;
+  }
+
+  return 1;
 }
 
 // Recursive algorithm for traversing the file structure and searching for 
@@ -125,21 +129,80 @@ bool Transformer::transformFile(std::filesystem::path path,
 //     ideally files will have been filtered but some logic exists to prevent
 //     mishaps just incase
 // Returns false if any C files failed transformation
-bool Transformer::transformAll(std::filesystem::path path,
-                            std::vector<std::string> &args) {
+int Transformer::transformAll(std::filesystem::path path, int count) {
   if (std::filesystem::exists(path)) {
     if (std::filesystem::is_directory(path)) {
+      int successes = 0;
       for (const std::filesystem::directory_entry &entry :
            std::filesystem::directory_iterator(path)) {
-        transformAll(entry.path(), args);
+        successes += transformAll(entry.path(), count);
       }
+      return count + successes;
     } else if (std::filesystem::is_regular_file(path)) {
       if (path.has_extension() && path.extension() == ".c") {
-        return transformFile(path, args);
+        return count + transformFile(path);
       }
     }
   }
-  return true;
+  return count;
+}
+
+int Transformer::checkCompilable(std::filesystem::path path) {
+  static llvm::cl::OptionCategory myToolCategory("CheckCompiles");
+
+  std::string resourceDir = std::getenv("CLANG_RESOURCES");
+
+  std::vector<std::string> compOptionsArgs({
+    "clang",
+    "-extra-arg=-fsyntax-only",
+    "-extra-arg=-xc",
+    "-extra-arg=-I",
+    "-extra-arg=-w",
+    "-extra-arg=-resource-dir=" + resourceDir,
+    "verifier.c",
+    path.string()
+    // "-extra-arg=-fparse-all-comments",
+  });
+
+  int argc = compOptionsArgs.size();
+
+  char** argv = new char*[argc + 1];
+
+  for (int i=0; i<argc; i++) {
+    argv[i] = new char[compOptionsArgs[i].length() + 1];
+    std::strcpy(argv[i], compOptionsArgs[i].c_str());
+  }
+
+  argv[argc] = nullptr;
+
+  if (argv == nullptr) {
+    return 0;
+  }
+
+  llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser = clang::tooling::CommonOptionsParser::create(argc, (const char**)argv, myToolCategory);
+
+  if (!expectedParser) {
+    llvm::errs() << expectedParser.takeError();
+    return 0;
+  }
+
+  clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
+
+  clang::tooling::ClangTool tool(optionsParser.getCompilations(),
+                                 optionsParser.getSourcePathList());
+
+  // Show the number of errors only not the errors themselves to avoid clutter
+  clang::DiagnosticConsumer diagConsumer;
+  tool.setDiagnosticConsumer(&diagConsumer);
+
+  // tool.run(clang::tooling::newFrontendActionFactory<clang::PreprocessOnlyAction>().get());
+  tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
+
+  // If there are errors do not count the file as compilable
+  if (diagConsumer.getNumErrors()) {
+    return 0;
+  }
+  return 1;
 }
 
 void Transformer::parseConfig() {
@@ -150,14 +213,10 @@ int Transformer::run(std::string filePath) {
   std::filesystem::path path(filePath);
   if (std::filesystem::exists(path)) {
     parseConfig();
-    // Set args for AST creation
-    std::vector<std::string> args = std::vector<std::string>();
-    args.push_back("-fparse-all-comments");
-    args.push_back("-resource-dir=" + std::string(std::getenv("CLANG_RESOURCES")));
     // run the transformer on the file structure
-    if (transformAll(path, args)) {
-      return 0;
-    }
+    int result = transformAll(path, 0);
+    std::cout << "Number of Compilable Benchmarks: " << result << std::endl;
+    return result;
   }
-  return 1;
+  return 0;
 }
