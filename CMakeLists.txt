@@ -4,12 +4,6 @@ set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_C_COMPILER clang)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-# set(CMAKE_CXX_STANDARD 17)
-# set(CMAKE_CXX_STANDARD_REQUIRED ON)
-# set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "../bin")
-# set(CMAKE_C_STANDARD 99)
-# set(CMAKE_C_STANDARD_REQUIRED ON)
-
 
 project(
   argv-argc-transformer
@@ -19,7 +13,19 @@ project(
 
 find_package(Clang REQUIRED)
 find_package(LLVM REQUIRED)
-# find_package(libgit2 REQUIRED)
+
+# NOTE: If adding the downloader to the build system is desirable
+# find_package(Python3 REQUIRED COMPONENTS Interpreter)
+# add_custom_target(
+#   download
+#   COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/src/download/Downloader.py
+#   COMMENT "Running the Downloader"
+# )
+# NOTE: Immediatly executes instead of on user command
+
+# Can be used to enforce downloader to run before filter?
+# add_dependencies(filter download)
+
 
 set(HEADERS_FILTER
   src/filter/include
@@ -74,23 +80,6 @@ set(SOURCE_EXAMPLE
 # )
 
 include(FetchContent)
-
-# FetchContent_Declare(
-#   fmt
-#   GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-#   GIT_TAG 11.1.3
-# )
-
-# FetchContent_GetProperties(fmt)
-# if(NOT fmt_POPULATED)
-#   FetchContent_MakeAvailable(fmt)
-# endif()
-
-# FetchContent_Declare(
-#   rapidcsv
-#   GIT_REPOSITORY d99kris/rapidcsv
-#   GIT_TAG v8.84
-# )
 
 include_directories(${LLVM_INCLUDE_DIRS} ${Clang_INCLUDE_DIRS} ${LLVM_INC} ${CLANG_INC} /usr/local )
 

@@ -25,14 +25,17 @@ echo "=================================== Reset Directories ====================
 rm -r filteredFiles/*
 rm -r benchmark/*
 
-set -e
+# set -e
 
 echo "=================================== Using Resources ==================================="
 clangResourceDir="$(clang -print-resource-dir)"
 echo "Using Resource Directory: $clangResourceDir"
 
+echo "=================================== Run Downdload ================================="
+python3 ./src/download/Downloader.py "$configFile"
+
 echo "=================================== Run Filter ==================================="
-./build/filter "$configFile"
+./build/filter "$configFile" 
 
 echo "=================================== Run Transform ==================================="
-./build/transform "$configFile"
+./build/transform "$configFile" 

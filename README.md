@@ -2,11 +2,11 @@
 
 <!--toc:start-->
 - [ArgV C Transformer](#argv-c-transformer)
-- [Running the Code](#running-the-code)
   - [Dependencies](#dependencies)
     - [Clang Resources](#clang-resources)
-  - [Available Targets](#available-targets)
-  - [Temporary Scripts](#temporary-scripts)
+  - [Running the Code](#running-the-code)
+  - [Targets](#targets)
+  - [Scripts](#scripts)
 <!--toc:end-->
 
 ArgC transformer takes directories with c files or individual c files and
@@ -18,8 +18,8 @@ individual functions.
 
 To develop and run the code the following are needed:
 
-- llvm-devel
-- clang-devel
+- llvm developer toolkit
+- clang and the clang developer toolkit
 - cmake
 - make or ninja
 - a c++ compiler
@@ -30,13 +30,22 @@ To compile the ASTs without errors on includes from the c file standard library
 headers, the clang resource dir must be provided to the compiler. This is done
 via an environment variable called `CLANG_RESOURCES`. This must be set by the
 user on the system. The location of the resource directory can be found by
-running `clang -print-resource-dir`.
+running `clang -print-resource-dir`. The code cannot be run until this Variable
+has been set.
 
 ## Running the Code
 
-The project can be run on folders or individual files as specified by the user.
-The attributes used to filter out undesired functions are set via the
-config.properties file. To run any of the targets the user must first run the
+The project can be run on folders or individual files as specified by the user
+in the provided configuration file. The configuration file also provides all
+settings used by the filter and the transformer during the run. Such as the
+minimum number of loops needed or location of the filtered files.
+
+The name of the configuration file is passed to the program as a commandline
+argument and can be passed to a tool individually or, if using either the
+'run.sh' or 'liveRun.sh' scripts, to the program as a whole as the first and
+only argument.
+
+To run any of the targets the user must first run the
 cmake command followed by the make or ninja command, depending on the generator
 chosen. Examples of these commands on a unix system would look something like these.
 If generating from inside the build folder:
@@ -67,33 +76,49 @@ ninja -C build -j2
 ./build/<TARGET> <args>
 ```
 
-Would set the generator to ninja then use 2 processors to compile, then run the
-chosen target.
+This would set the generator to ninja then use 2 processors to compile, then
+runs the chosen target.
 
-## Available Targets
+## Targets
 
-Filter requres that the user provides the location of the *dir-to-filter*, and
-the *propertiesFile*
+Filter requres that the user provides the location of the *configurationFile*
 
-Transform requres that the user provides the the location of the *dir-to-transform*
+Transform requres that the user provides the the location of the *configurationFile*
 
 Full requires that the user provide the
 *file/dir-to-filter* and the *propertiesFile* location
 
-## Temporary Scripts
+## Scripts
 
-2 Scripts are provided with similar functionality and can be modified to suit
-user needs as development continues.
+All scripts currently only exist for unix based systems. These can be adapted
+or used as a template for other systems if desired by the user but all changed
+scripts should remain local to the user's system.
 
-- The `run.sh` file runs does the cmake and build steps using ninja as the
-generator then clears the old results folders and runs the filter and transform
-sequentially with the necessary arguments. It also copies the compile_commands.json
-file to the root dir. This file is used by many ide's for linting.
-- The `fullRun.sh` script runs the full target comprised of all current parts
-using the same arguments and default locations
+### For Running on Sample Code
 
-There is also a `clean.sh` script provided that cleans the build folder without
-destroying the dependencies.
+- `run.sh <config-file-name>`:
+  - runs cmake from root using Ninja as the Generator
+  - clears all old results folders
+  - runs the filter and transform sequentially with specified config file
+  - It also copies the compile_commands.json file to the root dir (This file is
+  used by many ide's for linting)
+
+### For Running on Live Code
+
+- `liveRun.sh <config-file-name>`
+  - runs cmake from root using Ninja as the Generator
+  - clears all old results folders
+  - runs the downloader pulling live repositories from github
+    - the repos pulled are found in the specified csv file and are filtered by
+    the downloader
+  - runs the filter and transform sequentially with specified config file
+  - It also copies the compile_commands.json file to the root dir (This file is
+  used by many ide's for linting)
+
+### For Cleaning In Between Major Changes
+
+- `clean.sh`
+  - script provided that cleans the build folder without destroying the dependencies.
 
 These scripts can act as a template for user scripts or as an example on how to
 run the code on unix based systems.

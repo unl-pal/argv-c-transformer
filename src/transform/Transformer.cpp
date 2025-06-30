@@ -121,7 +121,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
   output.close();
 
   if (!checkCompilable(srcPath)) {
-    if (!configuration.keepCompilesOnly) {
+    if (configuration.keepCompilesOnly) {
       std::filesystem::remove(srcPath);
     }
     return 0;
