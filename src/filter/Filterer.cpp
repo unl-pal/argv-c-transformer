@@ -17,9 +17,11 @@
 #include <regex>
 #include <string>
 
-Filterer::Filterer(){
+Filterer::Filterer(std::string configFile){
   typesRequested = std::vector<unsigned int>();
   typeNames = std::vector<std::string>();
+  parseConfigFile(configFile);
+
 };
 
 // Parse the config file for all settings as well as a list of desired types
@@ -78,8 +80,25 @@ void Filterer::parseConfigFile(std::string configFile) {
             }
             value = typeMatches.suffix().str();
           }
-        }
-        else {
+        } else if (key == "databaseDir") {
+          if (std::filesystem::exists(value)) {
+            configuration.databaseDir = value;
+          } else {
+            configuration.databaseDir = "database";
+          }
+        } else if (key == "filterDir") {
+          if (std::filesystem::exists(value)) {
+            configuration.filterDir = value;
+          } else {
+            configuration.filterDir = "filteredFiles";
+          }
+        } else if (key == "debugLevel") {
+          try {
+            configuration.debugLevel = std::stoi(value);
+          } catch (...) {
+            configuration.debugLevel = 0;
+          }
+        } else {
           std::cout << "Key: " << key
             << " Is Not A Valid Key For Filtering Files" << std::endl;
         }
@@ -97,6 +116,9 @@ void Filterer::parseConfigFile(std::string configFile) {
   } else {
     std::cerr << "File Failed to Open" << std::endl;
     std::cout << "Using Default Settings" << std::endl;
+    configuration.debugLevel = 0;
+    configuration.filterDir = "filtereredFiles";
+    configuration.databaseDir = "database";
   }
 }
 
@@ -203,14 +225,11 @@ void Filterer::debugInfo(std::string info) {
 }
 
 /// Main driver for the Filter System
-int Filterer::run(std::string fileOrDirToFilter,
-                  std::string propertiesConfigFile) {
+int Filterer::run() {
 
   std::cout << "starting" << std::endl;
 
-  parseConfigFile(propertiesConfigFile);
-
-  std::filesystem::path pathObject(fileOrDirToFilter);
+  std::filesystem::path pathObject(configuration.databaseDir);
 
   std::vector<std::string> filesToFilter = std::vector<std::string>();
 

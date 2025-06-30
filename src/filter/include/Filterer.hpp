@@ -6,10 +6,16 @@
 #include <string>
 #include <vector>
 
+struct filterConfigs {
+  std::string databaseDir;
+  std::string filterDir;
+  int debugLevel;
+};
+
 class Filterer {
 public:
   /// Constructor for the Filterer Object
-  Filterer();
+  Filterer(std::string configFile);
 
   /// Parse the config file creating the config map used by the rest of the
   /// filter steps
@@ -32,8 +38,7 @@ public:
 
   /// Main driver for the rest of the code creating the filter tool and running
   /// it on each file found in the path that has potential
-  int run(std::string fileOrDirToFilter    = "database",
-          std::string propertiesConfigFile = "properties.config");
+  int run();
 
 private:
   /// vector of all standard library names to compare includes to
@@ -52,7 +57,7 @@ private:
   /// Map of Valid Config Settings with Default Values
   std::map<std::string, int> *config = new std::map<std::string, int>({
     {"debug", 1},
-    {"debugLevel", 0},
+    // {"debugLevel", 0},
     {"maxCallFunc", 99999},
     {"maxFileLoC", 2000},
     {"maxForLoops", 99999},
@@ -89,4 +94,5 @@ private:
     {"minWhileLoops", 0},
     {"useNonStdHeaders", 0}
   });
+  struct filterConfigs configuration;
 };

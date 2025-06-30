@@ -18,6 +18,7 @@
 #include <clang/Tooling/Tooling.h>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <llvm/ADT/IntrusiveRefCntPtr.h>
 #include <llvm/ADT/StringRef.h>
 #include <iostream>
@@ -25,8 +26,13 @@
 #include <llvm/Support/VirtualFileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
+#include <regex>
 #include <string>
 #include <vector>
+
+Transformer::Transformer(std::string configFile) : configuration() {
+  parseConfig(configFile);
+}
 
 // Take an individual file and apply all transformations to it by generating 
 // the ast, visitors and regenerating the source code as precompiled .i file
@@ -204,14 +210,61 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   return 1;
 }
 
-void Transformer::parseConfig() {
+void Transformer::parseConfig(std::string configFile) {
+  std::ifstream file(configFile);
+  if (!std::filesystem::exists(configFile)) {
+    std::cout << "File: " << configFile << " Does Not Exist" << std::endl;
+    std::cout << "Using Default Settings" << std::endl;
+    return;
+  }
+  if (file.is_open()) {
+    std::cout << "Using: " << configFile << " Specified Settings" << std::endl;
+    std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|[\\w\\s,]+)$");
+    std::string line;
+    std::smatch match;
+    while (std::getline(file, line)) {
+      if (std::regex_search(line, match, pattern)) {
+        std::string key = match[1];
+        std::string value = match[2];
+        // Add the value to the config if the key is a member of the map
+        if (key == "benchmarkDir") {
+          if (std::filesystem::exists(value)) {
+            configuration.benchmarkDir = value;
+          } else {
+            configuration.benchmarkDir = "database";
+          }
+        } else if (key == "filterDir") {
+          if (std::filesystem::exists(value)) {
+            configuration.filterDir = value;
+          } else {
+            configuration.filterDir = "filteredFiles";
+          }
+        } else if (key == "debugLevel") {
+          try {
+            configuration.debugLevel = std::stoi(value);
+          } catch (...) {
+            configuration.debugLevel = 0;
+          }
+        } else if (key == "keepCompilesOnly"){
+          configuration.keepCompilesOnly = (value == "true" || value == "True");
+        }
+      }
+    }
+    file.close();
+  } else {
+    std::cerr << "File Failed to Open" << std::endl;
+    std::cout << "Using Default Settings" << std::endl;
+    configuration.debugLevel = 0;
+    configuration.keepCompilesOnly = false;
+    configuration.filterDir = "filtereredFiles";
+    configuration.benchmarkDir = "benchmark";
+  }
 }
 
 // Main function should be transfered to a driver for use via the full implementation
-int Transformer::run(std::string filePath) {
-  std::filesystem::path path(filePath);
+int Transformer::run() {
+  std::filesystem::path path(configuration.filterDir);
   if (std::filesystem::exists(path)) {
-    parseConfig();
     // run the transformer on the file structure
     int result = transformAll(path, 0);
     std::cout << "Number of Compilable Benchmarks: " << result << std::endl;
