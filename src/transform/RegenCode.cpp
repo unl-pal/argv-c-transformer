@@ -1,6 +1,9 @@
 #include "include/RegenCode.hpp"
 
+#include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/RawCommentList.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <llvm/Support/raw_ostream.h>
 
 // param *C a pointer to a Context
@@ -16,23 +19,34 @@ RegenCodeVisitor::RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &o
 // Catch all do nothing unless specified
 bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
   if (!D) return false;
+  if (!D->getParentFunctionOrMethod()) {
+    if (clang::RawComment * rawComment = _C->getRawCommentForDeclNoCache(D)) {
+      _Output << rawComment->getRawText(_M) << "\n";
+    }
+  }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitDecl(D);
 }
 
 // Prints functions and their children with a ';' for externs
 bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if (!D) return false;
-    D->print(_Output);
+  if (!_M.isInMainFile(D->getLocation())) return true;
   if (D->getAsFunction()->getStorageClass() == clang::SC_Extern) {
-    _Output << ";";
-  }
+    if (!D->getName().starts_with("__VERIFIER_nondet_")) {
+      D->print(_Output);
+      _Output << ";\n";
+    }
+  } else {
+    D->print(_Output);
     _Output << "\n";
+  }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitFunctionDecl(D);
 }
 
 // Print globally avaiable variables not parameters or function specific
 bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
   if (!D) return false;
+  if (!_M.isInMainFile(D->getLocation())) return true;
   if (D->isDefinedOutsideFunctionOrMethod()) {
     if (!D->isLocalVarDeclOrParm()) {
       D->print(_Output);
@@ -45,15 +59,18 @@ bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
 // Print Structs and Unions and their children
 bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
   if (!D) return false;
+  if (!_M.isInMainFile(D->getLocation())) return true;
   if (!D->isAnonymousStructOrUnion()) {
-      D->print(_Output);
-      _Output << ";\n";
+    D->print(_Output);
+    _Output << ";\n";
+    _Output << "\n";
   }
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitRecordDecl(D);
 }
 
 // Print TypeDefs
 bool RegenCodeVisitor::VisitTypedefDecl(clang::TypedefDecl *D) {
+  if (!_M.isInMainFile(D->getLocation())) return true;
       D->print(_Output);
       _Output << ";\n";
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitTypedefDecl(D);
@@ -72,7 +89,12 @@ bool RegenCodeVisitor::VisitFieldDecl(clang::FieldDecl * D){
 // Print Unnamed Global Constants
 bool RegenCodeVisitor::VisitUnnamedGlobalConstantDecl(
   clang::UnnamedGlobalConstantDecl *D) {
+  if (!_M.isInMainFile(D->getLocation())) return true;
   D->print(_Output);
   _Output << ";\n";
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitUnnamedGlobalConstantDecl(D);
+}
+
+bool RegenCodeVisitor::shouldTraversePostOrder() {
+  return false;
 }
