@@ -261,7 +261,15 @@ int Filterer::run() {
 
       clang::IgnoringDiagConsumer diagConsumer;
 
-      std::string resourceDir = std::getenv("CLANG_RESOURCES");
+      std::string resourceDir;
+      try {
+        resourceDir = std::getenv("CLANG_RESOURCES");
+      } catch (...) {
+        std::cout << "Please set the CLANG_RESOURCES environment vairable "
+                     "before proceeding"
+                  << std::endl;
+        return 1;
+      }
 
       /// Set args for AST creation
       std::vector<std::string> args = std::vector<std::string>({

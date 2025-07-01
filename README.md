@@ -7,6 +7,9 @@
   - [Running the Code](#running-the-code)
   - [Targets](#targets)
   - [Scripts](#scripts)
+    - [For Running on Sample Code](#for-running-on-sample-code)
+    - [For Running on Live Code](#for-running-on-live-code)
+    - [For Cleaning In Between Major Changes](#for-cleaning-in-between-major-changes)
 <!--toc:end-->
 
 ArgC transformer takes directories with c files or individual c files and

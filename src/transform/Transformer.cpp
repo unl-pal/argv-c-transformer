@@ -56,7 +56,15 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   clang::IgnoringDiagConsumer diagConsumer;
 
-  std::string resourceDir = std::getenv("CLANG_RESOURCES");
+  std::string resourceDir;
+  try {
+    resourceDir = std::getenv("CLANG_RESOURCES");
+  } catch (...) {
+    std::cout << "Please set the CLANG_RESOURCES environment vairable "
+      "before proceeding"
+      << std::endl;
+    return 1;
+  }
 
   std::cout << "Setting Comp Options" << std::endl;
 
