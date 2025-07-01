@@ -17,12 +17,15 @@
 #include <regex>
 #include <string>
 
-Filterer::Filterer(){
+Filterer::Filterer(std::string configFile){
   typesRequested = std::vector<unsigned int>();
   typeNames = std::vector<std::string>();
+  parseConfigFile(configFile);
+
 };
 
 // Parse the config file for all settings as well as a list of desired types
+/// TODO MAKE THE PARSERS MORE SECURE!!
 void Filterer::parseConfigFile(std::string configFile) {
   std::ifstream file(configFile);
   if (!std::filesystem::exists(configFile)) {
@@ -32,7 +35,7 @@ void Filterer::parseConfigFile(std::string configFile) {
   }
   if (file.is_open()) {
     std::cout << "Using: " << configFile << " Specified Settings" << std::endl;
-    std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|[\\w\\s,]+)$");
+    std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|[\\w\\s,]+|[\\w/-_.]+)$");
     std::string line;
     std::smatch match;
     while (std::getline(file, line)) {
@@ -78,8 +81,25 @@ void Filterer::parseConfigFile(std::string configFile) {
             }
             value = typeMatches.suffix().str();
           }
-        }
-        else {
+        } else if (key == "databaseDir") {
+          if (std::filesystem::exists(value)) {
+            configuration.databaseDir = value;
+          } else {
+            configuration.databaseDir = "database";
+          }
+        } else if (key == "filterDir") {
+          if (std::filesystem::exists(value)) {
+            configuration.filterDir = value;
+          } else {
+            configuration.filterDir = "filteredFiles";
+          }
+        } else if (key == "debugLevel") {
+          try {
+            configuration.debugLevel = std::stoi(value);
+          } catch (...) {
+            configuration.debugLevel = 0;
+          }
+        } else {
           std::cout << "Key: " << key
             << " Is Not A Valid Key For Filtering Files" << std::endl;
         }
@@ -97,6 +117,9 @@ void Filterer::parseConfigFile(std::string configFile) {
   } else {
     std::cerr << "File Failed to Open" << std::endl;
     std::cout << "Using Default Settings" << std::endl;
+    configuration.debugLevel = 0;
+    configuration.filterDir = "filtereredFiles";
+    configuration.databaseDir = "database";
   }
 }
 
@@ -203,14 +226,11 @@ void Filterer::debugInfo(std::string info) {
 }
 
 /// Main driver for the Filter System
-int Filterer::run(std::string fileOrDirToFilter,
-                  std::string propertiesConfigFile) {
+int Filterer::run() {
 
   std::cout << "starting" << std::endl;
 
-  parseConfigFile(propertiesConfigFile);
-
-  std::filesystem::path pathObject(fileOrDirToFilter);
+  std::filesystem::path pathObject(configuration.databaseDir);
 
   std::vector<std::string> filesToFilter = std::vector<std::string>();
 
@@ -241,7 +261,15 @@ int Filterer::run(std::string fileOrDirToFilter,
 
       clang::IgnoringDiagConsumer diagConsumer;
 
-      std::string resourceDir = std::getenv("CLANG_RESOURCES");
+      std::string resourceDir;
+      try {
+        resourceDir = std::getenv("CLANG_RESOURCES");
+      } catch (...) {
+        std::cout << "Please set the CLANG_RESOURCES environment vairable "
+                     "before proceeding"
+                  << std::endl;
+        return 1;
+      }
 
       /// Set args for AST creation
       std::vector<std::string> args = std::vector<std::string>({

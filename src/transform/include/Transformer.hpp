@@ -2,10 +2,19 @@
 
 #include <filesystem>
 #include <string>
-#include <vector>
+
+struct transformConfigs {
+  int debugLevel;
+  bool keepCompilesOnly;
+  std::string filterDir;
+  std::string benchmarkDir;
+};
 
 class Transformer {
 public:
+  /// Constructor
+  Transformer(std::string configFile);
+
   /// Creates the frontend action to transform a file
   bool transformFile(std::filesystem::path path);
 
@@ -15,29 +24,17 @@ public:
   /// Check that the transformed file compiles without errors
   int checkCompilable(std::filesystem::path path);
 
-  /// Parses the configuration file to determine necessary types and counts and
-  /// location of files
-  void parseConfig();
+  /// Parses the configuration file to determine location of files to filter
+  /// where to store benchmarks
+  /// what the debug level is
+  /// whether or not to keep benchmarks that do not compile
+  void parseConfig(std::string configFile);
 
   /// Driver for the transformer that is called by full or transform to run the
   /// transformer on code specified by the given arguments
-  int run(std::string filePath = "filteredFiles");
+  int run();
 
 private:
-  struct configs {
-    int minLoC;
-    int maxLoC;
-    int minIf;
-    int maxLoop;
-    int minLoop;
-    int minNumCompareInt;
-    int minNumOpBinary;
-    int minNumOpUnary;
-    int minNumVarInt;
-    int maxNumVarFloat;
-    int maxNumVarString;
-    int maxNumVarPoint;
-    int maxNumVarStruct;
-    int keepCompilesOnly;
-  };
+  // std::filesystem::path _ConfigFile;
+  struct transformConfigs configuration;
 };
