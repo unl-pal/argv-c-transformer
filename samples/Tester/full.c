@@ -1,3 +1,12 @@
+/* 
+* LICENSE INFO
+*
+* COPYRIGHT INFO
+*
+*/
+
+/// How to tutorial thingy
+
 #include <string.h>
 #include <stdbool.h>
 

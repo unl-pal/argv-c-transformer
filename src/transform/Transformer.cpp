@@ -70,12 +70,12 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   std::vector<std::string> compOptionsArgs({
     "clang",
-    path.string(),
-    // "--",
+    "-extra-arg=-xc",
+    "-extra-arg=-I",
     "-extra-arg=-fparse-all-comments",
     "-extra-arg=-resource-dir=" + resourceDir,
-    "-extra-arg=-xc",
-    "-extra-arg=-I"
+    path.string(),
+    // "--",
   });
 
   int argc = compOptionsArgs.size();

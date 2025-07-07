@@ -134,12 +134,13 @@ bool Filterer::checkPotentialFile(std::string fileName,
   std::cout << fileName << std::endl;
 
   if (file.is_open()) {
-    std::regex pattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
+    std::regex allowedHeadersPattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
+    std::regex macroPattern("macro");
     std::string line;
     std::smatch match;
     int count = 0;
     while (std::getline(file, line)) {
-      if (std::regex_search(line, match, pattern)) {
+      if (std::regex_search(line, match, allowedHeadersPattern)) {
         if (std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) !=
             stdLibNames.end()) {
         } else if (!config->at("useNonStdHeaders")) {
@@ -154,13 +155,10 @@ bool Filterer::checkPotentialFile(std::string fileName,
     }
     file.close();
     if (count < config->at("minFileLoC")) {
-      *contents = "";
       return false;
     } else if (count > config->at("maxFileLoC")) {
-      *contents = "";
       return false;
     } else {
-      *contents += buffer.str();
       return true;
     }
   } else {

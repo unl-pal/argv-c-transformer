@@ -50,7 +50,7 @@ if (os.path.exists(fileSettings['csv'])):
         i = 0
         start = time.time()
         for row in reader:
-            if (i >= (int)(downloadSettings['projectCount'])):
+            if (i > (int)(downloadSettings['projectCount'])):
                 break
             if (row['language'] == downloadSettings['language'] 
                     and (int)(row['size']) >= (int)(downloadSettings['minRepoLoC'])
