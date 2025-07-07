@@ -10,9 +10,10 @@
 #include <string.h>
 #include <stdbool.h>
 
+bool anotherBool = true;
+
 // comment by local external function
 extern int elsewhere(int x);
-
 // comments for the var decl
 int a0 = 0;
 int a1 = 1;
@@ -20,8 +21,6 @@ int a2 = 2;
 
 int ara[3] = {0, 1, 2};
 int b0;
-
-bool anotherBool = true;
 
 struct thing {
   float f;
@@ -39,8 +38,12 @@ int doesThing(int input) {
 
 // comments for the function to remove
 // badFunc3 comment
-int empty() {
-  return 1;
+bool empty() {
+  return false;
+}
+
+char* returnsString() {
+  return "string";
 }
 
 // removeMe comment
@@ -53,7 +56,7 @@ int main() {
   struct thing myThing;
   struct thing *myThing2 = &myThing;
   myThing.b = true;
-  char *s1 = "";
+  const char *s1 = returnsString().c_str();
   char *s2 = "";
   char *s3 = "thing";
 
@@ -74,9 +77,14 @@ int main() {
     ++a0;
   }
 
-  int y = empty();
+  bool y = empty();
 
-  int z = hasInput(a2)+ empty();
+  int z;
+  if (empty()) {
+    z = hasInput(a2) + a1;
+  } else {
+    z = 0;
+  }
 
   // comments by the removed function call
   int x = hasInput(z) * y;

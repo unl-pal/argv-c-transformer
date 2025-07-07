@@ -49,7 +49,7 @@ private:
     "stdatomic.h", "stdbit.h",   "stdbool.h", "stdckdint.h", "stddef.h",
     "stdint.h",    "stdio.h",    "stdlib.h",  "stdmchar.h",  "stdnoreturn.h",
     "string.h",    "tgmath.h",   "threads.h", "time.h",      "uchar.h",
-    "wchar.h",     "wctype.h"};
+    "wchar.h",     "wctype.h", "string"};
 
   std::vector<unsigned int> typesRequested;
   std::vector<std::string> typeNames;

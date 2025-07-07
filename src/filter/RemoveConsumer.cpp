@@ -9,8 +9,8 @@ void RemoveConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   if (_toRemove->size()) {
     RemoveFuncVisitor Visitor(&Context, _Rewriter, *_toRemove);
     bool done = false;
-    while (!done) {
+    // while (!done) {
       done = Visitor.TraverseTranslationUnitDecl(Context.getTranslationUnitDecl());
-    }
+    // }
   }
 }

@@ -31,10 +31,10 @@ void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc,
         // llvm::outs() << "Found include directive: " << FileName << " (";
         if (IsAngled) {
           // llvm::outs() << "<>";
-          _Output << "#include <" << FileName << ">\n";
+          // _Output << "#include <" << FileName << ">\n";
         } else {
           llvm::outs() << "\"\"";
-          _Output << "#include \"" << FileName << "\"\n";
+          // _Output << "#include \"" << FileName << "\"\n";
         }
         // llvm::outs() << ") at " << HashLoc.printToString(_Mgr) << "\n";
       }
@@ -49,7 +49,7 @@ IncludeFinder::IncludeFinder(clang::SourceManager &SM, llvm::raw_fd_ostream &out
 
 // Constructor for GenerateIncludeAction that sets up the output stream for
 // regenerating source code
-TransformAction::TransformAction(llvm::raw_fd_ostream &output) : _Output(output) {}
+TransformAction::TransformAction(llvm::raw_fd_ostream &output) : _Output(output), _Rewriter() {}
 
 // Overridden function that uses a ConsumerMultiplexer instead of a single
 // ASTConsumer to run many consumers, handlers and visitors over the same AST
@@ -70,9 +70,9 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(std::make_unique<GenerateIncludeConsumer>(_Output));
-  tempVector.emplace_back(std::make_unique<ReplaceDeadCallsConsumer>(neededTypes));
-  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(_Output, neededTypes));
-  tempVector.emplace_back(std::make_unique<GenerateCodeConsumer>(_Output));
+  tempVector.emplace_back(std::make_unique<ReplaceDeadCallsConsumer>(neededTypes, _Rewriter));
+  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(_Output, neededTypes, _Rewriter));
+  // tempVector.emplace_back(std::make_unique<GenerateCodeConsumer>(_Output));
 
   // Multiplexor of all consumers that will be run over the same AST
   std::unique_ptr<clang::MultiplexConsumer> result =
@@ -91,6 +91,7 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 // Function that runs before any of the consumers but after preprocessor steps
 bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action" << "\n";
+  _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
   return result;
 }
@@ -98,4 +99,5 @@ bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
 // Function that runs after all of the consumers but before the AST is cleaned up
 void TransformAction::EndSourceFileAction() {
   llvm::outs() << "End Source File Action" << "\n";
+  _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }

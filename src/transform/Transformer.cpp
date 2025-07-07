@@ -72,9 +72,9 @@ bool Transformer::transformFile(std::filesystem::path path) {
     "clang",
     "-extra-arg=-xc",
     "-extra-arg=-I",
-    "-extra-arg=-fparse-all-comments",
-    "-extra-arg=-resource-dir=" + resourceDir,
     path.string(),
+    "-extra-arg=-resource-dir=" + resourceDir,
+    "-extra-arg=-fparse-all-comments",
     // "--",
   });
 

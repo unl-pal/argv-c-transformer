@@ -7,6 +7,7 @@
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Lex/PPCallbacks.h>
 #include <clang/Lex/Token.h>
+#include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
@@ -67,5 +68,6 @@ public:
 
 private:
   llvm::raw_fd_ostream &_Output;
+  clang::Rewriter _Rewriter;
 };
 
