@@ -5,16 +5,22 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
+#include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <set>
 #include <string>
+#include <vector>
 
 class RemoveFuncVisitor : public clang::RecursiveASTVisitor<RemoveFuncVisitor> {
 public:
   /// Constructs a Visitor that removes functions specified in toRemove using
   /// the rewriter
-  RemoveFuncVisitor(clang::ASTContext *C, clang::Rewriter &rewriter, std::vector<std::string> toRemove);
+  RemoveFuncVisitor(clang::ASTContext *C,
+                    clang::Rewriter &rewriter,
+                    std::vector<std::string>      toRemove,
+                    std::set<clang::QualType> *neededTypes);
 
   /// Visits all function declarations checking the name agains the functions to
   /// remove and handles the function declaration and any associated comments
@@ -32,4 +38,5 @@ private:
   clang::SourceManager &_mgr;
   clang::Rewriter &_Rewriter;
   std::vector<std::string> _toRemove;
+  std::set<clang::QualType> *_NeededTypes;
 };

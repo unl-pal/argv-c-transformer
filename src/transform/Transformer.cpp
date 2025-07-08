@@ -171,10 +171,10 @@ int Transformer::checkCompilable(std::filesystem::path path) {
     "-extra-arg=-fsyntax-only",
     "-extra-arg=-xc",
     "-extra-arg=-I",
-    "-extra-arg=-w",
     "-extra-arg=-resource-dir=" + resourceDir,
     "verifier.c",
-    path.string()
+    path.string(),
+    // "-extra-arg=-w",
     // "-extra-arg=-fparse-all-comments",
   });
 

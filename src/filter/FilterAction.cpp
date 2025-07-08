@@ -1,3 +1,4 @@
+#include "AddVerifiersConsumerFilter.hpp"
 #include "CountingConsumer.hpp"
 #include "CountingVisitor.hpp"
 #include "FilterAction.hpp"
@@ -6,9 +7,12 @@
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/TemplateName.h>
+#include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/MultiplexConsumer.h>
 #include <clang/Lex/Preprocessor.h>
+#include <llvm20/include/clang/AST/Type.h>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -31,13 +35,15 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   std::unordered_map<std::string, CountNodesVisitor::attributes *> *toFilter =
     new std::unordered_map<std::string, CountNodesVisitor::attributes *>();
   std::vector<std::string> *toRemove = new std::vector<std::string>();
+  std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
   llvm::outs() << "Created To Filter and Remove Vars" << "\n";
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(std::make_unique<CountingConsumer>(_Types, toFilter));
   tempVector.emplace_back(
     std::make_unique<FilterFunctionsConsumer>(toFilter, toRemove, _Config));
-  tempVector.emplace_back(std::make_unique<RemoveConsumer>(_Rewriter, toRemove));
+  tempVector.emplace_back(std::make_unique<RemoveConsumer>(_Rewriter, toRemove, neededTypes));
+  tempVector.emplace_back(std::make_unique<AddVerifiersConsumerFilter>(_Output, neededTypes, _Rewriter));
 
   llvm::outs() << "Created Temp Vector" << "\n";
 

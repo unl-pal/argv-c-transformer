@@ -56,7 +56,7 @@ int main() {
   struct thing myThing;
   struct thing *myThing2 = &myThing;
   myThing.b = true;
-  const char *s1 = returnsString().c_str();
+  const char *s1 = returnsString();
   char *s2 = "";
   char *s3 = "thing";
 
@@ -79,8 +79,10 @@ int main() {
 
   bool y = empty();
 
+  y = empty() && anotherBool;
+
   int z;
-  if (empty()) {
+  if (empty() || y) {
     z = hasInput(a2) + a1;
   } else {
     z = 0;

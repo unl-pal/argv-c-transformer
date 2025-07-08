@@ -1,16 +1,18 @@
 #include "RemoveVisitor.hpp"
 #include "RemoveConsumer.hpp"
 
+#include <clang/AST/Type.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <vector>
 
-RemoveConsumer::RemoveConsumer(clang::Rewriter &rewriter, std::vector<std::string> *toRemove) : _Rewriter(rewriter), _toRemove(toRemove) {}
+RemoveConsumer::RemoveConsumer(clang::Rewriter          &rewriter,
+                               std::vector<std::string> *toRemove,
+                               std::set<clang::QualType> *neededTypes)
+    : _Rewriter(rewriter), _toRemove(toRemove), _NeededTypes(neededTypes) {}
 
 void RemoveConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   if (_toRemove->size()) {
-    RemoveFuncVisitor Visitor(&Context, _Rewriter, *_toRemove);
-    bool done = false;
-    // while (!done) {
-      done = Visitor.TraverseTranslationUnitDecl(Context.getTranslationUnitDecl());
-    // }
+    RemoveFuncVisitor Visitor(&Context, _Rewriter, *_toRemove, _NeededTypes);
+    Visitor.TraverseTranslationUnitDecl(Context.getTranslationUnitDecl());
   }
 }

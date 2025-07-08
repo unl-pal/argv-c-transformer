@@ -12,42 +12,37 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm20/include/llvm/Support/raw_ostream.h>
+#include <string>
+#include <vector>
 
 RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext       *C,
-                                     clang::Rewriter &rewriter,
-                                     std::vector<std::string> toRemove)
-    : _C(C), _mgr(rewriter.getSourceMgr()), _Rewriter(rewriter), _toRemove(toRemove) {
-}
+                                     clang::Rewriter         &rewriter,
+                                     std::vector<std::string> toRemove,
+                                     std::set<clang::QualType> *neededTypes)
+    : _C(C),
+      _mgr(rewriter.getSourceMgr()),
+      _Rewriter(rewriter),
+      _toRemove(toRemove),
+      _NeededTypes(neededTypes) {}
 
 bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if(!D) return false;
   if (_mgr.isInMainFile(D->getLocation())) {
     for (std::string& name : _toRemove) {
       if (name == D->getNameAsString()) {
-        llvm::outs() << name << "\n";
-        // clang::SourceRange range = D->getSourceRange();
+        // llvm::outs() << name << "\n";
+        _NeededTypes->emplace(D->getReturnType());
         clang::SourceLocation zero = _mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(D->getLocation()), 1);
         clang::SourceRange range = clang::SourceRange(zero, D->getEndLoc());
-        llvm::outs() << range.printToString(_mgr) << "\n";
+        // llvm::outs() << range.printToString(_mgr) << "\n";
         if (D->getStorageClass() == clang::SC_Extern) {
           range = clang::SourceRange(D->getOuterLocStart(), D->getEndLoc().getLocWithOffset(1));
         }
         _Rewriter.RemoveText(range);
-        // _Rewriter.ReplaceText(range, "");
         clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D);
         if (rawComment != nullptr) {
-          // _Rewriter.ReplaceText(rawComment->getSourceRange(), "");
           _Rewriter.RemoveText(rawComment->getSourceRange());
         }
-        // _Rewriter.ReplaceText(range, "// === Removed Undesired Function ===\n");
-        // if (_C->getTranslationUnitDecl()->containsDecl(D)) {
-        //   _C->getTranslationUnitDecl()->removeDecl(D);
-        // } else {
-        //   clang::IdentifierInfo *newInfo = &_C->Idents.get("0func" + name);
-        //   clang::DeclarationName newName(newInfo);
-        //   D->setDeclName(newName);
-        // }
-        // return false;
       }
     }
   }
@@ -64,8 +59,60 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
       std::string name = func->getNameAsString();
       for (std::string removedFuncName : _toRemove) {
         if (name == removedFuncName) {
-          // std::string returnType = E->getCall
-          _Rewriter.ReplaceText(E->getSourceRange(), "__VERIFIER_nondet_" + func->getReturnType().getAsString() + "()");
+          std::string newName = "";
+          bool isPointer = E->getType()->isPointerType();
+          // isPointer ?  newName += "new " : newName += "";
+          std::string returnTypeName = E->getCallReturnType(*_C).getAsString();
+          std::string newReturnTypeName = "";
+          if (E->getCallReturnType(*_C)->isBooleanType()) {
+          // if (returnTypeName == "_Bool") {
+            newReturnTypeName = "bool";
+          } else if (E->getCallReturnType(*_C)->isBuiltinType() || E->getCallReturnType(*_C)->isCharType() || E->getCallReturnType(*_C)->isAnyPointerType()) {
+            for (unsigned i=0; i<returnTypeName.size(); i++) {
+            char letter = returnTypeName[i];
+              if (letter == ' ') {
+                newReturnTypeName += "";
+              } else if (letter == '_') {
+                newReturnTypeName += "";
+              } else if (letter == '*') {
+                newReturnTypeName += "";
+              } else {
+                newReturnTypeName += letter;
+              }
+            }
+          }
+          if (newReturnTypeName.size()) {
+            // isPointer ? newName += "new " + newReturnTypeName : newName;
+            isPointer ? newName += "(" + newReturnTypeName + "" : newName;
+            // newName += newReturnTypeName;
+            isPointer ? newName += "*)(" : newName += "";
+            newName += "__VERIFIER_nondet_" + newReturnTypeName + "()";
+            isPointer ? newName += ")" : newName;
+            // std::replace(returnTypeName.begin(), returnTypeName.end(), ' ', '_');
+            // auto done = returnTypeName.begin();
+            // while (done != returnTypeName.end()) {
+            //   done = std::remove(returnTypeName.begin(), returnTypeName.end(), '_');
+            // }
+            // done = returnTypeName.begin();
+            // while (done != returnTypeName.end()) {
+            //   done = std::remove(returnTypeName.begin(), returnTypeName.end(), '*');
+            // }
+            // newName += newReturnTypeName;
+            // newName += "()";
+            // llvm::outs() << E->getDirectCallee()->getName().str() << "\n";
+            // clang::SourceRange range;
+            // // range.setBegin((_mgr.getSpellingLineNumber(E->getBeginLoc()), E->getEndLoc().getLocWithOffset(-(name.size() - 1))));
+            // range.setBegin(_mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(E->getCallee()->getEndLoc()), _mgr.getSpellingColumnNumber(E->getCallee()->getBeginLoc())));
+            // range.setEnd(E->getEndLoc());
+            // range.dump(_mgr);
+            // range = E->getSourceRange();
+            // range.dump(_mgr);
+            // E->getSourceRange().dump(_mgr);
+            // _Rewriter.ReplaceText(range, newName);
+            _Rewriter.ReplaceText(E->getSourceRange(), newName);
+          } else {
+            _Rewriter.RemoveText(E->getSourceRange());
+          }
         }
       }
     }

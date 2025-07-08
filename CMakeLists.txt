@@ -40,6 +40,8 @@ set(HEADERS_EXAMPLE
 )
 
 set(SOURCE_FILTER
+  src/filter/AddVerifiersConsumerFilter.cpp
+  src/filter/AddVerifiersVisitorFilter.cpp
   src/filter/CountingConsumer.cpp
   src/filter/CountingVisitor.cpp
   src/filter/FilterAction.cpp
@@ -52,8 +54,8 @@ set(SOURCE_FILTER
 
 set(SOURCE_TRANSFORM
   src/transform/AddVerifiersConsumer.cpp
-  src/transform/ArgsFrontendActionFactory.cpp
   src/transform/AddVerifiersVisitor.cpp
+  src/transform/ArgsFrontendActionFactory.cpp
   src/transform/GenerateCodeConsumer.cpp
   src/transform/TransformAction.cpp
   src/transform/GenerateIncludeConsumer.cpp
