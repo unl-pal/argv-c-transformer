@@ -36,3 +36,5 @@ echo "=================================== Run Filter ===========================
 
 echo "=================================== Run Transform ==================================="
 ./build/transform "$configFile"
+
+# find benchmark -empty -delete
