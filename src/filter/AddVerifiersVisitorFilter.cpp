@@ -17,8 +17,6 @@ AddVerifiersVisitorFilter::AddVerifiersVisitorFilter(clang::ASTContext *c, llvm:
 
 bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
   clang::SourceManager &mgr = _C->getSourceManager();
-  // clang::SourceLocation loc = mgr.getLocForStartOfFile(mgr.getMainFileID());
-  // clang::Decl *firstNode = D->getNextDeclInContext();
   clang::Decl *firstNode;
   for (auto *decl : D->decls()) {
     if (mgr.isInMainFile(decl->getLocation()) && !mgr.isMacroBodyExpansion(decl->getLocation())) {
@@ -29,9 +27,6 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
 
   firstNode->dumpColor();
   clang::SourceLocation loc = mgr.translateLineCol(mgr.getMainFileID(), mgr.getSpellingLineNumber(firstNode->getLocation()), 1);
-  // if (_Rewriter.getSourceMgr().isMacroBodyExpansion(loc)) {
-  //   loc = _Rewriter.getSourceMgr().getMacroArgExpandedLocation(loc);
-  // }
   if (clang::RawComment *comment = _C->getRawCommentForDeclNoCache(firstNode)) {
     llvm::outs() << comment->getRawText(mgr) << "\n";
     loc = comment->getBeginLoc();
@@ -62,15 +57,6 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
         } 
       }
     }
-    // std::replace(returnTypeName.begin(), returnTypeName.end(), ' ', '_');
-    // auto done = returnTypeName.begin();
-    // while (done != returnTypeName.end()) {
-    //   done = std::remove(returnTypeName.begin(), returnTypeName.end(), '_');
-    // }
-    // done = returnTypeName.begin();
-    // while (done != returnTypeName.end()) {
-    //   done = std::remove(returnTypeName.begin(), returnTypeName.end(), '*');
-    // }
     clang::IdentifierInfo *funcName = &_C->Idents.get(nondetName + newReturnTypeName);
     clang::DeclarationName declName(funcName);
     clang::FunctionProtoType::ExtProtoInfo epi;
@@ -90,8 +76,6 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
     newFunction->setIsUsed();
     D->addDecl(newFunction);
     _Rewriter.InsertTextBefore(loc, "extern " + newReturnTypeName + " " + newFunction->getNameAsString() + "();\n");
-    // loc = newFunction->getBeginLoc();
-    // _Output << "extern "  << newFunction->getReturnType() << " " << newFunction->getNameAsString() << "();\n";
   }
   _Rewriter.InsertTextBefore(loc, "\n");
   return false;

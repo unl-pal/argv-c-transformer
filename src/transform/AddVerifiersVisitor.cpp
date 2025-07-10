@@ -16,8 +16,6 @@ AddVerifiersVisitor::AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostr
 
 bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
   clang::SourceManager &mgr = _C->getSourceManager();
-  // clang::SourceLocation loc = mgr.getLocForStartOfFile(mgr.getMainFileID());
-  // clang::Decl *firstNode = D->getNextDeclInContext();
   clang::Decl *firstNode;
   for (auto *decl : D->decls()) {
     if (mgr.isInMainFile(decl->getLocation())) {
@@ -61,8 +59,6 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
     newFunction->setIsUsed();
     D->addDecl(newFunction);
     _Rewriter.InsertTextBefore(loc, "extern " + newFunction->getReturnType().getAsString() + " " + newFunction->getNameAsString() + "();\n");
-    // loc = newFunction->getBeginLoc();
-    // _Output << "extern "  << newFunction->getReturnType() << " " << newFunction->getNameAsString() << "();\n";
   }
   return false;
 }

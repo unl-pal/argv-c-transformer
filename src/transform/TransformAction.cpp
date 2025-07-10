@@ -83,11 +83,6 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   return result;
 }
 
-// May be needed or implemented later to force only the preprocessor to run on code
-// bool GenerateIncludeAction::usesPreprocessorOnly() const {
-//   return 1;
-// }
-
 // Function that runs before any of the consumers but after preprocessor steps
 bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action" << "\n";
