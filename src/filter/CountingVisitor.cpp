@@ -71,8 +71,14 @@ bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
 bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   if (!FD) return false;
   if (_mgr->isInMainFile(FD->getLocation())) {
-    _allFunctions->try_emplace(FD->getNameAsString(), new attributes);
-    _allFunctions->at("Program")->Functions++;
+    if (_allFunctions->count(FD->getNameAsString())) {
+      if (_mgr->getMacroArgExpandedLocation(FD->getLocation()).isMacroID()) {
+	FD->dumpColor();
+      }
+    } else {
+      _allFunctions->try_emplace(FD->getNameAsString(), new attributes);
+      _allFunctions->at("Program")->Functions++;
+    }
   }
   return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitFunctionDecl(FD);
 }

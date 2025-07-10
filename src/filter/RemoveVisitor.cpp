@@ -17,7 +17,7 @@
 
 RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext       *C,
                                      clang::Rewriter         &rewriter,
-                                     std::vector<std::string> toRemove,
+                                     std::vector<std::string> *toRemove,
                                      std::set<clang::QualType> *neededTypes)
     : _C(C),
       _mgr(rewriter.getSourceMgr()),
@@ -28,17 +28,27 @@ RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext       *C,
 bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if(!D) return false;
   if (_mgr.isInMainFile(D->getLocation())) {
-    for (std::string& name : _toRemove) {
+    llvm::outs() << D->getNameAsString() << " is being checked" << "\n";
+    for (std::string& name : *_toRemove) {
+      if (D->getLocation().isValid() && D->getLocation().isMacroID()) {
+        llvm::outs() << name << " is macro thingy" << "\n";
+        return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
+      }
       if (name == D->getNameAsString()) {
-        // llvm::outs() << name << "\n";
-        _NeededTypes->emplace(D->getReturnType());
+        // if (!_NeededTypes->count(D->getReturnType())) {
+        //   _NeededTypes->emplace(D->getReturnType());
+        // }
         clang::SourceLocation zero = _mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(D->getLocation()), 1);
         clang::SourceRange range = clang::SourceRange(zero, D->getEndLoc());
         // llvm::outs() << range.printToString(_mgr) << "\n";
         if (D->getStorageClass() == clang::SC_Extern) {
-          range = clang::SourceRange(D->getOuterLocStart(), D->getEndLoc().getLocWithOffset(1));
+          // range = clang::SourceRange(D->getOuterLocStart(), D->getEndLoc().getLocWithOffset(1));
+          range.setEnd(D->getEndLoc().getLocWithOffset(1));
         }
-        _Rewriter.RemoveText(range);
+        if (range.isValid()) {
+          llvm::outs() << name << " Is Valid Range" << "\n";
+          _Rewriter.RemoveText(range);
+        }
         clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D);
         if (rawComment != nullptr) {
           _Rewriter.RemoveText(rawComment->getSourceRange());
@@ -46,7 +56,7 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
       }
     }
   }
-    return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
+  return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
 }
 
 // TODO CallExpr can be used to also ID the return type for replacing with the
@@ -57,17 +67,27 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
     // TODO RETURN TYPE IS LOST BETWEEN FILTER AND TRANSFORM
     if (clang::FunctionDecl *func = E->getDirectCallee()) {
       std::string name = func->getNameAsString();
-      for (std::string removedFuncName : _toRemove) {
+      llvm::outs() << name << " call is being checked" << "\n";
+      
+      for (std::string removedFuncName : *_toRemove) {
         if (name == removedFuncName) {
+          if (func->getLocation().isValid() && func->getLocation().isMacroID()) {
+            llvm::outs() << name << " is macro thingy" << "\n";
+            return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(func);
+          }
+          if (!_NeededTypes->count(E->getCallReturnType(*_C))) {
+            _NeededTypes->emplace(E->getCallReturnType(*_C));
+          }
           std::string newName = "";
-          bool isPointer = E->getType()->isPointerType();
+          bool isPointer = E->getCallReturnType(*_C)->isPointerType();
           // isPointer ?  newName += "new " : newName += "";
           std::string returnTypeName = E->getCallReturnType(*_C).getAsString();
           std::string newReturnTypeName = "";
           if (E->getCallReturnType(*_C)->isBooleanType()) {
           // if (returnTypeName == "_Bool") {
             newReturnTypeName = "bool";
-          } else if (E->getCallReturnType(*_C)->isBuiltinType() || E->getCallReturnType(*_C)->isCharType() || E->getCallReturnType(*_C)->isAnyPointerType()) {
+          // } else if (E->getCallReturnType(*_C)->isBuiltinType() || E->getCallReturnType(*_C)->isCharType() || E->getCallReturnType(*_C)->isAnyPointerType()) {
+          }
             for (unsigned i=0; i<returnTypeName.size(); i++) {
             char letter = returnTypeName[i];
               if (letter == ' ') {
@@ -80,7 +100,7 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
                 newReturnTypeName += letter;
               }
             }
-          }
+          // }
           if (newReturnTypeName.size()) {
             // isPointer ? newName += "new " + newReturnTypeName : newName;
             isPointer ? newName += "(" + newReturnTypeName + "" : newName;
@@ -100,40 +120,53 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
             // newName += newReturnTypeName;
             // newName += "()";
             // llvm::outs() << E->getDirectCallee()->getName().str() << "\n";
-            // clang::SourceRange range;
+            clang::SourceRange range;
             // // range.setBegin((_mgr.getSpellingLineNumber(E->getBeginLoc()), E->getEndLoc().getLocWithOffset(-(name.size() - 1))));
-            // range.setBegin(_mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(E->getCallee()->getEndLoc()), _mgr.getSpellingColumnNumber(E->getCallee()->getBeginLoc())));
+            range.setBegin(_mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(E->getCallee()->getEndLoc()), _mgr.getSpellingColumnNumber(E->getCallee()->getBeginLoc())));
             // range.setEnd(E->getEndLoc());
+            range.setEnd(E->getRParenLoc());
             // range.dump(_mgr);
             // range = E->getSourceRange();
             // range.dump(_mgr);
             // E->getSourceRange().dump(_mgr);
             // _Rewriter.ReplaceText(range, newName);
-            _Rewriter.ReplaceText(E->getSourceRange(), newName);
-          } else {
-            _Rewriter.RemoveText(E->getSourceRange());
+            // if (E->getSourceRange().isValid()) {
+            if (range.isValid()) {
+              llvm::outs() << name << " Range is Valid" << "\n";
+              range.dump(_mgr);
+              llvm::outs() << newName << "\n";
+              llvm::outs() << _Rewriter.isRewritable(E->getCallee()->getExprLoc()) << "\n";
+              if (auto thing = _mgr.getCharacterData(E->getCallee()->getExprLoc())) {
+                llvm::outs() << thing << "\n";
+                // llvm::outs() << "There is Rewritten Text\n" << _Rewriter.getRewrittenText(range);
+                llvm::outs() << _Rewriter.ReplaceText(range, newName);
+                llvm::outs() << name << "Replaced Text" << "\n";
+              }
+            }
+          // } else {
+            // _Rewriter.RemoveText(E->getSourceRange());
           }
         }
       }
     }
-    if (E->getType()->isFunctionType()) {
-      auto thing = E->getCallReturnType(*_C);
-      if (thing->isCharType()) {
-      } else if (thing->isIntegerType()) {
-      } else if (thing->isFloatingType()) {
-      } else if (thing->isStructureType()) {
-      } else if (thing->isObjectPointerType()) {
-      } else if (thing->isArrayType()) {
-      } else if (thing->isNullPtrType()) {
-      // } else if (thing->isDoubleType()) {
-      } else {
-      }
-    }
+    // if (E->getType()->isFunctionType()) {
+    //   auto thing = E->getCallReturnType(*_C);
+    //   if (thing->isCharType()) {
+    //   } else if (thing->isIntegerType()) {
+    //   } else if (thing->isFloatingType()) {
+    //   } else if (thing->isStructureType()) {
+    //   } else if (thing->isObjectPointerType()) {
+    //   } else if (thing->isArrayType()) {
+    //   } else if (thing->isNullPtrType()) {
+    //   // } else if (thing->isDoubleType()) {
+    //   } else {
+    //   }
+    // }
   }
   return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitCallExpr(E);
 }
 
 bool RemoveFuncVisitor::shouldTraversePostOrder() {
-  // return true;
-  return false;
+  return true;
+  // return false;
 }

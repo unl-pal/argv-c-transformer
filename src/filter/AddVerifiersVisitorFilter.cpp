@@ -21,7 +21,7 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
   // clang::Decl *firstNode = D->getNextDeclInContext();
   clang::Decl *firstNode;
   for (auto *decl : D->decls()) {
-    if (mgr.isInMainFile(decl->getLocation())) {
+    if (mgr.isInMainFile(decl->getLocation()) && !mgr.isMacroBodyExpansion(decl->getLocation())) {
       firstNode = decl;
       break;
     }
@@ -29,6 +29,9 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
 
   firstNode->dumpColor();
   clang::SourceLocation loc = mgr.translateLineCol(mgr.getMainFileID(), mgr.getSpellingLineNumber(firstNode->getLocation()), 1);
+  // if (_Rewriter.getSourceMgr().isMacroBodyExpansion(loc)) {
+  //   loc = _Rewriter.getSourceMgr().getMacroArgExpandedLocation(loc);
+  // }
   if (clang::RawComment *comment = _C->getRawCommentForDeclNoCache(firstNode)) {
     llvm::outs() << comment->getRawText(mgr) << "\n";
     loc = comment->getBeginLoc();
@@ -90,5 +93,6 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
     // loc = newFunction->getBeginLoc();
     // _Output << "extern "  << newFunction->getReturnType() << " " << newFunction->getNameAsString() << "();\n";
   }
+  _Rewriter.InsertTextBefore(loc, "\n");
   return false;
 }

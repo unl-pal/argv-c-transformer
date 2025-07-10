@@ -19,7 +19,7 @@ public:
   /// the rewriter
   RemoveFuncVisitor(clang::ASTContext *C,
                     clang::Rewriter &rewriter,
-                    std::vector<std::string>      toRemove,
+                    std::vector<std::string>      *toRemove,
                     std::set<clang::QualType> *neededTypes);
 
   /// Visits all function declarations checking the name agains the functions to
@@ -37,6 +37,6 @@ private:
   clang::ASTContext *_C;
   clang::SourceManager &_mgr;
   clang::Rewriter &_Rewriter;
-  std::vector<std::string> _toRemove;
+  std::vector<std::string> *_toRemove;
   std::set<clang::QualType> *_NeededTypes;
 };
