@@ -1,10 +1,11 @@
 #include "AllFunctionsToCallHandler.hpp"
 #include <clang/AST/Decl.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <string>
 #include <vector>
 
 AllFunctionsToCallHandler::AllFunctionsToCallHandler() 
-  : _Names()
+  : _Names(std::vector<std::string>())
 {
 }
 

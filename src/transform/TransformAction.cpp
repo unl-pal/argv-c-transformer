@@ -70,13 +70,13 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 
   std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
 
-  bool hasMain = false;
+  compiler.createASTContext();
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(std::make_unique<GenerateIncludeConsumer>(_Output));
   tempVector.emplace_back(std::make_unique<ReplaceDeadCallsConsumer>(neededTypes, _Rewriter));
   tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(_Output, neededTypes, _Rewriter));
-  tempVector.emplace_back(std::make_unique<IsThereMainConsumer>());
+  tempVector.emplace_back(std::make_unique<IsThereMainConsumer>(_Rewriter));
   // tempVector.emplace_back(std::make_unique<AddMainConsumer>(hasMain));
   // tempVector.emplace_back(std::make_unique<GenerateCodeConsumer>(_Output));
 

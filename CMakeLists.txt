@@ -53,16 +53,20 @@ set(SOURCE_FILTER
 )
 
 set(SOURCE_TRANSFORM
+  src/transform/AddMainVisitor.cpp
   src/transform/AddVerifiersConsumer.cpp
   src/transform/AddVerifiersVisitor.cpp
+  src/transform/AllFunctionsToCallHandler.cpp
   src/transform/ArgsFrontendActionFactory.cpp
+  src/transform/IsThereMainConsumer.cpp
+  src/transform/IsThereMainHandler.cpp
   src/transform/GenerateCodeConsumer.cpp
-  src/transform/TransformAction.cpp
   src/transform/GenerateIncludeConsumer.cpp
   src/transform/GenerateIncludeHandler.cpp
   src/transform/RegenCode.cpp
   src/transform/ReplaceDeadCallsVisitor.cpp
   src/transform/ReplaceDeadCallsConsumer.cpp
+  src/transform/TransformAction.cpp
   src/transform/Transformer.cpp
 )
 

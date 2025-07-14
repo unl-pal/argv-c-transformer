@@ -42,6 +42,9 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
     std::replace(returnTypeName.begin(), returnTypeName.end(), ' ', '_');
     clang::IdentifierInfo *funcName = &_C->Idents.get(nondetName + returnTypeName);
     clang::DeclarationName declName(funcName);
+    if (D->lookup(declName).find_first<clang::FunctionDecl>()) {
+      continue;
+    }
     clang::FunctionProtoType::ExtProtoInfo epi;
     clang::QualType funcQualType = _C->getFunctionType(returnType, clang::ArrayRef<clang::QualType>(), epi);
 

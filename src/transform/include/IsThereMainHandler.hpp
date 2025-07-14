@@ -11,5 +11,5 @@ public:
   bool HasMain();
 
 private:
-  bool _hasMain = false;
+  bool _hasMain;
 };

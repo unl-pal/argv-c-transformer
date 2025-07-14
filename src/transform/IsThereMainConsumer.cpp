@@ -6,9 +6,10 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/raw_ostream.h>
 
-IsThereMainConsumer::IsThereMainConsumer() 
+IsThereMainConsumer::IsThereMainConsumer(clang::Rewriter &rewriter) : _Rewriter(rewriter) 
 {
 }
 
@@ -17,14 +18,21 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   llvm::outs() << "Looking for Main Function\n";
   clang::ast_matchers::MatchFinder MatchFinder;
   IsThereMainHandler Handler;
-  MatchFinder.addMatcher(functionDecl(isMain()).bind("main"), &Handler);
+  context.getTranslationUnitDecl()->dumpColor();
+  MatchFinder.addMatcher(decl().bind("main"), &Handler);
+  llvm::outs() << "Add Ze Mache\n";
   MatchFinder.matchAST(context);
-  if (Handler.HasMain()) {
+  llvm::outs() << "Run Ze Mache\n";
+  if (!Handler.HasMain()) {
+    llvm::outs() << "Not Haz Ze Maene\n";
     clang::ast_matchers::MatchFinder FunctionsMatchFinder;
     AllFunctionsToCallHandler FunctionsHandler;
     FunctionsMatchFinder.addMatcher(functionDecl().bind("functions"), &FunctionsHandler);
     FunctionsMatchFinder.matchAST(context);
-    AddMainVisitor Visitor(FunctionsHandler.GetNames());
-    Visitor.HandleTranslationUnit(clang::ASTContext context);
+    llvm::outs() << "Gotz Nameze\n";
+    if (FunctionsHandler.GetNames().size()) {
+      AddMainVisitor Visitor(&context, FunctionsHandler.GetNames(), _Rewriter);
+      Visitor.VisitTranslationUnitDecl(context.getTranslationUnitDecl());
+    }
   } 
 }

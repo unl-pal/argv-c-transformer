@@ -3,16 +3,17 @@
 #include <clang/AST/DeclBase.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 
-IsThereMainHandler::IsThereMainHandler() {}
+IsThereMainHandler::IsThereMainHandler() : _hasMain(false) {}
 
 void IsThereMainHandler::run(const clang::ast_matchers::MatchFinder::MatchResult &results) {
   if (const clang::FunctionDecl *decl = results.Nodes.getNodeAs<clang::FunctionDecl>("main")) {
+    // decl->dumpColor();
     if (decl->isMain()) {
-      _hasMain = true;
+      this->_hasMain = true;
     }
   }
 }
 
 bool IsThereMainHandler::HasMain() {
-  return _hasMain;
+  return this->_hasMain;
 }

@@ -76,6 +76,8 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
           std::string newReturnTypeName = "";
           if (E->getCallReturnType(*_C)->isBooleanType()) {
             newReturnTypeName = "bool";
+          } else {
+            newReturnTypeName = "";
           }
           for (unsigned i=0; i<returnTypeName.size(); i++) {
             char letter = returnTypeName[i];
@@ -105,7 +107,7 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
             // llvm::outs() << _Rewriter.isRewritable(E->getCallee()->getExprLoc()) << "\n";
             // if (auto thing = _mgr.getCharacterData(E->getCallee()->getExprLoc())) {
             // llvm::outs() << thing << "\n";
-            // llvm::outs() << _Rewriter.ReplaceText(range, newName);
+            llvm::outs() << _Rewriter.ReplaceText(range, newName);
             // llvm::outs() << name << "Replaced Text" << "\n";
             // }
           }
@@ -117,6 +119,6 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
 }
 
 bool RemoveFuncVisitor::shouldTraversePostOrder() {
-  return true;
-  // return false;
+  // return true;
+  return false;
 }

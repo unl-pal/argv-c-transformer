@@ -30,7 +30,8 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
         if (_C->getSourceManager().isInMainFile(func->getLocation()) && (!func->isDefined() || func->isImplicit()) && func->getStorageClass() != clang::SC_Extern) {
           clang::FunctionDecl *refDecl = E->getDirectCallee();
           if (refDecl) {
-            std::string verifierString = "__VERIFIER_nondet_";
+            // std::string verifierString = "__VERIFIER_nondet_";
+            std::string verifierString = "";
             if (refDecl->declarationReplaces(func)) {
               clang::QualType funcType = E->getCallReturnType(*_C);
               std::string myType = funcType.getAsString();
