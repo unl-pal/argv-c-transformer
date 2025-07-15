@@ -8,7 +8,7 @@ class IsThereMainConsumer : public clang::ASTConsumer {
 public:
   IsThereMainConsumer(clang::Rewriter &rewriter);
 
-  virtual void HandleTranslationUnit(clang::ASTContext &context) override;
+  void HandleTranslationUnit(clang::ASTContext &Context) override;
 
 private:
   clang::Rewriter &_Rewriter;

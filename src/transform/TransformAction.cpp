@@ -5,6 +5,7 @@
 #include "GenerateCodeConsumer.hpp"
 
 #include <IsThereMainConsumer.hpp>
+#include <clang/AST/ASTContext.h>
 #include <clang/AST/TemplateName.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/MultiplexConsumer.h>
@@ -67,10 +68,12 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   // pp.addCommentHandler(CommentHandler *Handler)
 
   llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
+  // compiler.createASTReader();
+  // clang::ASTReader *reader = compiler.getASTReader().get();
+  // compiler.createASTContext();
+  // compiler.getASTContext().getTranslationUnitDecl()->dumpColor();
 
   std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
-
-  compiler.createASTContext();
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(std::make_unique<GenerateIncludeConsumer>(_Output));
@@ -92,6 +95,17 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 // Function that runs before any of the consumers but after preprocessor steps
 bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action" << "\n";
+
+  // compiler.createASTContext();
+  // compiler.getASTContext().getTranslationUnitDecl()->dumpColor();
+  // clang::ASTContext &Context = compiler.getASTContext();
+  // if (clang::DeclarationName main = compiler.getASTContext().Idents.find("main")->second) {
+  //   if (clang::FunctionDecl *func = compiler.getASTContext().getTranslationUnitDecl()->lookup(main).find_first<clang::FunctionDecl>()) {
+  //     func->dumpColor();
+  //   }
+  // }
+
+
   _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
   return result;
@@ -100,5 +114,6 @@ bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
 // Function that runs after all of the consumers but before the AST is cleaned up
 void TransformAction::EndSourceFileAction() {
   llvm::outs() << "End Source File Action" << "\n";
+  // getCompilerInstance().getASTContext().getTranslationUnitDecl()->dumpColor();
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }
