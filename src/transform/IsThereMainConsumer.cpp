@@ -146,7 +146,7 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       loc,
       declName,
       funcQualType,
-      nullptr,
+      Context.CreateTypeSourceInfo(Context.IntTy),
       clang::SC_None,
       false,
       false,
@@ -155,17 +155,25 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       nullptr
     );
     mainFunc->setWillHaveBody(true);
+    mainFunc->setHasImplicitReturnZero(true);
     // mainFunc->setParams({});
-    // clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr);
-    // std::vector<clang::ParmVarDecl*> parms = {parm};
+    clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.IntTy, nullptr, clang::SC_None, nullptr);
+    std::vector<clang::ParmVarDecl*> parms = {parm};
+    llvm::outs() << "Parameters size: " << parms.size() << "\n";
+
+    // auto thing = mainFunc->parameters().vec().swap(parms);
+    // llvm::outs() << "Size of Parameters: " << thing.size() << "\n";
+    mainFunc->parameters().vec() = parms;
+    llvm::outs() << "Parameters size: " << mainFunc->parameters().vec().size() << "\n";
+
     // mainFunc->setParams({clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr)});
     // clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.NullPtrTy, nullptr, clang::SC_None, nullptr);
     // clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, TD->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.IntTy, nullptr, clang::SC_None, nullptr);
     // clang::ParmVarDecl *parm = clang::ParmVarDecl::Empty;
     // parm->setOwningFunction(mainFunc);
-    // mainFunc->setParams({parm});
-    // mainFunc->addDecl(parm);
-    // mainFunc->addDecl(clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr));
+    mainFunc->setParams({parm});
+    mainFunc->addDecl(parm);
+    mainFunc->addDecl(clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr));
     // mainFunc->setParams({clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr)});
     // clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, TD, mainFunc->getLocation(), mainFunc->getLocation(), nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr);
     // mainFunc->addDeclInternal(parm);
@@ -196,8 +204,9 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   //   }
     // clang::ReturnStmt *returnStmt = clang::ReturnStmt::CreateEmpty(Context, false);
     // returnStmt->setRetValue(0);
-    clang::ReturnStmt *returnStmt = clang::ReturnStmt::Create(Context, mainFunc->getLocation(), clang::IntegerLiteral::Create(Context, llvm::APInt::doubleToBits(0), Context.IntTy, mainFunc->getLocation()), clang::VarDecl::CreateDeserialized(Context, TD->getGlobalID()));
-    stmts.emplace_back(returnStmt);
+    // TODO THIS ACTUALLY DOES WORK
+    // clang::ReturnStmt *returnStmt = clang::ReturnStmt::Create(Context, mainFunc->getLocation(), clang::IntegerLiteral::Create(Context, llvm::APInt::doubleToBits(0), Context.IntTy, mainFunc->getLocation()), clang::VarDecl::CreateDeserialized(Context, TD->getGlobalID()));
+    // stmts.emplace_back(returnStmt);
   } else {
     mainFunc = TD->lookup(&Context.Idents.get("main")).find_first<clang::FunctionDecl>();
     stmts.emplace(stmts.begin(), mainFunc->getBody());
