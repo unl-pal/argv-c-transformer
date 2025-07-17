@@ -36,27 +36,25 @@ void IsThereMainHandler::run(const clang::ast_matchers::MatchFinder::MatchResult
       clang::SourceLocation loc = mgr->getLocForEndOfFile(mgr->getMainFileID());
       if (mgr->isInMainFile(func->getLocation())) {
         llvm::outs() << "FOUND " << func->getNameAsString() << "!!\n";
-        if (!func->isReferenced() || !func->isUsed()) {
-
+        if (!func->isReferenced() && !func->isUsed()) {
+          func->dump();
+          // clang::QualType someType;
+          // clang::ArrayRef<clang::Expr*> args;
+          // for (clang::ParmVarDecl *parm : func->parameters()) {
+          //   clang::QualType tempType = parm->getType();
+          //   // clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*context, tempType, loc, (clang::FunctionDecl*)(func), false, loc, someType, clang::ExprValueKind::VK_LValue);
+          //   // args.vec().push_back()
+          // }
+          // if (func->parameters().size()) {
+          //   clang::ParmVarDecl *parm = func->parameters().front();
+          //   someType = parm->getType();
+          // } else {
+          //   someType = context->VoidTy;
+          // }
+          clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*context, func->getQualifierLoc(), clang::SourceLocation(), (clang::FunctionDecl*)(func), false, loc, func->getType(), clang::ExprValueKind::VK_LValue, (clang::NamedDecl*)(func)); // clang::CallExpr *callExpr = clang::CallExpr::Create(const ASTContext &Ctx, Expr *Fn, ArrayRef<Expr *> Args, QualType Ty, ExprValueKind VK, SourceLocation RParenLoc, FPOptionsOverride FPFeatures)
+          // clang::CallExpr *callExpr = clang::CallExpr::Create(*context, call, args, call->getFoundDecl()->getAsFunction()->getType(), clang::ExprValueKind::VK_LValue, loc, clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto));
+          _CallsToMake.emplace(call);
         }
-        func->dump();
-        clang::QualType someType;
-        clang::ArrayRef<clang::Expr*> args;
-        for (clang::ParmVarDecl *parm : func->parameters()) {
-          clang::QualType tempType = parm->getType();
-          // clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*context, tempType, loc, (clang::FunctionDecl*)(func), false, loc, someType, clang::ExprValueKind::VK_LValue);
-          // args.vec().push_back()
-        }
-        if (func->parameters().size()) {
-          clang::ParmVarDecl *parm = func->parameters().front();
-          someType = parm->getType();
-        } else {
-          someType = context->VoidTy;
-        }
-        clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*context, func->getQualifierLoc(), loc, (clang::FunctionDecl*)(func), false, loc, someType, clang::ExprValueKind::VK_LValue);
-        // clang::CallExpr *callExpr = clang::CallExpr::Create(const ASTContext &Ctx, Expr *Fn, ArrayRef<Expr *> Args, QualType Ty, ExprValueKind VK, SourceLocation RParenLoc, FPOptionsOverride FPFeatures)
-        // clang::CallExpr *callExpr = clang::CallExpr::Create(*context, call, args, call->getFoundDecl()->getAsFunction()->getType(), clang::ExprValueKind::VK_LValue, loc, clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto));
-        _CallsToMake.emplace(call);
       }
     }
   }

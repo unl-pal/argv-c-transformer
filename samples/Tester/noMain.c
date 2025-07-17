@@ -28,7 +28,15 @@ struct thing {
   bool b;
 };
 
-int doesThing(int input) {
+int doesThing(int input, int input2) {
+  int var = 1;
+  if (input) {
+    return var + input + input2;
+  }
+  return 0;
+}
+
+int doesThing2(int input) {
   int var = 1;
   if (input) {
     return var + input;
@@ -36,6 +44,13 @@ int doesThing(int input) {
   return 0;
 }
 
+int doesThing3(int input) {
+  int var = 1;
+  if (input) {
+    return var + input;
+  }
+  return 0;
+}
 // comments for the function to remove
 // badFunc3 comment
 bool empty() {
