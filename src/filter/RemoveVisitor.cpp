@@ -70,25 +70,27 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
           if (!_NeededTypes->count(E->getCallReturnType(*_C))) {
             _NeededTypes->emplace(E->getCallReturnType(*_C));
           }
+          clang::QualType callReturnType = E->getCallReturnType(*_C);
           std::string newName = "";
-          bool isPointer = E->getCallReturnType(*_C)->isPointerType();
-          std::string returnTypeName = E->getCallReturnType(*_C).getAsString();
+          bool isPointer = callReturnType->isPointerType();
+          bool isBool = callReturnType->isBooleanType();
+          std::string returnTypeName = callReturnType.getAsString();
           std::string newReturnTypeName = "";
-          if (E->getCallReturnType(*_C)->isBooleanType()) {
+          if (isBool) {
             newReturnTypeName = "bool";
           } else {
             newReturnTypeName = "";
-          }
-          for (unsigned i=0; i<returnTypeName.size(); i++) {
-            char letter = returnTypeName[i];
-            if (letter == ' ') {
-              newReturnTypeName += "";
-            } else if (letter == '_') {
-              newReturnTypeName += "";
-            } else if (letter == '*') {
-              newReturnTypeName += "";
-            } else {
-              newReturnTypeName += letter;
+            for (unsigned i=0; i<returnTypeName.size(); i++) {
+              char letter = returnTypeName[i];
+              if (letter == ' ') {
+                newReturnTypeName += "";
+              } else if (letter == '_') {
+                newReturnTypeName += "";
+              } else if (letter == '*') {
+                newReturnTypeName += "";
+              } else {
+                newReturnTypeName += letter;
+              }
             }
           }
           if (newReturnTypeName.size()) {

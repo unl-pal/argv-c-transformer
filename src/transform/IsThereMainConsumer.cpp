@@ -57,7 +57,8 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   // context.getTranslationUnitDecl()->dumpColor();
   // MatchFinder.addMatcher(decl().bind("something"), &Handler);
   MatchFinder.addMatcher(functionDecl(unless(isMain())).bind("functions"), &Handler);
-  MatchFinder.addMatcher(functionDecl(isMain()).bind("main"), &Handler);
+  // MatchFinder.addMatcher(functionDecl(isMain()).bind("main"), &Handler);
+  MatchFinder.addMatcher(functionDecl(matchesName("main")).bind("main"), &Handler);
   // llvm::outs() << "Add Ze Mache\n";
   MatchFinder.matchAST(Context);
   // llvm::outs() << "Run Ze Mache\n";
@@ -88,7 +89,9 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       }
     }
     for (clang::ParmVarDecl *var : vars) {
-      clang::IdentifierInfo *info = &Context.Idents.get("__VERIFIER_nondet_" + var->getType().getAsString());
+      clang::QualType varType = var->getType();
+      std::string varTypeString = varType->isBooleanType() ? "bool" : varType.getAsString();
+      clang::IdentifierInfo *info = &Context.Idents.get("__VERIFIER_nondet_" + varTypeString);
       clang::DeclarationName name(info);
       clang::DeclContextLookupResult result = TD->lookup(name);
       clang::FunctionDecl *verifier;
@@ -98,14 +101,20 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
           insertFirst = decl->getLocation();
           if (!mgr.isMacroArgExpansion(insertFirst)) {
             if (mgr.isInMainFile(insertFirst)) {
+              int firstLine = mgr.getSpellingLineNumber(insertFirst);
+              insertFirst = mgr.translateLineCol(mgr.getMainFileID(), firstLine, 1);
               break;
             }
           }
         }
-        verifier = clang::FunctionDecl::Create(Context, TD, insertFirst, insertFirst, name, var->getType(), nullptr, clang::SC_Extern);
+        verifier = clang::FunctionDecl::Create(Context, TD, insertFirst, insertFirst, name, varType, nullptr, clang::SC_Extern);
         TD->addDecl(verifier);
         if (insertFirst.isValid()) {
-          _Rewriter.InsertTextBefore(insertFirst, verifier->getNameAsString() + "();\n");
+          // _Rewriter.InsertTextBefore(insertFirst, varType.getAsString() + " " + verifier->getNameAsString() + "();\n");
+          std::string verifierString = "";
+          llvm::raw_string_ostream tempStream(verifierString);
+          verifier->getAsFunction()->print(tempStream);
+          _Rewriter.InsertTextBefore(insertFirst, verifierString + "();\n");
         }
       } else {
         verifier = result.find_first<clang::FunctionDecl>();
@@ -137,13 +146,17 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     clang::IdentifierInfo *funcName = &Context.Idents.get("main");
     clang::DeclarationName declName(funcName);
     clang::FunctionProtoType::ExtProtoInfo epi;
+    // clang::FunctionProtoType::FunctionType::ExtParameterInfo::getOpaqueValue() epi;
+    // epi.ExtParameterInfos->getOpaqueValue();
+    // epi.requiresFunctionProtoTypeArmAttributes();
+    // epi.requiresFunctionProtoTypeExtraBitfields();
     clang::QualType funcQualType = Context.IntTy;
 
     mainFunc = clang::FunctionDecl::Create(
       Context,
       TD,
       loc,
-      loc,
+      loc.getLocWithOffset(1),
       declName,
       funcQualType,
       Context.CreateTypeSourceInfo(Context.IntTy),
@@ -155,8 +168,9 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       nullptr
     );
     mainFunc->setWillHaveBody(true);
-    mainFunc->setHasImplicitReturnZero(true);
+    // mainFunc->setHasImplicitReturnZero(true);
     // mainFunc->setParams({});
+    // clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.IntTy, nullptr, clang::SC_None, nullptr);
     clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.IntTy, nullptr, clang::SC_None, nullptr);
     std::vector<clang::ParmVarDecl*> parms = {parm};
     llvm::outs() << "Parameters size: " << parms.size() << "\n";
@@ -205,8 +219,8 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     // clang::ReturnStmt *returnStmt = clang::ReturnStmt::CreateEmpty(Context, false);
     // returnStmt->setRetValue(0);
     // TODO THIS ACTUALLY DOES WORK
-    // clang::ReturnStmt *returnStmt = clang::ReturnStmt::Create(Context, mainFunc->getLocation(), clang::IntegerLiteral::Create(Context, llvm::APInt::doubleToBits(0), Context.IntTy, mainFunc->getLocation()), clang::VarDecl::CreateDeserialized(Context, TD->getGlobalID()));
-    // stmts.emplace_back(returnStmt);
+    clang::ReturnStmt *returnStmt = clang::ReturnStmt::Create(Context, mainFunc->getLocation(), clang::IntegerLiteral::Create(Context, llvm::APInt::doubleToBits(0), Context.IntTy, mainFunc->getLocation()), clang::VarDecl::CreateDeserialized(Context, TD->getGlobalID()));
+    stmts.emplace_back(returnStmt);
   } else {
     mainFunc = TD->lookup(&Context.Idents.get("main")).find_first<clang::FunctionDecl>();
     stmts.emplace(stmts.begin(), mainFunc->getBody());
@@ -217,12 +231,14 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   mainFunc->dumpColor();
   std::string mainString = "";
   llvm::raw_string_ostream tempStream(mainString);
-  mainFunc->print(tempStream, 2, true);
+  // mainFunc->print(tempStream, 2, true);
   // mainFunc->getAsFunction()->print(tempStream);
   // tempStream << mgr.getCharacterData(mainFunc->getLocation());
   // mainFunc->printGroup(mainFunc, mainFunc->getSourceRange tempStream, );
   // tempStream << "() ";
-  // mainFunc->getBody()->printPretty(tempStream, nullptr, Context.getPrintingPolicy());
+  // mainFunc->print(tempStream, 0, true);
+  tempStream << "int main() ";
+  mainFunc->getBody()->printPrettyControlled(tempStream, nullptr, Context.getPrintingPolicy(), 0, "\n", nullptr);
   if (!Handler.HasMain()) {
     _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainString);
   } else {
