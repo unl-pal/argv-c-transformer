@@ -37,7 +37,7 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
 
   std::string nondetName = "__VERIFIER_nondet_";
   for (clang::QualType returnType : *_NeededTypes) {
-    std::string returnTypeName = returnType.getAsString();
+    std::string returnTypeName = returnType->isBooleanType() ? "bool" : returnType.getAsString();
     llvm::outs() << returnTypeName << "\n";
     std::replace(returnTypeName.begin(), returnTypeName.end(), ' ', '_');
     clang::IdentifierInfo *funcName = &_C->Idents.get(nondetName + returnTypeName);
@@ -46,7 +46,7 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
       continue;
     }
     clang::FunctionProtoType::ExtProtoInfo epi;
-    clang::QualType funcQualType = _C->getFunctionType(returnType, clang::ArrayRef<clang::QualType>(), epi);
+    clang::QualType funcQualType = _C->getFunctionType(returnType, {_C->VoidTy}, epi);
 
     clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
       *_C,
@@ -55,13 +55,17 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
       loc,
       declName,
       funcQualType,
-      nullptr,
+      _C->CreateTypeSourceInfo(returnType),
       clang::SC_Extern
     );
     newFunction->setReferenced();
     newFunction->setIsUsed();
     D->addDecl(newFunction);
-    _Rewriter.InsertTextBefore(loc, "extern " + newFunction->getReturnType().getAsString() + " " + newFunction->getNameAsString() + "();\n");
+    // _Rewriter.InsertTextBefore(loc, "extern " + newFunction->getReturnType().getAsString() + " " + newFunction->getNameAsString() + "();\n");
+    std::string verifierString = "";
+    llvm::raw_string_ostream tempStream(verifierString);
+    newFunction->getAsFunction()->print(tempStream, 0, true);
+    _Rewriter.InsertTextBefore(loc, verifierString + ";\n");
   }
   return false;
 }

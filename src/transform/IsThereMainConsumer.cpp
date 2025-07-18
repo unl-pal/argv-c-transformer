@@ -19,6 +19,7 @@
 #include <clang/Basic/SourceManager.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <clang/Sema/DeclSpec.h>
 #include <llvm/ADT/APInt.h>
 #include <llvm/Support/raw_ostream.h>
 #include <sstream>
@@ -91,11 +92,14 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     for (clang::ParmVarDecl *var : vars) {
       clang::QualType varType = var->getType();
       std::string varTypeString = varType->isBooleanType() ? "bool" : varType.getAsString();
+      std::replace(varTypeString.begin(), varTypeString.end(), ' ', '_');
       clang::IdentifierInfo *info = &Context.Idents.get("__VERIFIER_nondet_" + varTypeString);
       clang::DeclarationName name(info);
       clang::DeclContextLookupResult result = TD->lookup(name);
       clang::FunctionDecl *verifier;
+      llvm::outs() << "PreProto\n";
       if (result.empty()) {
+      // if (result.find_first<clang::FunctionDecl>()) {
         clang::SourceLocation insertFirst;
         for (clang::Decl *decl : TD->decls()) {
           insertFirst = decl->getLocation();
@@ -107,14 +111,37 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
             }
           }
         }
-        verifier = clang::FunctionDecl::Create(Context, TD, insertFirst, insertFirst, name, varType, nullptr, clang::SC_Extern);
+        // clang::QualType funcQualType = Context.getFunctionType(Context.IntTy, {Context.VoidTy}, epi);
+        clang::FunctionProtoType::ExtProtoInfo varEpi;
+        clang::QualType funcQualType = Context.getFunctionType(varType, clang::ArrayRef<clang::QualType>({Context.VoidTy}), varEpi);
+        // clang::QualType funcQualType = Context.getFunctionType(Context.getCanonicalParamType(varType), {Context.VoidTy}, varEpi);
+        verifier = clang::FunctionDecl::Create(Context, TD, insertFirst, insertFirst.getLocWithOffset(1), name, funcQualType, Context.CreateTypeSourceInfo(varType), clang::SC_Extern);
+        verifier->setWillHaveBody(false);
+        // verifier = clang::FunctionDecl::Create(Context, TD, insertFirst, insertFirst, name, funcQualType, nullptr, clang::SC_Extern);
+        // verifier = clang::FunctionDecl::Create(Context, TD, insertFirst, insertFirst, name, varType, nullptr, clang::SC_Extern);
+        // verifier->setParams();
+
+        clang::ParmVarDecl *vParm = clang::ParmVarDecl::Create(Context, verifier->getDeclContext(), verifier->getLocation(), verifier->getLocation(), nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr);
+        verifier->setParams({vParm});
+        vParm->setOwningFunction(verifier);
+        verifier->addDecl(vParm);
+
+        // verifier->addDecl(clang::ParmVarDecl::Create(Context, verifier->getDeclContext(), verifier->getInnerLocStart(), verifier->getLocation(), &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr));
         TD->addDecl(verifier);
+        if (verifier) {
+          llvm::outs() << "Well at least there is that\n";
+          verifier->dumpColor();
+        }
         if (insertFirst.isValid()) {
           // _Rewriter.InsertTextBefore(insertFirst, varType.getAsString() + " " + verifier->getNameAsString() + "();\n");
           std::string verifierString = "";
-          llvm::raw_string_ostream tempStream(verifierString);
-          verifier->getAsFunction()->print(tempStream);
-          _Rewriter.InsertTextBefore(insertFirst, verifierString + "();\n");
+          llvm::raw_string_ostream verifierStream(verifierString);
+          llvm::outs() << "PreProto\n";
+          verifier->dumpColor();
+          verifier->getAsFunction()->print(verifierStream, 0, true);
+          // verifier->print(tempStream, 0, true);
+          llvm::outs() << "PreProto\n";
+          _Rewriter.InsertTextBefore(insertFirst, verifierString + ";\n");
         }
       } else {
         verifier = result.find_first<clang::FunctionDecl>();
@@ -146,11 +173,8 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     clang::IdentifierInfo *funcName = &Context.Idents.get("main");
     clang::DeclarationName declName(funcName);
     clang::FunctionProtoType::ExtProtoInfo epi;
-    // clang::FunctionProtoType::FunctionType::ExtParameterInfo::getOpaqueValue() epi;
-    // epi.ExtParameterInfos->getOpaqueValue();
-    // epi.requiresFunctionProtoTypeArmAttributes();
-    // epi.requiresFunctionProtoTypeExtraBitfields();
-    clang::QualType funcQualType = Context.IntTy;
+    // clang::FunctionProtoType::ExtParameterInfo epi;
+    clang::QualType funcQualType = Context.getFunctionType(Context.IntTy, {Context.VoidTy}, epi);
 
     mainFunc = clang::FunctionDecl::Create(
       Context,
@@ -160,65 +184,21 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       declName,
       funcQualType,
       Context.CreateTypeSourceInfo(Context.IntTy),
-      clang::SC_None,
-      false,
-      false,
-      false,
-      clang::ConstexprSpecKind::Unspecified,
-      nullptr
+      clang::SC_None//,
+      // false,
+      // false,
+      // false,
+      // clang::ConstexprSpecKind::Unspecified,
+      // nullptr
     );
     mainFunc->setWillHaveBody(true);
-    // mainFunc->setHasImplicitReturnZero(true);
-    // mainFunc->setParams({});
-    // clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.IntTy, nullptr, clang::SC_None, nullptr);
-    clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.IntTy, nullptr, clang::SC_None, nullptr);
+    clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr);
     std::vector<clang::ParmVarDecl*> parms = {parm};
     llvm::outs() << "Parameters size: " << parms.size() << "\n";
-
-    // auto thing = mainFunc->parameters().vec().swap(parms);
-    // llvm::outs() << "Size of Parameters: " << thing.size() << "\n";
-    mainFunc->parameters().vec() = parms;
-    llvm::outs() << "Parameters size: " << mainFunc->parameters().vec().size() << "\n";
-
-    // mainFunc->setParams({clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr)});
-    // clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.NullPtrTy, nullptr, clang::SC_None, nullptr);
-    // clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, TD->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.IntTy, nullptr, clang::SC_None, nullptr);
-    // clang::ParmVarDecl *parm = clang::ParmVarDecl::Empty;
-    // parm->setOwningFunction(mainFunc);
     mainFunc->setParams({parm});
     mainFunc->addDecl(parm);
     mainFunc->addDecl(clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr));
-    // mainFunc->setParams({clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr)});
-    // clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, TD, mainFunc->getLocation(), mainFunc->getLocation(), nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr);
-    // mainFunc->addDeclInternal(parm);
-    // mainFunc->getDeclContext()->addDecl(parm);
-    // mainFunc->setParams({parm});
-    // parm->setOwningFunction(mainFunc);
-    // parm->dumpColor();
-    // parm->getParentFunctionOrMethod()->dumpAsDecl();
-    // llvm::outs() << mainFunc->param_size() << "\n";
     TD->addDecl(mainFunc);
-    // TD->decls_end()->dumpColor();
-    // mainFunc->setImplicit(true);
-    // mainFunc->setQualifierInfo(mainFunc->getQualifierLoc());
-    // mainFunc->setParams({clang::ParmVarDecl::Create(ASTContext &C, DeclContext *DC, SourceLocation StartLoc, SourceLocation IdLoc, const IdentifierInfo *Id, QualType T, TypeSourceInfo *TInfo, StorageClass S, Expr *DefArg)})
-    // _Rewriter.InsertTextAfter(loc, mainFunc->getReturnType().getAsString() + " " + mainFunc->getNameAsString() + "() {\n");
-    // clang::SourceRange range;
-    // loc = mainFunc->getLocation();
-    // range.setBegin(loc);
-    // _Rewriter.InsertTextAfter(loc, "}");
-  //   clang::ast_matchers::MatchFinder FunctionsMatchFinder;
-  //   AllFunctionsToCallHandler FunctionsHandler;
-  //   FunctionsMatchFinder.addMatcher(functionDecl().bind("functions"),
-  //   &FunctionsHandler); FunctionsMatchFinder.matchAST(Context); llvm::outs()
-  //   << "Gotz Nameze\n"; if (FunctionsHandler.GetNames().size()) {
-  //     AddMainVisitor Visitor(&Context, FunctionsHandler.GetNames(),
-  //     _Rewriter);
-  //     Visitor.VisitTranslationUnitDecl(Context.getTranslationUnitDecl());
-  //   }
-    // clang::ReturnStmt *returnStmt = clang::ReturnStmt::CreateEmpty(Context, false);
-    // returnStmt->setRetValue(0);
-    // TODO THIS ACTUALLY DOES WORK
     clang::ReturnStmt *returnStmt = clang::ReturnStmt::Create(Context, mainFunc->getLocation(), clang::IntegerLiteral::Create(Context, llvm::APInt::doubleToBits(0), Context.IntTy, mainFunc->getLocation()), clang::VarDecl::CreateDeserialized(Context, TD->getGlobalID()));
     stmts.emplace_back(returnStmt);
   } else {
@@ -231,18 +211,10 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   mainFunc->dumpColor();
   std::string mainString = "";
   llvm::raw_string_ostream tempStream(mainString);
-  // mainFunc->print(tempStream, 2, true);
-  // mainFunc->getAsFunction()->print(tempStream);
-  // tempStream << mgr.getCharacterData(mainFunc->getLocation());
-  // mainFunc->printGroup(mainFunc, mainFunc->getSourceRange tempStream, );
-  // tempStream << "() ";
-  // mainFunc->print(tempStream, 0, true);
-  tempStream << "int main() ";
-  mainFunc->getBody()->printPrettyControlled(tempStream, nullptr, Context.getPrintingPolicy(), 0, "\n", nullptr);
+  mainFunc->print(tempStream, 0, true);
   if (!Handler.HasMain()) {
     _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainString);
   } else {
-    // mainFunc->getBody()->printPretty(tempStream, nullptr, Context.getPrintingPolicy());
     _Rewriter.ReplaceText(oldRange, mainString);
   }
 }
