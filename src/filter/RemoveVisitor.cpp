@@ -3,6 +3,7 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/RawCommentList.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/LLVM.h>
 #include <clang/Basic/LangStandard.h>
@@ -34,7 +35,7 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         llvm::outs() << name << " is macro thingy" << "\n";
         return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
       }
-      if (name == D->getNameAsString()) {
+      if (name == D->getNameAsString() && !D->isMain()) {
         clang::SourceLocation zero = _mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(D->getLocation()), 1);
         clang::SourceRange range = clang::SourceRange(zero, D->getEndLoc());
         if (D->getStorageClass() == clang::SC_Extern) {
@@ -46,7 +47,9 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
         }
         clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D);
         if (rawComment != nullptr) {
-          _Rewriter.RemoveText(rawComment->getSourceRange());
+          if (rawComment->getSourceRange().isValid()) {
+            _Rewriter.RemoveText(rawComment->getSourceRange());
+          }
         }
       }
     }
@@ -99,19 +102,21 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
             newName += "__VERIFIER_nondet_" + newReturnTypeName + "()";
             isPointer ? newName += ")" : newName;
             clang::SourceRange range;
-            range.setBegin(_mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(E->getCallee()->getEndLoc()), _mgr.getSpellingColumnNumber(E->getCallee()->getBeginLoc())));
-            range.setEnd(E->getRParenLoc());
+            range.setBegin(E->getBeginLoc());
+            // range.setBegin(_mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(E->getCallee()->getEndLoc()), _mgr.getSpellingColumnNumber(E->getCallee()->getBeginLoc())));
+            // range.setEnd(E->getRParenLoc());
+            range.setEnd(E->getEndLoc());
             // DEBUG STUFF
-            // if (range.isValid()) {
-            // llvm::outs() << name << " Range is Valid" << "\n";
-            // range.dump(_mgr);
+            if (range.isValid()) {
+            llvm::outs() << name << " Range is Valid" << "\n";
+            // range.print(llvm::outs(), _mgr);
             // llvm::outs() << newName << "\n";
             // llvm::outs() << _Rewriter.isRewritable(E->getCallee()->getExprLoc()) << "\n";
             // if (auto thing = _mgr.getCharacterData(E->getCallee()->getExprLoc())) {
             // llvm::outs() << thing << "\n";
-            llvm::outs() << _Rewriter.ReplaceText(range, newName);
+            llvm::outs() << "Rewriter Result: " << _Rewriter.ReplaceText(range, newName) << "\n";
             // llvm::outs() << name << "Replaced Text" << "\n";
-            // }
+            }
           }
         }
       }
@@ -120,7 +125,11 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
   return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitCallExpr(E);
 }
 
+bool RemoveFuncVisitor::VisitVarDecl(clang::VarDecl *D) {
+  return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitVarDecl(D);
+}
+
 bool RemoveFuncVisitor::shouldTraversePostOrder() {
-  // return true;
-  return false;
+  return true;
+  // return false;
 }

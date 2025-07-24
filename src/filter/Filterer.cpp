@@ -135,7 +135,7 @@ bool Filterer::checkPotentialFile(std::string fileName,
 
   if (file.is_open()) {
     std::regex allowedHeadersPattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
-    std::regex macroPattern("macro");
+    std::regex macroPattern("macro"); // Place holder for if we allow macros
     std::string line;
     std::smatch match;
     int count = 0;
@@ -272,12 +272,12 @@ int Filterer::run() {
       /// Set args for AST creation
       std::vector<std::string> args = std::vector<std::string>({
         "clang",
-        oldPath.string(),
-        "-extra-arg=-fparse-all-comments",
-        "-extra-arg=-resource-dir=" + resourceDir,
-        "-extra-arg=-Wdocumentation",
         "-extra-arg=-xc",
-        "-extra-arg=-I"
+        "-extra-arg=-I",
+        oldPath.string(),
+        "-extra-arg=-resource-dir=" + resourceDir,
+        "-extra-arg=-fparse-all-comments",
+        // "-extra-arg=-Wdocumentation",
       });
 
       int argc = args.size();

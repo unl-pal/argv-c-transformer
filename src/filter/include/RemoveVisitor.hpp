@@ -30,6 +30,8 @@ public:
   /// deleted functions
   bool VisitCallExpr(clang::CallExpr *E);
 
+  bool VisitVarDecl(clang::VarDecl *D);
+
   /// Tells the RecursiveASTVisitor wether to recurse depth or breadth first
   bool shouldTraversePostOrder();
 
