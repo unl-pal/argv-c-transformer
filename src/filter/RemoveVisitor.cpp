@@ -38,7 +38,8 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
       if (name == D->getNameAsString() && !D->isMain()) {
         clang::SourceLocation zero = _mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(D->getLocation()), 1);
         clang::SourceRange range = clang::SourceRange(zero, D->getEndLoc());
-        if (D->getStorageClass() == clang::SC_Extern) {
+        // if (D->getStorageClass() == clang::SC_Extern || D->isStatic()) {
+        if (!D->hasBody()) {
           range.setEnd(D->getEndLoc().getLocWithOffset(1));
         }
         if (range.isValid()) {
@@ -103,17 +104,9 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
             isPointer ? newName += ")" : newName;
             clang::SourceRange range;
             range.setBegin(E->getBeginLoc());
-            // range.setBegin(_mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(E->getCallee()->getEndLoc()), _mgr.getSpellingColumnNumber(E->getCallee()->getBeginLoc())));
-            // range.setEnd(E->getRParenLoc());
             range.setEnd(E->getEndLoc());
-            // DEBUG STUFF
             if (range.isValid()) {
-            llvm::outs() << name << " Range is Valid" << "\n";
-            // range.print(llvm::outs(), _mgr);
-            // llvm::outs() << newName << "\n";
-            // llvm::outs() << _Rewriter.isRewritable(E->getCallee()->getExprLoc()) << "\n";
-            // if (auto thing = _mgr.getCharacterData(E->getCallee()->getExprLoc())) {
-            // llvm::outs() << thing << "\n";
+            // llvm::outs() << name << " Range is Valid" << "\n";
             llvm::outs() << "Rewriter Result: " << _Rewriter.ReplaceText(range, newName) << "\n";
             // llvm::outs() << name << "Replaced Text" << "\n";
             }

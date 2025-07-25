@@ -4,6 +4,7 @@
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/DeclarationName.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/NestedNameSpecifier.h>
 #include <clang/AST/Type.h>
 #include <clang/ASTMatchers/ASTMatchFinder.h>
 #include <clang/Basic/LLVM.h>
@@ -32,28 +33,77 @@ void IsThereMainHandler::run(const clang::ast_matchers::MatchFinder::MatchResult
     // may need to add it to the main
     if (const clang::FunctionDecl *func = results.Nodes.getNodeAs<clang::FunctionDecl>("functions")) {
       clang::SourceManager *mgr = results.SourceManager;
+      if (clang::FunctionType::MacroQualified == func->getType()->getTypeClass()) {
+        llvm::outs() << "This is a Macro thingy\n";
+      }
+      // if (func->getFunctionType()->isFunctionProtoType()) {
+      //   llvm::outs() << "FOUND " << func->getNameAsString() << "!!\n";
+      //   llvm::outs() << "This is a Function Proto Type\n";
+      //   return;
+      // }
+      if (const clang::FunctionDecl *def = func->getDefinition()) {
+        if (def->getLocation().isMacroID()) {
+          llvm::outs() << "IsInSystemMacro\n";
+        };
+      }
+      if (func->getLocation().isMacroID()) {
+          llvm::outs() << "IsInSystemMacro\n";
+      }
+      if (mgr->isInSystemMacro(func->getLocation())) {
+        llvm::outs() << "IsInSystemMacro\n";
+      }
+      if (func->getLocation().isMacroID()) {
+        llvm::outs() << "Is Macro ID\n";
+      }
+      if (func->getLocation().isValid()) {
+        llvm::outs() << "Location is Valid\n";
+      }
+      if (func->hasValidDeclKind()) {
+        llvm::outs() << "Has Valid Decl Kind\n";
+      }
       clang::ASTContext *context = results.Context;
       clang::SourceLocation loc = mgr->getLocForEndOfFile(mgr->getMainFileID());
       if (mgr->isInMainFile(func->getLocation())) {
         llvm::outs() << "FOUND " << func->getNameAsString() << "!!\n";
         if (!func->isReferenced() && !func->isUsed()) {
-          func->dump();
-          // clang::QualType someType;
-          // clang::ArrayRef<clang::Expr*> args;
-          // for (clang::ParmVarDecl *parm : func->parameters()) {
-          //   clang::QualType tempType = parm->getType();
-          //   // clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*context, tempType, loc, (clang::FunctionDecl*)(func), false, loc, someType, clang::ExprValueKind::VK_LValue);
-          //   // args.vec().push_back()
-          // }
-          // if (func->parameters().size()) {
-          //   clang::ParmVarDecl *parm = func->parameters().front();
-          //   someType = parm->getType();
-          // } else {
-          //   someType = context->VoidTy;
-          // }
-          clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*context, func->getQualifierLoc(), clang::SourceLocation(), (clang::FunctionDecl*)(func), false, loc, func->getType(), clang::ExprValueKind::VK_LValue, (clang::NamedDecl*)(func)); // clang::CallExpr *callExpr = clang::CallExpr::Create(const ASTContext &Ctx, Expr *Fn, ArrayRef<Expr *> Args, QualType Ty, ExprValueKind VK, SourceLocation RParenLoc, FPOptionsOverride FPFeatures)
-          // clang::CallExpr *callExpr = clang::CallExpr::Create(*context, call, args, call->getFoundDecl()->getAsFunction()->getType(), clang::ExprValueKind::VK_LValue, loc, clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto));
-          _CallsToMake.emplace(call);
+          if (func->isStatic() || mgr->isMacroBodyExpansion(func->getLocation()) || mgr->isMacroArgExpansion(func->getLocation())) {
+            return;
+          } else {
+            // if (func->getDefinition()) {
+
+            auto thing = context->getMacroQualifiedType(context->VoidTy, &context->Idents.get(func->getNameAsString()));
+            thing->isFunctionProtoType();
+
+            func->dumpColor();
+            // clang::QualType someType;
+            // clang::ArrayRef<clang::Expr*> args;
+            // for (clang::ParmVarDecl *parm : func->parameters()) {
+            //   clang::QualType tempType = parm->getType();
+            //   // clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*context, tempType, loc, (clang::FunctionDecl*)(func), false, loc, someType, clang::ExprValueKind::VK_LValue);
+            //   // args.vec().push_back()
+            // }
+            // if (func->parameters().size()) {
+            //   clang::ParmVarDecl *parm = func->parameters().front();
+            //   someType = parm->getType();
+            // } else {
+            //   someType = context->VoidTy;
+            // }
+            clang::NestedNameSpecifierLoc qualLoc;
+            func->dumpAsDecl();
+            if (func->getQualifierLoc()) {
+              qualLoc = func->getQualifierLoc();
+            } else {
+              qualLoc = clang::NestedNameSpecifierLoc();
+            }
+
+            clang::FunctionProtoType::ExtProtoInfo epi;
+            clang::QualType funcQualType = context->getFunctionType(func->getReturnType(), clang::ArrayRef<clang::QualType>({context->VoidTy}), epi);
+            // clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*context, qualLoc, clang::SourceLocation(), (clang::FunctionDecl*)(func), false, loc, func->getType(), clang::ExprValueKind::VK_LValue, (clang::NamedDecl*)(func)); // clang::CallExpr *callExpr = clang::CallExpr::Create(const ASTContext &Ctx, Expr *Fn, ArrayRef<Expr *> Args, QualType Ty, ExprValueKind VK, SourceLocation RParenLoc, FPOptionsOverride FPFeatures)
+            clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*context, qualLoc, clang::SourceLocation(), (clang::FunctionDecl*)(func), false, func->getLocation(), funcQualType, clang::ExprValueKind::VK_LValue);
+            // clang::CallExpr *callExpr = clang::CallExpr::Create(*context, call, args, call->getFoundDecl()->getAsFunction()->getType(), clang::ExprValueKind::VK_LValue, loc, clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto));
+            _CallsToMake.emplace(call);
+            // }
+          }
         }
       }
     }

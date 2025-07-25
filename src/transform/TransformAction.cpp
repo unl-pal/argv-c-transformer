@@ -63,6 +63,12 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   clang::Preprocessor &pp = compiler.getPreprocessor();
   pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
 
+  // pp.macro_begin();
+  // pp.macro_end();
+  // pp.macros();
+  // TODO - Decide on the inclusion or exclusion of MACROS
+  // pp.SetMacroExpansionOnlyInDirectives(); // Come Back To This
+
   // llvm::outs() << "Added Callbacks for: " << filename << "\n";
   // TODO implement a comment handler in code regen
   // pp.addCommentHandler(CommentHandler *Handler)
@@ -80,7 +86,6 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   tempVector.emplace_back(std::make_unique<ReplaceDeadCallsConsumer>(neededTypes, _Rewriter));
   tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(_Output, neededTypes, _Rewriter));
   tempVector.emplace_back(std::make_unique<IsThereMainConsumer>(_Rewriter));
-  // tempVector.emplace_back(std::make_unique<AddMainConsumer>(hasMain));
   // tempVector.emplace_back(std::make_unique<GenerateCodeConsumer>(_Output));
 
   // Multiplexor of all consumers that will be run over the same AST
@@ -95,16 +100,6 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 // Function that runs before any of the consumers but after preprocessor steps
 bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action" << "\n";
-
-  // compiler.createASTContext();
-  // compiler.getASTContext().getTranslationUnitDecl()->dumpColor();
-  // clang::ASTContext &Context = compiler.getASTContext();
-  // if (clang::DeclarationName main = compiler.getASTContext().Idents.find("main")->second) {
-  //   if (clang::FunctionDecl *func = compiler.getASTContext().getTranslationUnitDecl()->lookup(main).find_first<clang::FunctionDecl>()) {
-  //     func->dumpColor();
-  //   }
-  // }
-
 
   _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
