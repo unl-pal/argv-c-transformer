@@ -29,6 +29,8 @@ std::unique_ptr<clang::ASTConsumer>
 FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
                                 llvm::StringRef          filename) {
 
+  compiler.getPreprocessor().SetMacroExpansionOnlyInDirectives();
+
   llvm::outs() << "Created ASTConsumer" << "\n";
   compiler.createASTContext();
 

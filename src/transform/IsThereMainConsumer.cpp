@@ -24,7 +24,6 @@
 #include <clang/Sema/DeclSpec.h>
 #include <llvm/ADT/APInt.h>
 #include <llvm/Support/raw_ostream.h>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -36,55 +35,15 @@ using namespace clang::ast_matchers;
 void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   llvm::outs() << "Looking for Main Function\n";
   clang::ast_matchers::MatchFinder MatchFinder;
-  // IsThereMainHandler Handler(_Rewriter);
-  // std::set<clang::CallExpr*> callsToMake;
   std::set<clang::DeclRefExpr*> callsToMake;
   IsThereMainHandler Handler(callsToMake);
-  // TODO REMOVE ME
-  // if (Context.Idents.find("main") != Context.Idents.end()) {
-  //   auto lookup = Context.Idents.find("main");
-  //   llvm::outs() << "Found Lookup\n";
-  //   // if (lookup) {
-  //     // llvm::outs() << "Found main name\n";
-  //     if (clang::DeclarationName main = lookup->second) {
-  //       llvm::outs() << "Found main info\n";
-  //       if (clang::TranslationUnitDecl *TD = Context.getTranslationUnitDecl()) {
-  //         llvm::outs() << "Found TD\n";
-  //         if (clang::FunctionDecl *func = TD->lookup(main).find_first<clang::FunctionDecl>()) {
-  //           llvm::outs() << "Found main\n";
-  //           func->dumpColor();
-  //         }
-  //       }
-  //     }
-  //   // }
-  // }
-  // context.getTranslationUnitDecl()->dumpColor();
-  // MatchFinder.addMatcher(decl().bind("something"), &Handler);
-  // MatchFinder.addMatcher(clang::ast_matchers::selectFirst<clang::Decl>("first", *results)->isUnavailable, &Handler);
-  MatchFinder.addMatcher(clang::ast_matchers::translationUnitDecl(clang::ast_matchers::traverse(clang::TraversalKind::TK_IgnoreUnlessSpelledInSource, clang::ast_matchers::decl().bind("allDecls"))), &Handler); // Currently not in use...
+  // MatchFinder.addMatcher(clang::ast_matchers::translationUnitDecl(clang::ast_matchers::traverse(clang::TraversalKind::TK_IgnoreUnlessSpelledInSource, clang::ast_matchers::decl().bind("allDecls"))), &Handler); // Currently not in use...
   MatchFinder.addMatcher(functionDecl(isMain()).bind("main"), &Handler);
-  MatchFinder.addMatcher(functionDecl(unless(allOf(isMain(), isExpansionInMainFile(), isExpandedFromMacro("*")))).bind("functions"), &Handler);
-  // internal::matcher_isExpansionInFileMatching0Matcher<typename clang::Decl, typename clang::ParmVarDecl>();
-  // clang::ast_matchers::macroQualifiedType
-  // MatchFinder.addMatcher(functionDecl(matchesName("main")).bind("main"), &Handler);
-  // llvm::outs() << "Add Ze Mache\n";
+  // MatchFinder.addMatcher(functionDecl(unless(anyOf(isMain(), isExpansionInMainFile(), isExpandedFromMacro("*")))).bind("functions"), &Handler);
+  MatchFinder.addMatcher(functionDecl(unless(isMain())).bind("functions"), &Handler);
   MatchFinder.matchAST(Context);
-  // llvm::outs() << "Run Ze Mache\n";
   clang::TranslationUnitDecl *TD = Context.getTranslationUnitDecl();
   clang::SourceManager &mgr = Context.getSourceManager();
-  //
-  // TODO - This is getting stupider by the minute
-  // need to verify that a verifier exists or create and add one if there is not
-  // in order for the nondet calls of the args/parameters on referenced
-  // functions in main are there and available while all the AST info on types
-  // and what not exists and is easily available
-  //
-  // This is a bigger headache than planned and is leading to a ver conplicated
-  // consumer
-  //
-  // This needs to be broken out into more functions and tasks to make this
-  // easier to understand and maintain if possible
-  //
   std::vector<clang::Stmt*> stmts;
   for (clang::DeclRefExpr *call : callsToMake) {
     std::vector<clang::Expr*> tempArgs({});
@@ -96,12 +55,19 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
         }
       }
     }
+    llvm::outs() << "Calls to Make: " << callsToMake.size() << "\n";
     for (clang::ParmVarDecl *var : vars) {
       clang::QualType varType = var->getType();
-      if (!varType->isBuiltinType()) {
+      if (varType->isAnyPointerType()) {
         break;
-        // varType = Context.VoidPtrTy;
-      } // Attempting to replace custom return values and parameters with void*
+      }
+      // if (!varType->isBuiltinType() &&
+      //   !varType->isBooleanType() &&
+      //   !varType->isCharType() &&
+      //   !varType->isVoidType()) {
+      //   // break;
+      //   // varType = Context.VoidPtrTy;
+      // } // Attempting to replace custom return values and parameters with void*
       varType->dump();
       std::string varTypeString = varType->isBooleanType() ? "bool" : varType.getAsString();
       std::replace(varTypeString.begin(), varTypeString.end(), ' ', '_');
@@ -115,7 +81,6 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       clang::FunctionDecl *verifier;
       llvm::outs() << "PreProto\n";
       if (result.empty()) {
-      // if (result.find_first<clang::FunctionDecl>()) {
         clang::SourceLocation insertFirst;
         for (clang::Decl *decl : TD->decls()) {
           insertFirst = decl->getLocation();
@@ -127,41 +92,31 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
             }
           }
         }
-        // clang::QualType funcQualType = Context.getFunctionType(Context.IntTy, {Context.VoidTy}, epi);
         clang::FunctionProtoType::ExtProtoInfo varEpi;
-        // clang::QualType funcQualType = Context.getFunctionType(varType, clang::ArrayRef<clang::QualType>({Context.VoidTy}), varEpi);
-        // clang::QualType funcQualType = Context.getFunctionType(varType, {}, varEpi);
         clang::QualType funcQualType = Context.getFunctionType(Context.getCanonicalParamType(varType), {Context.VoidTy}, varEpi);
         verifier = clang::FunctionDecl::Create(Context, TD, insertFirst, insertFirst.getLocWithOffset(1), name, funcQualType, Context.CreateTypeSourceInfo(varType), clang::SC_Extern);
 
         verifier->setLocation(insertFirst);
         verifier->setReferenced();
         verifier->setIsUsed();
-        // verifier->setWillHaveBody(false);
-        // verifier = clang::FunctionDecl::Create(Context, TD, insertFirst, insertFirst, name, funcQualType, nullptr, clang::SC_Extern);
-        // verifier = clang::FunctionDecl::Create(Context, TD, insertFirst, insertFirst, name, varType, nullptr, clang::SC_Extern);
-        // verifier->setParams();
 
         clang::ParmVarDecl *vParm = clang::ParmVarDecl::Create(Context, verifier->getDeclContext(), verifier->getLocation(), verifier->getLocation(), nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr);
         verifier->setParams({vParm});
         vParm->setOwningFunction(verifier);
         verifier->addDecl(vParm);
+        verifier->addDecl(clang::ParmVarDecl::Create(Context, verifier->getDeclContext(), verifier->getInnerLocStart(), verifier->getLocation(), &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr));
 
-        // verifier->addDecl(clang::ParmVarDecl::Create(Context, verifier->getDeclContext(), verifier->getInnerLocStart(), verifier->getLocation(), &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr));
         TD->addDecl(verifier);
         if (verifier) {
           llvm::outs() << "Well at least there is that\n";
-          verifier->dumpColor();
+          // verifier->dumpColor();
         }
         if (insertFirst.isValid()) {
-          // _Rewriter.InsertTextBefore(insertFirst, varType.getAsString() + " " + verifier->getNameAsString() + "();\n");
           std::string verifierString = "";
           llvm::raw_string_ostream verifierStream(verifierString);
           llvm::outs() << "PreProto\n";
           verifier->dumpColor();
           verifier->getAsFunction()->print(verifierStream, 0, true);
-          // verifierString = "extern " + verifier->getNameAsString() + "()";
-          // verifier->print(tempStream, 0, true);
           llvm::outs() << "PreProto\n";
           _Rewriter.InsertTextBefore(insertFirst, verifierString + ";\n");
         }
@@ -177,28 +132,19 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     if (tempArgs.size() < vars.size()) {
       break;
     }
-    // args.vec().(tempArgs);
     llvm::outs() << "Args Size: " << tempArgs.size() << "\n";
     clang::CallExpr *callExpr = clang::CallExpr::Create(Context, call, tempArgs, call->getType(), clang::ExprValueKind::VK_LValue, call->getLocation(), clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto));
     callExpr->dumpColor();
     stmts.emplace_back(callExpr);
-    // clang::Decl *callee = callExpr->getCalleeDecl();
-    
-
-    // mainFunc->addDecl(callee);
-
-    // llvm::outs() << 
-    // _Rewriter.InsertTextAfter(Context.getSourceManager().getLocForEndOfFile(Context.getSourceManager().getMainFileID()), callExpr)
   }
+
   clang::FunctionDecl* mainFunc;
   if (!Handler.HasMain()) {
-    llvm::outs() << "Not Haz Ze Maene\n";
     llvm::outs() << "Building Main\n";
     clang::SourceLocation loc = mgr.getLocForEndOfFile(mgr.getMainFileID());
     clang::IdentifierInfo *funcName = &Context.Idents.get("main");
     clang::DeclarationName declName(funcName);
     clang::FunctionProtoType::ExtProtoInfo epi;
-    // clang::FunctionProtoType::ExtParameterInfo epi;
     clang::QualType funcQualType = Context.getFunctionType(Context.IntTy, {Context.VoidTy}, epi);
 
     mainFunc = clang::FunctionDecl::Create(
@@ -210,11 +156,6 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       funcQualType,
       Context.CreateTypeSourceInfo(Context.IntTy),
       clang::SC_None//,
-      // false,
-      // false,
-      // false,
-      // clang::ConstexprSpecKind::Unspecified,
-      // nullptr
     );
     mainFunc->setWillHaveBody(true);
     clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(), nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr);
@@ -231,25 +172,21 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     stmts.emplace(stmts.begin(), mainFunc->getBody());
   }
   clang::SourceRange oldRange = mainFunc->getSourceRange();
-  clang::SourceLocation oldLocation = mainFunc->getLocation();
   clang::CompoundStmt *body = clang::CompoundStmt::Create(Context, stmts, clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_None), mainFunc->getBeginLoc(), mainFunc->getBodyRBrace());
   mainFunc->setBody(body);
-  // mainFunc->dumpColor();
   llvm::outs() << "Body Printed\n";
   std::string mainString = "";
   llvm::raw_string_ostream tempStream(mainString);
-  mainFunc->print(tempStream, 0, true);
-  llvm::outs() << mainString << "Main Printed\n";
-  // mainFunc->print(tempStream);
+  mainFunc->print(tempStream, 0, false);
+  // llvm::outs() << mainString << "Main Printed\n";
   if (!Handler.HasMain()) {
     llvm::outs() << "Did Not Have Main\n";
     _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainString);
   } else {
     if (oldRange.isValid() && _Rewriter.isRewritable(mainFunc->getLocation())) {
       llvm::outs() << "Range is Valid\n";
-      oldRange.dump(mgr);
-      // _Rewriter.ReplaceText(oldRange, mainString);
-      // _Rewriter.RemoveText(oldRange);
+      // oldRange.dump(mgr);
+      _Rewriter.RemoveText(oldRange);
       llvm::outs() << "Removed\n";
       _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainString);
       llvm::outs() << "Replaced\n";
