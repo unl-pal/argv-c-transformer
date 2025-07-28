@@ -11,7 +11,7 @@
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/MultiplexConsumer.h>
 #include <clang/Lex/Preprocessor.h>
-#include <llvm20/include/clang/AST/Type.h>
+#include <clang/AST/Type.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -29,6 +29,8 @@ std::unique_ptr<clang::ASTConsumer>
 FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
                                 llvm::StringRef          filename) {
 
+  // Only expand directive macros
+  //  What qualifies as directive
   compiler.getPreprocessor().SetMacroExpansionOnlyInDirectives();
 
   llvm::outs() << "Created ASTConsumer" << "\n";
@@ -58,11 +60,6 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   return result;
 }
 
-// May be needed or implemented later to force only the preprocessor to run on code
-// bool GenerateIncludeAction::usesPreprocessorOnly() const {
-//   return 1;
-// }
-
 bool FilterAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action" << "\n";
   _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
@@ -72,6 +69,5 @@ bool FilterAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
 
 void FilterAction::EndSourceFileAction() {
   llvm::outs() << "End Source File Action" << "\n";
-  // _Rewriter.overwriteChangedFiles();
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }

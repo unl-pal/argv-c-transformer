@@ -63,21 +63,10 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   clang::Preprocessor &pp = compiler.getPreprocessor();
   pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
 
-  // pp.macro_begin();
-  // pp.macro_end();
-  // pp.macros();
   // TODO - Decide on the inclusion or exclusion of MACROS
-  // pp.SetMacroExpansionOnlyInDirectives(); // Come Back To This
-
-  // llvm::outs() << "Added Callbacks for: " << filename << "\n";
-  // TODO implement a comment handler in code regen
-  // pp.addCommentHandler(CommentHandler *Handler)
+  pp.SetMacroExpansionOnlyInDirectives(); // Come Back To This
 
   llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
-  // compiler.createASTReader();
-  // clang::ASTReader *reader = compiler.getASTReader().get();
-  // compiler.createASTContext();
-  // compiler.getASTContext().getTranslationUnitDecl()->dumpColor();
 
   std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
 
@@ -109,6 +98,5 @@ bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
 // Function that runs after all of the consumers but before the AST is cleaned up
 void TransformAction::EndSourceFileAction() {
   llvm::outs() << "End Source File Action" << "\n";
-  // getCompilerInstance().getASTContext().getTranslationUnitDecl()->dumpColor();
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }
