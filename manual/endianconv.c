@@ -31,6 +31,8 @@
 
 extern uint __VERIFIER_nondet_uint(void);
 
+extern void __VERIFIER_assert(int cond);
+
 void memrev16(void *p) {
     unsigned char *x = p, t;
 
@@ -112,9 +114,15 @@ int endianconvTest(int argc, char *argv[], int flags) {
     return 0;
 }
 #endif
+
 int main(void) {
-    intrev16(__VERIFIER_nondet_uint());
-    intrev32(__VERIFIER_nondet_uint());
-    intrev64(__VERIFIER_nondet_uint());
-    return 0;
+    uint result;
+
+    result = intrev16(__VERIFIER_nondet_uint());
+    result += intrev32(__VERIFIER_nondet_uint());
+    result += intrev64(__VERIFIER_nondet_uint());
+
+    __VERIFIER_assert(result);
+
+    return result;
 }
