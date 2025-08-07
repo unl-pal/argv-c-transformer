@@ -34,16 +34,27 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+// Modified by ArgV-C-Transformer
 
 #include <stdarg.h>
 #include <stdio.h> 
 #include <stdlib.h>
 #include <signal.h>
+#include <string.h>
+
+extern void abort();
+void reach_error();
+
+extern void * __VERIFIER_nondet_pointer(void);
+extern int __VERIFIER_nondet_int(void);
+
+void __VERIFIER_assert(int cond) { if(!cond) {reach_error(); abort(); } }
 
 void _serverAssert(const char *estr, const char *file, int line) {
     fprintf(stderr, "=== ASSERTION FAILED ===");
     fprintf(stderr, "==> %s:%d '%s' is not true",file,line,estr);
     raise(SIGSEGV);
+    __VERIFIER_assert(0);
 }
 
 void _serverPanic(const char *file, int line, const char *msg, ...) {
@@ -58,9 +69,19 @@ void _serverPanic(const char *file, int line, const char *msg, ...) {
     fprintf(stderr, "!!! Software Failure. Press left mouse button to continue");
     fprintf(stderr, "Guru Meditation: %s #%s:%d",fmtmsg,file,line);
     abort();
+    __VERIFIER_assert(0);
 }
 
 int main(void)
 {
-    return 0;
+  _serverAssert((const char *)(__VERIFIER_nondet_pointer()),
+                (const char *)(__VERIFIER_nondet_pointer()),
+                __VERIFIER_nondet_int());
+  _serverPanic(
+      (const char *)(__VERIFIER_nondet_pointer()), __VERIFIER_nondet_int(),
+      (const char *)(__VERIFIER_nondet_pointer()), __VERIFIER_nondet_int());
+  // _serverAssert("unknown", "thisFile.i", 420);
+  // _serverPanic("thisFile.c\n", 420, "Does not compute\n", strcmp("this",
+  // "that"));
+  return 0;
 }

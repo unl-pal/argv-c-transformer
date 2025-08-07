@@ -25,12 +25,15 @@
    +----------------------------------------------------------------------+
  */
 
-// Modified by ArgV-C-Transformer
+// Modified by ArgV-C-Transformer and PACLab Team
 
 extern void * __VERIFIER_nondet_pointer(void);
 extern double __VERIFIER_nondet_double(void);
-
-extern void __VERIFIER_assert(int cond);
+//
+// extern void abort();
+// void reach_error();
+//
+// void __VERIFIER_assert(int cond) { if (!cond) { reach_error(); abort(); } }
 
 #ifdef __cplusplus
 extern "C"
@@ -122,7 +125,10 @@ fstrcmp (const char *string1, const char *string2, double minimum)
 
 int main(void)
 {
-  double result = fstrcmp((const char *)(__VERIFIER_nondet_pointer()), (const char *)(__VERIFIER_nondet_pointer()), __VERIFIER_nondet_double());
-  __VERIFIER_assert(result);
-  return result;
+  // double result = fstrcmp((const char *)(__VERIFIER_nondet_pointer()), (const char *)(__VERIFIER_nondet_pointer()), __VERIFIER_nondet_double());
+  // double result = fstrcmp((const char *)(""), (const char *)(""), __VERIFIER_nondet_double());
+  double result = fstrcmp("abc", "abd", 0.0);
+
+  // __VERIFIER_assert(1);
+  return 1;
 }

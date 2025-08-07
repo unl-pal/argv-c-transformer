@@ -18,13 +18,16 @@
    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
    02111-1307 USA.  */
 
-// Modified by ArgV-C-Transformer
+// Modified by ArgV-C-Transformer and PACLab Team
 
 #include <stdlib.h>
 
+extern void abort();
+void reach_error();
+
 extern void * __VERIFIER_nondet_pointer(void);
-extern void __assert_fail(const char *assertion, const char *file,
-                          unsigned int line, const char *function);
+
+void __VERIFIER_assert(int cond) {if (!cond) {reach_error(); abort(); } }
 
 /* This algorithm is mentioned in the ISO C standard, here extended
    for 32 bits.  */
@@ -55,8 +58,7 @@ int rand_r (unsigned int *seed)
 int main(void)
 {
     int result = rand_r((unsigned int *)(__VERIFIER_nondet_pointer()));
-    if (result) {
-        __assert_fail("0", "rand_r.c", 56, "main");
-    }
+    __VERIFIER_assert(result >= 0);
     return result;
+    __VERIFIER_assert(0);
 }

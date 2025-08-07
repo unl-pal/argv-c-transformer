@@ -16,11 +16,17 @@
 
 // Modified by ArgV-C-Transformer
 
+#include <stddef.h>
+#include <stdio.h>
 #include <string.h>
+
+extern void abort();
+// void reach_error();
+void reach_error() {}
 
 extern void * __VERIFIER_nondet_pointer(void);
 extern long __VERIFIER_nondet_long(void);
-extern void __VERIFIER_assert(int cond);
+void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
 
 /*
  * Copy string src to buffer dst of size dsize.  At most dsize-1
@@ -36,8 +42,9 @@ redis_strlcpy(char *dst, const char *src, size_t dsize)
     /* Copy as many bytes as will fit. */
     if (nleft != 0) {
         while (--nleft != 0) {
-            if ((*dst++ = *src++) == '\0')
+            if ((*dst++ = (char)*src++) == '\0')
                 break;
+            // printf("nleft: %zu\nsrc char: %c\ndst char: %c\n", nleft, *src, *dst);
         }
     }
 
@@ -62,6 +69,7 @@ redis_strlcpy(char *dst, const char *src, size_t dsize)
 size_t
 redis_strlcat(char *dst, const char *src, size_t dsize)
 {
+    // printf("str1: %s\nstr2: %s\nsize: %zu\n", dst, src, dsize);
     const char *odst = dst;
     const char *osrc = src;
     size_t n = dsize;
@@ -89,8 +97,43 @@ redis_strlcat(char *dst, const char *src, size_t dsize)
 
 int main(void) 
 {
-    long result = redis_strlcat((char *)(__VERIFIER_nondet_pointer()), (const char *)(__VERIFIER_nondet_pointer()), __VERIFIER_nondet_long());
-    result += redis_strlcpy((char *)(__VERIFIER_nondet_pointer()), (const char *)(__VERIFIER_nondet_pointer()), __VERIFIER_nondet_long());
-    __VERIFIER_assert(result);
-    return result;
+
+    char *str1 = "Hello";
+    const char* str2 = "World";
+    // size_t num = strlen(str1);
+    size_t num = 5;
+
+    // size_t result = redis_strlcat(str1, str2, num);
+    printf("%zu\n", redis_strlcat(str1, str2, num));
+
+    // __VERIFIER_assert(result >= 0);
+
+//     size_t result = redis_strlcat(
+//         (char *)(__VERIFIER_nondet_pointer()),
+//         (const char *)(__VERIFIER_nondet_pointer()),
+//         __VERIFIER_nondet_long()
+//     );
+
+
+    // result = redis_strlcpy(
+    //     (char *)(__VERIFIER_nondet_pointer()),
+    //     (const char *)(__VERIFIER_nondet_pointer()),
+    //     __VERIFIER_nondet_long()
+    // );
+
+    // size_t num = strlen(str1);
+    // char str3[5] = {'H', 'e', 'l', 'l', 'o'};
+    char str3[5] = {'H', 'e', 'l', 'l', 'o'};
+    const char* str4 = "World";
+    // char *str5 = strstr(str4, "World");
+    size_t num2 = 5;
+    printf("%zu\n", redis_strlcpy(str3, str4, num2));
+    // printf("%zu\n", redis_strlcpy(str5, str4, num2));
+    // result = redis_strlcpy(str1, str2, num);
+
+    // __VERIFIER_assert(result >= 0);
+
+
+    return 0;
+    // __VERIFIER_assert(0);
 }

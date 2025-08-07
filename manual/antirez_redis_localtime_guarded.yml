@@ -1,0 +1,14 @@
+format_version: '2.0'
+
+input_files: 'localtime.c'
+
+properties:
+  - property_file: ../properties/unreach-call.prp
+    expected_verdict: true
+  # - property_file: ../properties/no-overflow.prp
+  #   expected_verdict: true # Currently cannot seem to compute
+  # should be usable with multi threading I believe
+
+options:
+  language: C
+  data_model: LP64

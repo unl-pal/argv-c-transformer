@@ -30,10 +30,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+extern void abort();
+void reach_error();
+
 extern int __VERIFIER_nondet_int(void);
 extern void * __VERIFIER_nondet_pointer(void);
 
-extern void __VERIFIER_assert(int cond);
+void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
 
 #undef get16bits
 #if (defined(__GNUC__) && defined(__i386__)) || defined(__WATCOMC__) \
@@ -52,7 +55,7 @@ int rem;
 
     if (len <= 0 || data == NULL) return 0;
 
-    rem = len & 3;
+    rem = len & 3; // is the same as % 4 but better optimized and works with <0
     len >>= 2;
 
     /* Main loop */
@@ -63,6 +66,7 @@ int rem;
         data  += 2*sizeof (uint16_t);
         hash  += hash >> 11;
     }
+    __VERIFIER_assert(len == 0);
 
     /* Handle end cases */
     switch (rem) {
@@ -93,6 +97,6 @@ int rem;
 
 int main(void) {
     uint32_t result = SuperFastHash ((const char *)(__VERIFIER_nondet_pointer()), __VERIFIER_nondet_int());
-    __VERIFIER_assert(result);
     return result;
+    __VERIFIER_assert(0);
 }

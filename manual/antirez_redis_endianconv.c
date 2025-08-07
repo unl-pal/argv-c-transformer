@@ -29,9 +29,12 @@
 /* Toggle the 16 bit unsigned integer pointed by *p from little endian to
  * big endian */
 
+extern void abort();
+void reach_error();
+
 extern uint __VERIFIER_nondet_uint(void);
 
-extern void __VERIFIER_assert(int cond);
+void __VERIFIER_assert(int cond);
 
 void memrev16(void *p) {
     unsigned char *x = p, t;
@@ -116,13 +119,18 @@ int endianconvTest(int argc, char *argv[], int flags) {
 #endif
 
 int main(void) {
-    uint result;
 
-    result = intrev16(__VERIFIER_nondet_uint());
-    result += intrev32(__VERIFIER_nondet_uint());
-    result += intrev64(__VERIFIER_nondet_uint());
+    uint16_t original_16 = (uint16_t)__VERIFIER_nondet_uint();
+    uint16_t reversed_16 = intrev16(original_16);
+    __VERIFIER_assert(original_16 == intrev16(reversed_16));
 
-    __VERIFIER_assert(result);
+    uint32_t original_32 = (uint32_t)__VERIFIER_nondet_uint();
+    uint32_t reversed_32 = intrev32(original_32);
+    __VERIFIER_assert(original_32 == intrev32(reversed_32));
 
-    return result;
+    uint64_t original_64 = (uint64_t)__VERIFIER_nondet_uint();
+    uint64_t reversed_64 = intrev64(original_64);
+    __VERIFIER_assert(original_64 == intrev64(reversed_64));
+
+    return 0;
 }
