@@ -42,7 +42,7 @@ extern "C"
 
 #include <string.h>
 
-static int similar_text(char *str1, char *str2, int len1, int len2)
+static int similar_text(const char *str1, const char *str2, int len1, int len2)
 {
   int sum;
   int pos1 = 0, pos2 = 0;
@@ -98,14 +98,12 @@ static int similar_text(char *str1, char *str2, int len1, int len2)
  similar.  */
 
 double
-fstrcmp (char *string1, char *string2, double minimum)
+fstrcmp (const char *string1, const char *string2, double minimum)
 {
   int len1, len2, score;
 
   len1 = (int)strlen(string1);
   len2 = (int)strlen(string2);
-
-  // __VERIFIER_assert(len1 >= 0 && len2 >= 0);
 
   /* short-circuit obvious comparisons */
   if (len1 == 0 && len2 == 0)
@@ -127,14 +125,10 @@ fstrcmp (char *string1, char *string2, double minimum)
 
 int main(void)
 {
-  char *var1 = (char *)(__VERIFIER_nondet_pointer());
-  char *var2 = (char *)(__VERIFIER_nondet_pointer());
-
-  double var3 = __VERIFIER_nondet_double();
-
-  double result = fstrcmp(var1, var2, var3);
+  double result = fstrcmp((const char *)(__VERIFIER_nondet_pointer()),
+                          (const char *)(__VERIFIER_nondet_pointer()),
+                          __VERIFIER_nondet_double());
 
   __VERIFIER_assert(result >= 0.0 && result <=1.0);
-
   return result;
 }
