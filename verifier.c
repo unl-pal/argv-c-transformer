@@ -28,3 +28,7 @@ unsigned int __VERIFIER_nondet_uint(void) {
 bool __VERIFIER_nondet_bool(void) {
    return false;
 }
+
+void* __VERIFIER_nondet_pointer(void) {
+   return (void*)(5);
+}

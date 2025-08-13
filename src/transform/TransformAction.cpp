@@ -64,7 +64,7 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
 
   // TODO - Decide on the inclusion or exclusion of MACROS
-  pp.SetMacroExpansionOnlyInDirectives(); // Come Back To This
+  // pp.SetMacroExpansionOnlyInDirectives(); // Come Back To This
 
   llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
 

@@ -31,7 +31,7 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 
   // Only expand directive macros
   //  What qualifies as directive
-  compiler.getPreprocessor().SetMacroExpansionOnlyInDirectives();
+  // compiler.getPreprocessor().SetMacroExpansionOnlyInDirectives();
 
   llvm::outs() << "Created ASTConsumer" << "\n";
   compiler.createASTContext();

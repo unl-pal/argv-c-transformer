@@ -38,8 +38,8 @@ int doesThing(int input) {
 
 // comments for the function to remove
 // badFunc3 comment
-bool empty() {
-  return false;
+bool emptyBoolCall() {
+  return a1 == a2;
 }
 
 char* returnsString() {
@@ -77,12 +77,12 @@ int main() {
     ++a0;
   }
 
-  bool y = empty();
+  bool y = emptyBoolCall();
 
-  y = empty() && anotherBool;
+  y = emptyBoolCall() && anotherBool;
 
   int z;
-  if (empty() || y) {
+  if (emptyBoolCall() || y) {
     z = hasInput(a2) + a1;
   } else {
     z = 0;

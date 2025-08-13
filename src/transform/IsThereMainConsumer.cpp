@@ -51,6 +51,12 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     ).bind("main"),
     &Handler);
 
+  // MatchFinder.addMatcher(
+  //   functionDecl(
+  //     clang::ast_matchers::matchesName("main")
+  //   ).bind("main"),
+  //   &Handler);
+
   MatchFinder.addMatcher(
     functionDecl(
       unless(
@@ -303,7 +309,8 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainString);
   } else {
     if (oldRange.isValid() && _Rewriter.isRewritable(mainFunc->getLocation())) {
-      _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainString);
+      // _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainString);
+      _Rewriter.ReplaceText(oldRange, mainString);
     } else {
       llvm::outs() << "Oops\n";
     }

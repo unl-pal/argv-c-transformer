@@ -41,8 +41,12 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
     std::string returnTypeName = returnType.getAsString();
     llvm::outs() << returnTypeName << "\n";
     std::string newReturnTypeName;
+    bool isPointer = returnType->isAnyPointerType();
     if (returnTypeName == "_Bool") {
       newReturnTypeName = "bool";
+    } else if (isPointer) {
+      newReturnTypeName = "pointer";
+      returnTypeName = "void*";
     } else {
       for (unsigned i=0; i<returnTypeName.size(); i++) {
         char letter = returnTypeName[i];
@@ -60,7 +64,12 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
     clang::IdentifierInfo *funcName = &_C->Idents.get(nondetName + newReturnTypeName);
     clang::DeclarationName declName(funcName);
     clang::FunctionProtoType::ExtProtoInfo epi;
-    clang::QualType funcQualType = _C->getFunctionType(returnType, clang::ArrayRef<clang::QualType>(), epi);
+    clang::QualType funcQualType;
+    if (isPointer) {
+      funcQualType = _C->getFunctionType(_C->VoidPtrTy, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
+    } else {
+      funcQualType = _C->getFunctionType(returnType, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
+    }
 
     clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
       *_C,
@@ -72,11 +81,43 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
       nullptr,
       clang::SC_Extern
     );
+
     newFunction->setReferenced();
     newFunction->setIsUsed();
+
+    clang::ParmVarDecl *vParm = clang::ParmVarDecl::Create(
+      *_C,
+      newFunction->getDeclContext(),
+      newFunction->getLocation(),
+      newFunction->getLocation(),
+      nullptr,
+      _C->VoidTy,
+      nullptr,
+      clang::SC_None,
+      nullptr
+    );
+
+    newFunction->setParams({vParm});
+    vParm->setOwningFunction(newFunction);
+    newFunction->addDecl(vParm);
     D->addDecl(newFunction);
-    _Rewriter.InsertTextBefore(loc, "extern " + newReturnTypeName + " " + newFunction->getNameAsString() + "();\n");
+    if (loc.isValid() && mgr.isInMainFile(loc)) {
+      std::string verifierString = "";
+      llvm::raw_string_ostream tempStream(verifierString);
+      // newFunction->getAsFunction()->print(tempStream, 0, true);
+      newFunction->print(tempStream);
+      llvm::outs() << verifierString << " - The String\n";
+      _Rewriter.InsertTextBefore(loc, verifierString + ";\n");
+      llvm::outs() << "Inserted the text\n";
+    }
   }
-  _Rewriter.InsertTextBefore(loc, "\n");
   return false;
+
+  //   newFunction->setReferenced();
+  //   newFunction->setIsUsed();
+  //   D->addDecl(newFunction);
+  //   _Rewriter.InsertTextBefore(loc, "extern " + newReturnTypeName + " " + newFunction->getNameAsString() + "();\n");
+  // }
+  // _Rewriter.InsertTextBefore(loc, "\n");
+  // return false;
 }

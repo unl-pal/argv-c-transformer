@@ -51,16 +51,21 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
   for (clang::QualType returnType : *_NeededTypes) {
     // std::string returnTypeName;
 
+    // Should probably have a enum or def somewhere with all supported
+    // verrifiers to draw on for situations like this, or in config?
     if (!returnType->isBuiltinType() &&
         !returnType->isBooleanType() &&
         !returnType->isArrayType() &&
         !returnType->isAnyCharacterType() &&
-        !returnType->isVoidType()
+        !returnType->isVoidType() &&
+        !returnType->isAnyPointerType()
     ) {
       continue;
     }
 
+    bool isPointer = returnType->isAnyPointerType();
     std::string returnTypeName = returnType->isBooleanType() ? "bool" : returnType.getAsString();
+    returnTypeName = isPointer ? "pointer" : returnTypeName;
     llvm::outs() << returnTypeName << "\n";
     std::replace(returnTypeName.begin(), returnTypeName.end(), ' ', '_');
     std::replace(returnTypeName.begin(), returnTypeName.end(), '*', '\0');
@@ -74,7 +79,12 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
     }
     clang::FunctionProtoType::ExtProtoInfo epi;
 
-    clang::QualType funcQualType = _C->getFunctionType(returnType, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
+    clang::QualType funcQualType;
+    if (isPointer) {
+      funcQualType = _C->getFunctionType(_C->VoidPtrTy, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
+    } else {
+      funcQualType = _C->getFunctionType(returnType, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
+    }
 
     clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
       *_C,
@@ -109,7 +119,7 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
     if (loc.isValid() && mgr.isInMainFile(loc)) {
       std::string verifierString = "";
       llvm::raw_string_ostream tempStream(verifierString);
-      newFunction->getAsFunction()->print(tempStream, 0, true);
+      // newFunction->getAsFunction()->print(tempStream, 0, true);
       newFunction->print(tempStream);
       llvm::outs() << verifierString << " - The String\n";
       _Rewriter.InsertTextBefore(loc, verifierString + ";\n");

@@ -33,16 +33,23 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
             // std::string verifierString = "__VERIFIER_nondet_";
             std::string verifierString = "";
             if (refDecl->declarationReplaces(func)) {
-              clang::QualType funcType = E->getCallReturnType(*_C);
-              std::string myType = funcType.getAsString();
+              clang::QualType returnType = E->getCallReturnType(*_C);
+              clang::QualType newReturnType = returnType;
+              std::string myType = returnType.getAsString();
               std::string newName = "";
               newName += verifierString;
-              std::string returnTypeName = E->getCallReturnType(*_C).getAsString();
+              // std::string returnTypeName = E->getCallReturnType(*_C).getAsString();
+              std::string returnTypeName = returnType.getAsString();
               std::string newReturnTypeName = "";
-              bool isPointer = E->getType()->isPointerType();
-              if (returnTypeName == "_Bool") {
+              bool isPointer = returnType->isPointerType();
+              if (returnType->isBooleanType()) {
+                newReturnType = _C->BoolTy;
                 newReturnTypeName = "bool";
-              } else {
+              } else if (isPointer) {
+                newReturnType = _C->VoidPtrTy;
+                myType = "void*";
+                newReturnTypeName = "pointer";
+              }else {
                 for (unsigned i=0; i<returnTypeName.size(); i++) {
                   char letter = returnTypeName[i];
                   if (letter == ' ') {
@@ -56,12 +63,44 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
                   } 
                 }
               }
-              isPointer ? newName += "(" + newReturnTypeName : newName;
-              isPointer ? newName += "*)(" : newName += "";
+              isPointer ? newName += "(" + returnTypeName + ")(" : newName;
               newName += "__VERIFIER_nondet_" + newReturnTypeName + "()";
               isPointer ? newName += ")" : newName;
-              _NeededTypes->emplace(funcType);
-              _Rewriter.ReplaceText(E->getSourceRange(), newName);
+              clang::SourceRange range;
+              range.setBegin(E->getBeginLoc());
+              range.setEnd(E->getEndLoc());
+              clang::IdentifierInfo *funcName = &_C->Idents.get("__VERIFIER__non_det_" + newReturnTypeName);
+              clang::DeclarationName declName(funcName);
+              clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
+                *_C,
+                _C->getTranslationUnitDecl(),
+                E->getExprLoc(),
+                // range.getEnd.getLocWithOffset(1),
+                E->getExprLoc().getLocWithOffset(1),
+                funcName,
+                refDecl->getReturnType(),
+                // returnType,
+                _C->CreateTypeSourceInfo(_C->VoidTy),
+                clang::SC_Extern
+              );
+              if (range.isValid()) {
+                // llvm::outs() << name << " Range is Valid" << "\n";
+                std::string verifierString = "";
+                llvm::raw_string_ostream tempStream(verifierString);
+              isPointer ? verifierString += "(" + newReturnTypeName + ")(" : verifierString;
+              newFunction->printName(tempStream);
+              isPointer ? verifierString += "())" : verifierString += "()";
+              llvm::outs() << verifierString << " - The String for Replace Dead Calls Visitor\n";
+              _Rewriter.ReplaceText(E->getSourceRange(), verifierString);
+                // _Rewriter.ReplaceText(range, verifierString);
+                llvm::outs() << "Inserted the text\n";
+            // llvm::outs() << "Rewriter Result: " << _Rewriter.ReplaceText(range, newName) << "\n";
+            // llvm::outs() << name << "Replaced Text" << "\n";
+              // }
+            // }
+              }
+              _NeededTypes->emplace(returnType);
+              // _Rewriter.ReplaceText(E->getSourceRange(), verifierString);
             }
           }
         }
@@ -74,4 +113,5 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
 
 bool ReplaceDeadCallsVisitor::shouldTraversePostOrder() {
   return true;
+  // return false;
 }
