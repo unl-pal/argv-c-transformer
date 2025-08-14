@@ -112,12 +112,4 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
     }
   }
   return false;
-
-  //   newFunction->setReferenced();
-  //   newFunction->setIsUsed();
-  //   D->addDecl(newFunction);
-  //   _Rewriter.InsertTextBefore(loc, "extern " + newReturnTypeName + " " + newFunction->getNameAsString() + "();\n");
-  // }
-  // _Rewriter.InsertTextBefore(loc, "\n");
-  // return false;
 }

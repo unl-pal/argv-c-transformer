@@ -8,6 +8,7 @@ struct transformConfigs {
   bool keepCompilesOnly;
   std::string filterDir;
   std::string benchmarkDir;
+  bool wipeOldBenchmarks;
 };
 
 class Transformer {

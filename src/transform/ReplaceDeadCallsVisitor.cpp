@@ -75,7 +75,6 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
                 *_C,
                 _C->getTranslationUnitDecl(),
                 E->getExprLoc(),
-                // range.getEnd.getLocWithOffset(1),
                 E->getExprLoc().getLocWithOffset(1),
                 funcName,
                 refDecl->getReturnType(),
@@ -84,23 +83,16 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
                 clang::SC_Extern
               );
               if (range.isValid()) {
-                // llvm::outs() << name << " Range is Valid" << "\n";
                 std::string verifierString = "";
                 llvm::raw_string_ostream tempStream(verifierString);
-              isPointer ? verifierString += "(" + newReturnTypeName + ")(" : verifierString;
-              newFunction->printName(tempStream);
-              isPointer ? verifierString += "())" : verifierString += "()";
-              llvm::outs() << verifierString << " - The String for Replace Dead Calls Visitor\n";
-              _Rewriter.ReplaceText(E->getSourceRange(), verifierString);
-                // _Rewriter.ReplaceText(range, verifierString);
+                isPointer ? verifierString += "(" + newReturnTypeName + ")(" : verifierString;
+                newFunction->printName(tempStream);
+                isPointer ? verifierString += "())" : verifierString += "()";
+                llvm::outs() << verifierString << " - The String for Replace Dead Calls Visitor\n";
+                _Rewriter.ReplaceText(E->getSourceRange(), verifierString);
                 llvm::outs() << "Inserted the text\n";
-            // llvm::outs() << "Rewriter Result: " << _Rewriter.ReplaceText(range, newName) << "\n";
-            // llvm::outs() << name << "Replaced Text" << "\n";
-              // }
-            // }
               }
               _NeededTypes->emplace(returnType);
-              // _Rewriter.ReplaceText(E->getSourceRange(), verifierString);
             }
           }
         }

@@ -21,9 +21,9 @@ ninja -C build filter transform
 
 set +e
 
-echo "=================================== Reset Directories ==================================="
-rm -r filteredFiles/*
-rm -r benchmark/*
+# echo "=================================== Reset Directories ==================================="
+# rm -r filteredFiles/*
+# rm -r benchmark/*
 
 set -e
 

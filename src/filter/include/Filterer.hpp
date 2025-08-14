@@ -10,6 +10,7 @@ struct filterConfigs {
   std::string databaseDir;
   std::string filterDir;
   int debugLevel;
+  bool wipeOldBenchmarks;
 };
 
 class Filterer {

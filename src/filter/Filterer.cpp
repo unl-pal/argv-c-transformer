@@ -17,9 +17,20 @@
 #include <regex>
 #include <string>
 
+const int defaultDebugLevel = 0;
+// const bool defaultKeepCompilesOnly = true;
+const std::string defaultFilterDir = "filteredFiles";
+const std::string defaultDatabaseDir = "database";
+/// Not yet implemented in code - currently handled by scripts
+const bool defaultWipeOldBenchmarks = true;
+
 Filterer::Filterer(std::string configFile){
   typesRequested = std::vector<unsigned int>();
   typeNames = std::vector<std::string>();
+  configuration.debugLevel = defaultDebugLevel;
+  configuration.filterDir = defaultFilterDir;
+  configuration.databaseDir = defaultDatabaseDir;
+  configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
   parseConfigFile(configFile);
 
 };
@@ -82,16 +93,16 @@ void Filterer::parseConfigFile(std::string configFile) {
             value = typeMatches.suffix().str();
           }
         } else if (key == "databaseDir") {
-          if (std::filesystem::exists(value)) {
-            configuration.databaseDir = value;
-          } else {
-            configuration.databaseDir = "database";
+          configuration.databaseDir = value;
+          if (!std::filesystem::exists(value)) {
+            std::cout << "There is no directory: " << value
+                      << " to use as Database\nAborting Filtering Attempt"
+                      << std::endl;
           }
         } else if (key == "filterDir") {
-          if (std::filesystem::exists(value)) {
-            configuration.filterDir = value;
-          } else {
-            configuration.filterDir = "filteredFiles";
+          configuration.filterDir = value;
+          if (!std::filesystem::exists(value)) {
+            std::filesystem::create_directory(value);
           }
         } else if (key == "debugLevel") {
           try {
@@ -99,6 +110,8 @@ void Filterer::parseConfigFile(std::string configFile) {
           } catch (...) {
             configuration.debugLevel = 0;
           }
+        } else if (key == "wipeOldBenchmarks") {
+          configuration.wipeOldBenchmarks = (value == "true" || value == "True");
         } else {
           std::cout << "Key: " << key
             << " Is Not A Valid Key For Filtering Files" << std::endl;
@@ -117,9 +130,6 @@ void Filterer::parseConfigFile(std::string configFile) {
   } else {
     std::cerr << "File Failed to Open" << std::endl;
     std::cout << "Using Default Settings" << std::endl;
-    configuration.debugLevel = 0;
-    configuration.filterDir = "filtereredFiles";
-    configuration.databaseDir = "database";
   }
 }
 
@@ -244,11 +254,12 @@ int Filterer::run() {
     if (checkPotentialFile(fileName, contents)) {
       std::filesystem::path oldPath(fileName);
       std::filesystem::path newPath(std::filesystem::current_path() /
-                                    "filteredFiles");
+                                    configuration.filterDir);
       /// set up the new path in filteredFiles to keep directory structure
       // prevent writing outside the project directory for now
       for (const std::filesystem::path &component : oldPath) {
-        if (component.string() != "..") {
+        if (component.string() != ".."
+          || component.string() == configuration.databaseDir) {
           newPath /= component;
         }
       }
