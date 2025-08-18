@@ -40,8 +40,8 @@ has been set.
 
 The project can be run on folders or individual files as specified by the user
 in the provided configuration file. The configuration file also provides all
-settings used by the filter and the transformer during the run. Such as the
-minimum number of loops needed or location of the filtered files.
+settings used by the filter functions and the transformer during the run. Such
+as the minimum number of loops needed or location of the filtered files.
 
 The name of the configuration file is passed to the program as a commandline
 argument and can be passed to a tool individually or, if using either the
@@ -125,3 +125,15 @@ scripts should remain local to the user's system.
 
 These scripts can act as a template for user scripts or as an example on how to
 run the code on unix based systems.
+
+### Manual Benchmarks
+
+These benchmarks were initially transformed by the ArgC tool then subsequently
+modified by the developers to match SV-Comp style requirements by adding
+assertions and necessary yml files. Currently there are 10 'finished'
+benchmarks in the manual/round1 directory and incomplete benchmarks waiting for
+manual adjustments in the manual/round2 directory. All benchmarks in the
+manual/practice directory were created from scratch and are useful for
+understanding the addition of assertions as well as what kinds of properties a
+file may have. These are not exhaustive and should be treated as a starting
+point for learning only.
