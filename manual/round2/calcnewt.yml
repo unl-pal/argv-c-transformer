@@ -1,16 +1,13 @@
 format_version: '2.0'
 
-input_files: 'endianconv.c'
+input_files: 'antirez_redis_strl.c'
 
 properties:
   - property_file: ../properties/unreach-call.prp
     expected_verdict: true
   - property_file: ../properties/no-overflow.prp
     expected_verdict: true
-  - property_file: ../properties/termination.prp
-    expected_verdict: true
 
 options:
   language: C
   data_model: LP64
-  # ?? data_model: ILP32 && LP64 #both conversions are available

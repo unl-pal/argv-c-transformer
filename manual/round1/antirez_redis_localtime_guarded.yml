@@ -1,6 +1,6 @@
 format_version: '2.0'
 
-input_files: 'localtime.c'
+input_files: 'antirez_redis_localtime_guarded.c'
 
 properties:
   - property_file: ../properties/unreach-call.prp

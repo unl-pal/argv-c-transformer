@@ -66,11 +66,11 @@ void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
 
     tmp->tm_isdst = dst;
     tmp->tm_hour = seconds / secs_hour;
-    __VERIFIER_assert(tmp->tm_hour < 24);
+    __VERIFIER_assert(tmp->tm_hour >= 0 && tmp->tm_hour < 24);
     tmp->tm_min = (seconds % secs_hour) / secs_min;
-    __VERIFIER_assert(tmp->tm_min < 60);
+    __VERIFIER_assert(tmp->tm_min >= 0 && tmp->tm_min < 60);
     tmp->tm_sec = (seconds % secs_hour) % secs_min;
-    __VERIFIER_assert(tmp->tm_sec < 60);
+    __VERIFIER_assert(tmp->tm_sec >= 0 && tmp->tm_sec < 60);
 
     /* 1/1/1970 was a Thursday, that is, day 4 from the POV of the tm structure
      * where sunday = 0, so to calculate the day of the week we have to add 4

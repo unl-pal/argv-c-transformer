@@ -1,9 +1,9 @@
 format_version: '2.0'
 
-input_files: 'fstrcmp.c'
+input_files: 'antirez_redis_strl.c'
 
 properties:
-  - property_file: ../properties/termination.prp
+  - property_file: ../properties/unreach-call.prp
     expected_verdict: true
   - property_file: ../properties/no-overflow.prp
     expected_verdict: true
@@ -11,4 +11,3 @@ properties:
 options:
   language: C
   data_model: LP64
-

@@ -105,7 +105,7 @@ fstrcmp (char *string1, char *string2, double minimum)
   len1 = (int)strlen(string1);
   len2 = (int)strlen(string2);
 
-  // __VERIFIER_assert(len1 >= 0 && len2 >= 0);
+  __VERIFIER_assert(len1 >= 0 && len2 >= 0);
 
   /* short-circuit obvious comparisons */
   if (len1 == 0 && len2 == 0)

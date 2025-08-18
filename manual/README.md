@@ -8,11 +8,20 @@ ArgV-C version used - pre V0.0.0 experimental
 
 Benchmarks created automagically from FLOSS projects on GitHub including:
 
+Round1:
+
 - DrKLO/Telegram
 - antirez/redis
 - plexinc/plex-home-theater-public
 
-Along with PACLab created benchmarks:
+Round2:
+
+- Currently Identifying Candidates for Manual Transformation
+- stuff goes here
+
+Ignore PACLab created benchmarks:
+
+Practice:
 
 - triangle
 - triangle1

@@ -92,6 +92,7 @@ int rem;
     hash ^= hash << 25;
     hash += hash >> 6;
 
+    __VERIFIER_assert(rem > 0 && rem <=3);
     return hash;
 }
 
