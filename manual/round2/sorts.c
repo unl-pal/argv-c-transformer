@@ -4,6 +4,13 @@
 
 static int SIZE = 15;
 
+extern void abort();
+void reach_error();
+
+extern int __VERIFIER_nondet_int(void);
+
+void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
+
 void unsort(int *p);
 void print(int *p);
 void bubble(int *p);

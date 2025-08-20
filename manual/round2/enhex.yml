@@ -1,12 +1,10 @@
 format_version: '2.0'
 
-input_files: 'antirez_redis_strl.c'
+input_files: 'enhex.c'
 
 properties:
   - property_file: ../properties/unreach-call.prp
-    expected_verdict: true
-  - property_file: ../properties/no-overflow.prp
-    expected_verdict: true
+    expected_verdict: true #cpachecker and I disagree on this
 
 options:
   language: C

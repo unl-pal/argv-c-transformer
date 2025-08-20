@@ -17,6 +17,8 @@
    Boston, MA 02111-1307, USA.
 */
 
+#include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 #include <limits.h>
 #include <errno.h>
@@ -35,12 +37,7 @@ void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
    necessary.  Returns the number of characters read (not including the
    null terminator), or -1 on error or EOF.  */
 
-ssize_t
-getdelim (lineptr, n, terminator, stream)
-     char **lineptr;
-     size_t *n;
-     int terminator;
-     FILE *stream;
+ssize_t getdelim (char **lineptr, size_t *n, int terminator, FILE *stream)
 {
   char *line, *p;
   size_t size, copy;
@@ -60,6 +57,7 @@ getdelim (lineptr, n, terminator, stream)
 #ifndef	MAX_CANON
 #define	MAX_CANON	256
 #endif
+      // line = realloc(*lineptr, MAX_CANON);
       line = (char*)(__VERIFIER_nondet_pointer());
       if (line == NULL)
 	return -1;
@@ -73,45 +71,57 @@ getdelim (lineptr, n, terminator, stream)
   copy = size;
   p = line;
 
-      while (1)
-	{
-	  size_t len;
+  while (1)
+  {
+    size_t len;
 
-	  while (--copy > 0)
-	    {
-	      register int c = getc (stream);
-	      if (c == EOF)
-		goto lose;
-	      else if ((*p++ = c) == terminator)
-		goto win;
-	    }
+    while (--copy > 0)
+    {
+      // register int c = getc (stream);
+      register int c = __VERIFIER_nondet_int();
+      if (c == EOF)
+	goto lose;
+      else if ((*p++ = c) == terminator)
+	goto win;
+    }
 
-	  /* Need to enlarge the line buffer.  */
-	  len = p - line;
-	  size *= 2;
-	  line = (char*)(__VERIFIER_nondet_pointer());
-	  if (line == NULL)
-	    goto lose;
-	  *lineptr = line;
-	  *n = size;
-	  p = line + len;
-	  copy = size - len;
-	}
+    /* Need to enlarge the line buffer.  */
+    len = p - line;
+    size *= 2;
+    line = (char*)(__VERIFIER_nondet_pointer());
+    if (line == NULL)
+      goto lose;
+    *lineptr = line;
+    *n = size;
+    p = line + len;
+    copy = size - len;
+  }
+  __VERIFIER_assert(0);
 
- lose:
+lose:
   if (p == *lineptr)
     return -1;
   /* Return a partial line since we got an error in the middle.  */
- win:
+win:
   *p = '\0';
   return p - *lineptr;
 }
 
-int main(void) {
-  getdelim((char**)(__VERIFIER_nondet_pointer()),
-	   (size_t*)(__VERIFIER_nondet_pointer()),
-	   __VERIFIER_nondet_int(),
-	   (FILE*)(__VERIFIER_nondet_pointer())
-	   );
-    return 0;
+int main() {
+  char** deliminitedStr = (char**)(__VERIFIER_nondet_pointer());
+  // char** deliminitedStr;
+  size_t* beginningOfLine = (size_t*)(__VERIFIER_nondet_pointer());
+  int terminatorChar = __VERIFIER_nondet_int();
+  FILE* fileToBeRead = (FILE*)(__VERIFIER_nondet_pointer());
+
+  ssize_t lenOfDelimStr = getdelim(
+    deliminitedStr,
+    beginningOfLine,
+    terminatorChar,
+    fileToBeRead
+  );
+
+  // __VERIFIER_assert(lenOfDelimStr == -1 || lenOfDelimStr == EOF || lenOfDelimStr == strlen(*deliminitedStr) - 1);
+  // __VERIFIER_assert(lenOfDelimStr >= -1L);
+  return 0;
 }

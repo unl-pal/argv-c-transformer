@@ -41,6 +41,13 @@
    email: matumoto@math.keio.ac.jp
 */
 
+extern void abort();
+void reach_error();
+
+extern int __VERIFIER_nondet_int(void);
+
+void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
+
 /* Period parameters */  
 #define N 624
 #define M 397

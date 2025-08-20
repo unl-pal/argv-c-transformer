@@ -30,6 +30,14 @@
 #include <errno.h>
 #include <string.h>
 
+extern void abort();
+void reach_error();
+
+extern int __VERIFIER_nondet_int(void);
+extern void* __VERIFIER_nondet_pointer(void);
+
+void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
+
 void
 dehexUsage(char *me) {
   /*                       0   1     2   (2/3) */
@@ -67,66 +75,70 @@ dehexTable[128] = {
   -2, -2, -2, -2, -2, -2, -2, -2           /* 120 */
 };
 
-int main(int argc, char *argv[]) {
-    {
-        char *me, *inS, *outS;
-        FILE *fin, *fout;
-        int car = 0, byte, nibble, even;
-        me = argv[0];
-        if (!(2 == argc || 3 == argc))
+int main() {
+    char** argv = (char**)(__VERIFIER_nondet_pointer());
+    int argc = __VERIFIER_nondet_int();
+    char *me, *inS, *outS;
+    FILE *fin, *fout;
+    int car = 0, byte, nibble, even;
+    me = argv[0];
+    if (!(2 == argc || 3 == argc))
+        dehexUsage(me);
+    inS = argv[1];
+    if (!strcmp("-", inS)) {
+        fin = stdin;
+    } else {
+        fin = fopen(inS, "r");
+        if (!fin) {
+            fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n", me, inS, strerror((*__errno_location())));
             dehexUsage(me);
-        inS = argv[1];
-        if (!strcmp("-", inS)) {
-            fin = stdin;
+        }
+    }
+    if (2 == argc) {
+        fout = stdout;
+    } else {
+        outS = argv[2];
+        if (!strcmp("-", outS)) {
+            fout = stdout;
         } else {
-            fin = fopen(inS, "r");
-            if (!fin) {
-                fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n", me, inS, strerror((*__errno_location())));
+            fout = fopen(outS, "w");
+            if (!fout) {
+                fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"w\"): %s\n\n", me, outS, strerror((*__errno_location())));
                 dehexUsage(me);
             }
         }
-        if (2 == argc) {
-            fout = stdout;
-        } else {
-            outS = argv[2];
-            if (!strcmp("-", outS)) {
-                fout = stdout;
-            } else {
-                fout = fopen(outS, "w");
-                if (!fout) {
-                    fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"w\"): %s\n\n", me, outS, strerror((*__errno_location())));
-                    dehexUsage(me);
-                }
-            }
-        }
-        byte = 0;
-        even = 1;
-        for (car = fgetc(fin); (-1) != car; car = fgetc(fin)) {
-            nibble = dehexTable[car & 127];
-            if (-2 == nibble) {
-                break;
-            }
-            if (-1 == nibble) {
-                continue;
-            }
-            if (even) {
-                byte = nibble << 4;
-            } else {
-                byte += nibble;
-                if ((-1) == fputc(byte, fout)) {
-                    fprintf(stderr, "%s: error writing!!!\n", me);
-                    exit(1);
-                }
-            }
-            even = 1 - even;
-        }
-        if ((-1) != car) {
-            fprintf(stderr, "\n%s: got invalid character '%c'\n\n", me, car);
-            dehexUsage(me);
-        }
-        dehexFclose(fin);
-        dehexFclose(fout);
-        exit(0);
     }
+    __VERIFIER_assert(fin);
+    __VERIFIER_assert(fout);
+    byte = 0;
+    even = 1;
+    for (car = fgetc(fin); (-1) != car; car = fgetc(fin)) {
+        nibble = dehexTable[car & 127];
+        if (-2 == nibble) {
+            break;
+        }
+        if (-1 == nibble) {
+            continue;
+        }
+        if (even) {
+            byte = nibble << 4;
+        } else {
+            byte += nibble;
+            if ((-1) == fputc(byte, fout)) {
+                fprintf(stderr, "%s: error writing!!!\n", me);
+                exit(1);
+            }
+        }
+        even = 1 - even;
+        __VERIFIER_assert(even == 1 || even == 0);
+    }
+    if ((-1) != car) {
+        fprintf(stderr, "\n%s: got invalid character '%c'\n\n", me, car);
+        dehexUsage(me);
+    }
+    dehexFclose(fin);
+    dehexFclose(fout);
+    exit(0);
+    __VERIFIER_assert(0);
 }
 

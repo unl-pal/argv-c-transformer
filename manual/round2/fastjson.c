@@ -37,8 +37,68 @@
 
 #include <ctype.h>
 #include <string.h>
+#include <stdlib.h>
+
+extern void abort();
+void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
+extern void __VERIFIER_nondet_void(void);
+extern void* __VERIFIER_nondet_pointer(void);
+
+
+void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
+
+#define EXPR_TOKEN_EOF 0
+#define EXPR_TOKEN_NUM 1
+#define EXPR_TOKEN_STR 2
+#define EXPR_TOKEN_TUPLE 3
+#define EXPR_TOKEN_SELECTOR 4
+#define EXPR_TOKEN_OP 5
+#define EXPR_TOKEN_NULL 6
+
+#define EXPR_OP_OPAREN 0  /* ( */
+#define EXPR_OP_CPAREN 1  /* ) */
+#define EXPR_OP_NOT    2  /* ! */
+#define EXPR_OP_POW    3  /* ** */
+#define EXPR_OP_MULT   4  /* * */
+#define EXPR_OP_DIV    5  /* / */
+#define EXPR_OP_MOD    6  /* % */
+#define EXPR_OP_SUM    7  /* + */
+#define EXPR_OP_DIFF   8  /* - */
+#define EXPR_OP_GT     9  /* > */
+#define EXPR_OP_GTE    10 /* >= */
+#define EXPR_OP_LT     11 /* < */
+#define EXPR_OP_LTE    12 /* <= */
+#define EXPR_OP_EQ     13 /* == */
+#define EXPR_OP_NEQ    14 /* != */
+#define EXPR_OP_IN     15 /* in */
+#define EXPR_OP_AND    16 /* and */
+#define EXPR_OP_OR     17 /* or */
+
+/* This structure represents a token in our expression. It's either
+ * literals like 4, "foo", or operators like "+", "-", "and", or
+ * json selectors, that start with a dot: ".age", ".properties.somearray[1]" */
+typedef struct exprtoken {
+    int refcount;           // Reference counting for memory reclaiming.
+    int token_type;         // Token type of the just parsed token.
+    int offset;             // Chars offset in expression.
+    union {
+        double num;         // Value for EXPR_TOKEN_NUM.
+        struct {
+            char *start;    // String pointer for EXPR_TOKEN_STR / SELECTOR.
+            size_t len;     // String len for EXPR_TOKEN_STR / SELECTOR.
+            char *heapstr;  // True if we have a private allocation for this
+                            // string. When possible, it just references to the
+                            // string expression we compiled, exprstate->expr.
+        } str;
+        int opcode;         // Opcode ID for EXPR_TOKEN_OP.
+        struct {
+            struct exprtoken **ele;
+            size_t len;
+        } tuple;            // Tuples are like [1, 2, 3] for "in" operator.
+    };
+} exprtoken;
 
 // Forward declarations.
 static int jsonSkipValue(const char **p, const char *end);
@@ -177,14 +237,14 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
         q++; len++;
     }
     if (q >= end || *q != '"') return NULL; // Unterminated string
-    exprtoken *t = exprNewToken(EXPR_TOKEN_STR);
+    exprtoken *t = (exprtoken *)(__VERIFIER_nondet_pointer());
 
     if (!has_esc) {
         // No escapes, we can point directly into the original JSON string.
         t->str.start = (char*)start; t->str.len = len; t->str.heapstr = NULL;
     } else {
         // Escapes present, need to allocate and copy/process escapes.
-        char *dst = __VERIFIER__non_det_int();
+        char *dst = (char *)(__VERIFIER_nondet_pointer());
 
         t->str.start = t->str.heapstr = dst; t->str.len = len;
         const char *r = start; esc = 0;
@@ -238,7 +298,7 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
     }
 
     // If strtod() succeeded, create and return the token..
-    exprtoken *t = exprNewToken(EXPR_TOKEN_NUM);
+    exprtoken *t = (exprtoken *)(__VERIFIER_nondet_pointer());
     t->num = v;
     return t;
 }
@@ -264,7 +324,7 @@ static exprtoken *jsonParseLiteralToken(const char **p, const char *end, const c
 
     // Literal matched and is correctly terminated.
     *p += l;
-    exprtoken *t = exprNewToken(type);
+    exprtoken *t = (exprtoken *)(__VERIFIER_nondet_pointer());
     t->num = num;
     return t;
 }
@@ -274,7 +334,7 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
     (*p)++; // Skip '['.
     jsonSkipWhiteSpaces(p,end);
 
-    exprtoken *t = exprNewToken(EXPR_TOKEN_TUPLE);
+    exprtoken *t = (exprtoken *)(__VERIFIER_nondet_pointer());
     t->tuple.len = 0; t->tuple.ele = NULL; size_t alloc = 0;
 
     // Handle empty array [].
@@ -287,7 +347,7 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
     while (1) {
         exprtoken *ele = jsonParseValueToken(p,end);
         if (!ele) {
-            exprTokenRelease(t); // Clean up partially built array token.
+            __VERIFIER_nondet_void(); // Clean up partially built array token.
             return NULL;
         }
 
@@ -296,12 +356,11 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
             size_t newsize = alloc ? alloc * 2 : 4;
             // Check for potential overflow if newsize becomes huge.
             if (newsize < alloc) {
-                exprTokenRelease(ele);
-                exprTokenRelease(t);
+                __VERIFIER_nondet_void();
+                __VERIFIER_nondet_void();
                 return NULL;
             }
-            exprtoken **newele = RedisModule_Realloc(t->tuple.ele,
-                                           sizeof(exprtoken*)*newsize);
+            exprtoken **newele = (exprtoken **)(__VERIFIER_nondet_pointer());
             t->tuple.ele = newele;
             alloc = newsize;
         }
@@ -311,7 +370,7 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
         if (*p>=end) {
             // Unterminated array. Note that this check is crucial because
             // previous value parsed may seek 'p' to 'end'.
-            exprTokenRelease(t);
+            __VERIFIER_nondet_void();
             return NULL;
         }
 
@@ -325,7 +384,7 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
             return t; // End of array
         } else {
             // Unexpected character (not ',' or ']')
-            exprTokenRelease(t);
+            __VERIFIER_nondet_void();
             return NULL;
         }
     }
@@ -441,6 +500,7 @@ exprtoken *jsonExtractField(const char *json, size_t json_len,
      * Convert it into an expression token object. */
     return jsonParseValueToken(&valptr,end);
 }
+
 int main(void) {
     return 0;
 }

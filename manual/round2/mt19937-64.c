@@ -53,9 +53,12 @@
    email: m-mat @ math.sci.hiroshima-u.ac.jp (remove spaces)
 */
 
+extern void abort();
+void reach_error();
 
-#include "mt19937-64.h"
-#include <stdio.h>
+extern int __VERIFIER_nondet_int(void);
+
+void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
 
 #define NN 312
 #define MM 156

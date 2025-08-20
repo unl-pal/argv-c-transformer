@@ -1,4 +1,15 @@
 /* Local prototypes. */
+
+#include <math.h>
+
+extern void abort();
+void reach_error();
+
+extern int __VERIFIER_nondet_int(void);
+extern float __VERIFIER_nondet_float(void);
+
+void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
+
 static int l_u_decomp4(float M[4][4], int indx[4]);
 static void l_u_backsub4(float M[4][4], int indx[4], float v[4]);
 
@@ -235,6 +246,7 @@ static void matrix_mul_point(float out[3], float in[3], float M[4][4])
     out[1] = tmp[1];
     out[2] = tmp[2];
 }
+
 int main(void) {
     return 0;
 }
