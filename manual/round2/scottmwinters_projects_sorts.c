@@ -1,11 +1,12 @@
 #import <stdio.h>
 #import <stdlib.h>
-//#import <string.h>
+#import <string.h>
 
 static int SIZE = 15;
 
 extern void abort();
 void reach_error();
+void reach_error() {};
 
 extern int __VERIFIER_nondet_int(void);
 
@@ -21,28 +22,32 @@ void merge(int *p, int n);
 void mergeHelp(int *l1, int s1, int *l2, int s2, int *p);
 
 int main() {
-    {
-        int list[15] = {0, 5, 2, 1, 2, 3, 6, 8, 9, 5, 2, 1, 2, 3, 4};
-        int *p;
-        p = list;
-        bubble(p);
-        unsort(p);
-        insertion(p);
-        unsort(p);
-        selection(p);
-        unsort(p);
-        unsort(p);
-        merge(p, SIZE);
-        return 0;
-    }
+	int list[15] = {0, 5, 2, 1, 2, 3, 6, 8, 9, 5, 2, 1, 2, 3, 4};
+	int sorted[15] = {0, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5, 5, 6, 8, 9};
+	int *p, *s;
+	p = list;
+	s = sorted;
+	bubble(p);
+	__VERIFIER_assert(memcmp(p, s, 15 * sizeof(int)) == 0);
+	unsort(p);
+	insertion(p);
+	__VERIFIER_assert(memcmp(p, s, 15 * sizeof(int)) == 0);
+	unsort(p);
+	selection(p);
+	__VERIFIER_assert(memcmp(p, s, 15 * sizeof(int)) == 0);
+	unsort(p);
+	unsort(p);
+	merge(p, SIZE);
+	__VERIFIER_assert(memcmp(p, s, 15 * sizeof(int)) == 0);
+	return 0;
 }
-
 
 void unsort(int *p) {
 	printf("UNSORT\n");
 	int i, j;
 	for(i = SIZE; i > 0; i--) {
 		j = rand() % SIZE;
+		__VERIFIER_assert(j >= 0 && j < SIZE);
 		p[j] = p[i];
 	}
 }
@@ -64,9 +69,11 @@ void bubble(int *p) {
 				p[i] = p[i] ^ p[j];
 				p[j] = p[i] ^ p[j];
 				p[i] = p[i] ^ p[j];
+				__VERIFIER_assert(p[i] != p[j]);
 			}
 		}
 	}
+	__VERIFIER_assert(p[0] <= p[SIZE-1]);
 }
 
 void insertion(int *p) {
@@ -82,7 +89,9 @@ void insertion(int *p) {
 			j=j-1;
 		}
 	}
+	__VERIFIER_assert(p[0] <= p[SIZE-1]);
 }
+
 void selection(int *p) {
 	printf("SELECTION SORT\n");
 	int i, j;
@@ -98,9 +107,11 @@ void selection(int *p) {
 		p[i] = p[tempMin];
 		p[tempMin] = temp;
 	}
-
+	__VERIFIER_assert(p[0] <= p[SIZE-1]);
 }
+
 void quick(int *p){}
+
 void merge(int *p, int n) {
 	printf("n: %d\n", n);
 	int i;
@@ -128,6 +139,7 @@ void merge(int *p, int n) {
 	mergeHelp(l1, s1, l2, s2, p);
 	free(l1);
 	free(l2);
+	__VERIFIER_assert(p[0] <= p[n - 1]);
 }
 
 void mergeHelp(int *l1, int s1, int *l2, int s2, int *p) {
@@ -158,5 +170,6 @@ void mergeHelp(int *l1, int s1, int *l2, int s2, int *p) {
 		j++;
 		k++;
 	}
+	__VERIFIER_assert(p[0] <= p[k]);
 }
 

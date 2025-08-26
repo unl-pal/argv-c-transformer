@@ -44,8 +44,6 @@
 extern void abort();
 void reach_error();
 
-extern int __VERIFIER_nondet_int(void);
-
 void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
 
 /* Period parameters */  
@@ -77,8 +75,7 @@ void init_genrand(unsigned long s)
 /* initialize by an array with array-length */
 /* init_key is the array for initializing keys */
 /* key_length is its length */
-void init_by_array(init_key, key_length)
-unsigned long init_key[], key_length;
+void init_by_array(unsigned long init_key[], unsigned long key_length)
 {
     int i, j, k;
     init_genrand(19650218UL);
@@ -175,6 +172,28 @@ double genrand_res53(void)
     return(a*67108864.0+b)*(1.0/9007199254740992.0); 
 } 
 /* These real versions are due to Isaku Wada, 2002/01/09 added */
+
 int main(void) {
+    signed long r31 = genrand_int31();
+    signed long r31_neg = r31 * -1;
+    __VERIFIER_assert(r31_neg <= 0);
+    long long r31_pos = r31_neg * -1;
+    __VERIFIER_assert(r31_pos >= 0);
+    __VERIFIER_assert(r31_pos == r31);
+
+    long r = genrand_int32();
+    __VERIFIER_assert(r >= 0 && r <= (long)(0xfffffffe));
+
+    double real1 = genrand_real1();
+    __VERIFIER_assert(0 <= real1 && real1 <= 1);
+
+    double real2 = genrand_real2();
+    __VERIFIER_assert(0 <= real2 && real2 < 1);
+
+    double real3 = genrand_real3();
+    __VERIFIER_assert(0 < real3 && real3 < 1);
+
+    double res53 = genrand_res53();
+    __VERIFIER_assert(0 <= res53 && res53 < 1);
     return 0;
 }

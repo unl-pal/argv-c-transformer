@@ -56,8 +56,6 @@
 extern void abort();
 void reach_error();
 
-extern int __VERIFIER_nondet_int(void);
-
 void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
 
 #define NN 312
@@ -142,6 +140,7 @@ unsigned long long genrand64_int64(void)
     x ^= (x << 37) & 0xFFF7EEE000000000ULL;
     x ^= (x >> 43);
 
+    // __VERIFIER_assert(x >= 0 && x < )
     return x;
 }
 
@@ -188,6 +187,25 @@ int main(void)
     return 0;
 }
 #endif
+
 int main(void) {
+    signed long long r63 = genrand64_int63();
+    signed long long r63_neg = r63 * -1;
+    __VERIFIER_assert(r63_neg <= 0);
+    long long r63_pos = r63_neg * -1;
+    __VERIFIER_assert(r63_pos >= 0);
+    __VERIFIER_assert(r63_pos == r63);
+
+    long long r64 = genrand64_int64();
+    __VERIFIER_assert(r64 >= 0 && r64 <= (long long)(0xfffffffffffffffe));
+
+    double real1 = genrand64_real1();
+    __VERIFIER_assert(0 <= real1 && real1 <= 1);
+
+    double real2 = genrand64_real2();
+    __VERIFIER_assert(0 <= real2 && real2 < 1);
+
+    double real3 = genrand64_real3();
+    __VERIFIER_assert(0 < real3 && real3 < 1);
     return 0;
 }

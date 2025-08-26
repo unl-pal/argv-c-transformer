@@ -1,10 +1,11 @@
 format_version: '2.0'
 
-input_files: 'calcnewt.c'
+input_files: 'plexinc_plex-home-theater-public_getdelimog.c'
 
 properties:
   - property_file: ../properties/unreach-call.prp
     expected_verdict: true
+  - property_file: ../properties/termination.prp
 
 options:
   language: C

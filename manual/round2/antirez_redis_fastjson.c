@@ -35,6 +35,10 @@
  * const char *field, size_t field_len);
  * ------------------------------------------------------------------ */
 
+/*
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team
+*/
+
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
@@ -122,6 +126,7 @@ static int jsonIsNumberChar(int c) {
 /* Advance *p consuming all the spaces. */
 static inline void jsonSkipWhiteSpaces(const char **p, const char *end) {
     while (*p < end && isspace((unsigned char)**p)) (*p)++;
+    __VERIFIER_assert(**p == '\0' || **p != ' ');
 }
 
 /* Advance *p past a JSON string. Returns 1 on success, 0 on error. */
@@ -139,6 +144,8 @@ static int jsonSkipString(const char **p, const char *end) {
         }
         (*p)++;
     }
+    // If it reached the end it should be null yes?
+    __VERIFIER_assert(**p != '"' && **p == '\0');
     return 0; /* unterminated */
 }
 
@@ -158,6 +165,7 @@ static int jsonSkipBracketed(const char **p, const char *end,
         if (c == '"') {
             // Found a string, delegate skipping to jsonSkipString().
             if (!jsonSkipString(p, end)) {
+                __VERIFIER_assert(*p >= end && **p == '\0');
                 return 0; // String skipping failed (e.g., unterminated)
             }
             /* jsonSkipString() advances *p past the closing quote.
@@ -180,6 +188,7 @@ static int jsonSkipBracketed(const char **p, const char *end,
         (*p)++;
     }
 
+    __VERIFIER_assert(!depth || **p == '\0');
     /* Return 1 (true) if we successfully found the matching closer,
      * otherwise there is a parse error and we return 0. */
     return depth == 0;
@@ -189,6 +198,7 @@ static int jsonSkipBracketed(const char **p, const char *end,
  * Returns 1 on success, 0 on failure. */
 static int jsonSkipLiteral(const char **p, const char *end, const char *lit) {
     size_t l = strlen(lit);
+    __VERIFIER_assert(l > 0);
     if (*p + l > end) return 0;
     if (strncmp(*p, lit, l) == 0) { *p += l; return 1; }
     return 0;
@@ -236,6 +246,7 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
         if (*q == '"') break;
         q++; len++;
     }
+    __VERIFIER_assert(*q == '\0' || *q == '"');
     if (q >= end || *q != '"') return NULL; // Unterminated string
     exprtoken *t = (exprtoken *)(__VERIFIER_nondet_pointer());
 
@@ -268,6 +279,7 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
         }
         *dst = '\0'; // Null-terminate the allocated string.
     }
+    __VERIFIER_assert(t->str.start + t->str.len == NULL);
     *p = q + 1; // Advance the main pointer past the closing quote.
     return t;
 }
@@ -283,6 +295,7 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
         (*p)++;
     }
     buf[idx]='\0'; // Null-terminate buffer.
+    __VERIFIER_assert(idx != (int)sizeof(buf) && !jsonIsNumberChar(**p));
 
     if (idx==0) return NULL; // No number characters found.
 
@@ -296,6 +309,8 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
         *p = start;
         return NULL;
     }
+
+    __VERIFIER_assert(idx <= (int)sizeof(buf));
 
     // If strtod() succeeded, create and return the token..
     exprtoken *t = (exprtoken *)(__VERIFIER_nondet_pointer());
@@ -502,5 +517,11 @@ exprtoken *jsonExtractField(const char *json, size_t json_len,
 }
 
 int main(void) {
+    exprtoken *result = jsonExtractField(
+        (const char *)(__VERIFIER_nondet_pointer()),
+        (size_t)(__VERIFIER_nondet_int()),
+        (const char *)(__VERIFIER_nondet_pointer()),
+        (size_t)(__VERIFIER_nondet_int())
+    );
     return 0;
 }
