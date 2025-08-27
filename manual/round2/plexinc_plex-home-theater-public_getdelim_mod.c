@@ -17,6 +17,13 @@
    Boston, MA 02111-1307, USA.
 */
 
+/*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
+
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -57,8 +64,7 @@ ssize_t getdelim (char **lineptr, size_t *n, int terminator, FILE *stream)
 #ifndef	MAX_CANON
 #define	MAX_CANON	256
 #endif
-      // line = realloc(*lineptr, MAX_CANON);
-      line = (char*)(__VERIFIER_nondet_pointer());
+      line = realloc(*lineptr, MAX_CANON);
       if (line == NULL)
 	return -1;
       *lineptr = line;
@@ -77,8 +83,7 @@ ssize_t getdelim (char **lineptr, size_t *n, int terminator, FILE *stream)
 
     while (--copy > 0)
     {
-      // register int c = getc (stream);
-      register int c = __VERIFIER_nondet_int();
+      register int c = getc(stream);
       if (c == EOF)
 	goto lose;
       else if ((*p++ = c) == terminator)
@@ -88,7 +93,7 @@ ssize_t getdelim (char **lineptr, size_t *n, int terminator, FILE *stream)
     /* Need to enlarge the line buffer.  */
     len = p - line;
     size *= 2;
-    line = (char*)(__VERIFIER_nondet_pointer());
+    line = realloc (line, size);
     if (line == NULL)
       goto lose;
     *lineptr = line;
@@ -96,7 +101,6 @@ ssize_t getdelim (char **lineptr, size_t *n, int terminator, FILE *stream)
     p = line + len;
     copy = size - len;
   }
-  __VERIFIER_assert(0);
 
 lose:
   if (p == *lineptr)
@@ -109,7 +113,6 @@ win:
 
 int main() {
   char** deliminitedStr = (char**)(__VERIFIER_nondet_pointer());
-  // char** deliminitedStr;
   size_t* beginningOfLine = (size_t*)(__VERIFIER_nondet_pointer());
   int terminatorChar = __VERIFIER_nondet_int();
   FILE* fileToBeRead = (FILE*)(__VERIFIER_nondet_pointer());
@@ -121,7 +124,9 @@ int main() {
     fileToBeRead
   );
 
-  // __VERIFIER_assert(lenOfDelimStr == -1 || lenOfDelimStr == EOF || lenOfDelimStr == strlen(*deliminitedStr) - 1);
-  // __VERIFIER_assert(lenOfDelimStr >= -1L);
+  char *temp = strchr(*deliminitedStr, (char)(terminatorChar));
+  __VERIFIER_assert(temp || lenOfDelimStr != 0);
+  __VERIFIER_assert(fileToBeRead || lenOfDelimStr == -1);
+  __VERIFIER_assert(*deliminitedStr != NULL || lenOfDelimStr == -1);
   return 0;
 }

@@ -36,7 +36,9 @@
  * ------------------------------------------------------------------ */
 
 /*
- * Modified by PACLab Arg-C Transformer v0.0.0 and development team
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
 */
 
 #include <ctype.h>
@@ -126,7 +128,6 @@ static int jsonIsNumberChar(int c) {
 /* Advance *p consuming all the spaces. */
 static inline void jsonSkipWhiteSpaces(const char **p, const char *end) {
     while (*p < end && isspace((unsigned char)**p)) (*p)++;
-    __VERIFIER_assert(**p == '\0' || **p != ' ');
 }
 
 /* Advance *p past a JSON string. Returns 1 on success, 0 on error. */
@@ -371,8 +372,6 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
             size_t newsize = alloc ? alloc * 2 : 4;
             // Check for potential overflow if newsize becomes huge.
             if (newsize < alloc) {
-                __VERIFIER_nondet_void();
-                __VERIFIER_nondet_void();
                 return NULL;
             }
             exprtoken **newele = (exprtoken **)(__VERIFIER_nondet_pointer());
@@ -385,7 +384,6 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
         if (*p>=end) {
             // Unterminated array. Note that this check is crucial because
             // previous value parsed may seek 'p' to 'end'.
-            __VERIFIER_nondet_void();
             return NULL;
         }
 
@@ -399,7 +397,6 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
             return t; // End of array
         } else {
             // Unexpected character (not ',' or ']')
-            __VERIFIER_nondet_void();
             return NULL;
         }
     }
@@ -517,11 +514,18 @@ exprtoken *jsonExtractField(const char *json, size_t json_len,
 }
 
 int main(void) {
+    const char* json = (const char *)(__VERIFIER_nondet_pointer());
+    const char* field = (const char *)(__VERIFIER_nondet_pointer());
     exprtoken *result = jsonExtractField(
-        (const char *)(__VERIFIER_nondet_pointer()),
+        json,
         (size_t)(__VERIFIER_nondet_int()),
-        (const char *)(__VERIFIER_nondet_pointer()),
+        field,
         (size_t)(__VERIFIER_nondet_int())
     );
+
+    __VERIFIER_assert(strchr(json, ':') != NULL || result == NULL);
+    __VERIFIER_assert(strchr(json, '{') != NULL || result == NULL);
+    __VERIFIER_assert(strchr(json, '}') != NULL || result == NULL);
+    __VERIFIER_assert(strchr(json, '"') != NULL || result == NULL);
     return 0;
 }

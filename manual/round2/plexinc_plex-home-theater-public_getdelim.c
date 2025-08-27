@@ -17,9 +17,19 @@
    Boston, MA 02111-1307, USA.
 */
 
+/*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
+
+#include <limits.h>
+#include <stdlib.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <limits.h>
 #include <errno.h>
+#include <string.h>
 
 extern void abort();
 void reach_error();
@@ -60,7 +70,7 @@ getdelim (lineptr, n, terminator, stream)
 #ifndef	MAX_CANON
 #define	MAX_CANON	256
 #endif
-      line = (char*)(__VERIFIER_nondet_pointer());
+      line = realloc (*lineptr, MAX_CANON);
       if (line == NULL)
 	return -1;
       *lineptr = line;
@@ -89,7 +99,7 @@ getdelim (lineptr, n, terminator, stream)
 	  /* Need to enlarge the line buffer.  */
 	  len = p - line;
 	  size *= 2;
-	  line = (char*)(__VERIFIER_nondet_pointer());
+	  line = realloc (line, size);
 	  if (line == NULL)
 	    goto lose;
 	  *lineptr = line;
@@ -108,10 +118,21 @@ getdelim (lineptr, n, terminator, stream)
 }
 
 int main(void) {
-  getdelim((char**)(__VERIFIER_nondet_pointer()),
-	   (size_t*)(__VERIFIER_nondet_pointer()),
-	   __VERIFIER_nondet_int(),
-	   (FILE*)(__VERIFIER_nondet_pointer())
-	   );
-    return 0;
+  char** deliminitedStr = (char**)(__VERIFIER_nondet_pointer());
+  size_t* beginningOfLine = (size_t*)(__VERIFIER_nondet_pointer());
+  int terminatorChar = __VERIFIER_nondet_int();
+  FILE* fileToBeRead = (FILE*)(__VERIFIER_nondet_pointer());
+
+  ssize_t lenOfDelimStr = getdelim(
+    deliminitedStr,
+    beginningOfLine,
+    terminatorChar,
+    fileToBeRead
+  );
+
+  char *temp = strchr(*deliminitedStr, (char)(terminatorChar));
+  __VERIFIER_assert(temp || lenOfDelimStr != 0);
+  __VERIFIER_assert(fileToBeRead || lenOfDelimStr == -1);
+  __VERIFIER_assert(*deliminitedStr != NULL || lenOfDelimStr == -1);
+  return 0;
 }

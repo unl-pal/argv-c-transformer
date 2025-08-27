@@ -19,6 +19,12 @@
 */
 
 /*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
+
+/*
 ** enhex: simple stand-alone hex encoder
 **
 ** Compile with:
@@ -76,6 +82,7 @@ int main() {
     me = argv[0];
     if (!(2 == argc || 3 == argc))
         enhexUsage(me);
+        __VERIFIER_assert(0);
     inS = argv[1];
     if (!strcmp("-", inS)) {
         fin = stdin;
@@ -84,9 +91,10 @@ int main() {
         if (!fin) {
             fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n", me, inS, strerror((*__errno_location())));
             enhexUsage(me);
+            __VERIFIER_assert(0);
         }
     }
-    __VERIFIER_assert(fin);
+    __VERIFIER_assert(fin != NULL);
     if (2 == argc) {
         fout = stdout;
     } else {
@@ -101,11 +109,12 @@ int main() {
             }
         }
     }
-    __VERIFIER_assert(fout);
+    __VERIFIER_assert(fout != NULL);
     col = 0;
     car = fgetc(fin);
     while ((-1) != car)
     {
+        __VERIFIER_assert(car >= 0 && car < 256);
         if (col > enhexColumns) {
             fprintf(fout, "\n");
             col = 0;

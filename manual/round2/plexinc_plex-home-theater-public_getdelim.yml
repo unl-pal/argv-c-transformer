@@ -5,8 +5,6 @@ input_files: 'plexinc_plex-home-theater-public_getdelim.c'
 properties:
   - property_file: ../properties/unreach-call.prp
     expected_verdict: true
-  - property_file: ../properties/no-overflow.prp
-    expected_verdict: true
 
 options:
   language: C

@@ -53,6 +53,12 @@
    email: m-mat @ math.sci.hiroshima-u.ac.jp (remove spaces)
 */
 
+/*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
+
 extern void abort();
 void reach_error();
 

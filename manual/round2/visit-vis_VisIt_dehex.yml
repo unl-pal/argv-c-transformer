@@ -4,7 +4,7 @@ input_files: 'visit-vis_VisIt_dehex.c'
 
 properties:
   - property_file: ../properties/unreach-call.prp
-    expected_verdict: true # cpachecker and I disagree on this
+    expected_verdict: true
 
 options:
   language: C

@@ -19,6 +19,12 @@
 */
 
 /*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
+
+/*
 ** dehex: simple stand-alone hex decoder
 **
 ** Compile with:
@@ -84,6 +90,7 @@ int main() {
     me = argv[0];
     if (!(2 == argc || 3 == argc))
         dehexUsage(me);
+        __VERIFIER_assert(0);
     inS = argv[1];
     if (!strcmp("-", inS)) {
         fin = stdin;
@@ -92,6 +99,7 @@ int main() {
         if (!fin) {
             fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n", me, inS, strerror((*__errno_location())));
             dehexUsage(me);
+            __VERIFIER_assert(0);
         }
     }
     if (2 == argc) {
@@ -105,15 +113,17 @@ int main() {
             if (!fout) {
                 fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"w\"): %s\n\n", me, outS, strerror((*__errno_location())));
                 dehexUsage(me);
+                __VERIFIER_assert(0);
             }
         }
     }
-    __VERIFIER_assert(fin);
-    __VERIFIER_assert(fout);
+    __VERIFIER_assert(fin != NULL);
+    __VERIFIER_assert(fout != NULL);
     byte = 0;
     even = 1;
     for (car = fgetc(fin); (-1) != car; car = fgetc(fin)) {
         nibble = dehexTable[car & 127];
+        __VERIFIER_assert(nibble >= -2 && nibble <16);
         if (-2 == nibble) {
             break;
         }
@@ -124,6 +134,7 @@ int main() {
             byte = nibble << 4;
         } else {
             byte += nibble;
+            __VERIFIER_assert(byte < 256 && byte >= 0);
             if ((-1) == fputc(byte, fout)) {
                 fprintf(stderr, "%s: error writing!!!\n", me);
                 exit(1);
@@ -135,6 +146,7 @@ int main() {
     if ((-1) != car) {
         fprintf(stderr, "\n%s: got invalid character '%c'\n\n", me, car);
         dehexUsage(me);
+        __VERIFIER_assert(0);
     }
     dehexFclose(fin);
     dehexFclose(fout);
