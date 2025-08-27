@@ -1,3 +1,12 @@
+/*
+ * This code is not currently in use BUT can be used to generate pre compiled
+ * files with the macros and headers expanded for the computer architecture the
+ * tool was run on. When used with a docker or github runner this can generate
+ * precompiled files for different architectures, OS's and environments. Like
+ * the environment specified for the computers used to run the SV-Comp main
+ * competition.
+ */
+
 #include "include/RegenCode.hpp"
 
 #include <clang/AST/Decl.h>

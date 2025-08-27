@@ -18,7 +18,7 @@
 #include <string>
 
 const int defaultDebugLevel = 0;
-// const bool defaultKeepCompilesOnly = true;
+const bool defaultKeepCompilesOnly = true;
 const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultDatabaseDir = "database";
 /// Not yet implemented in code - currently handled by scripts
@@ -137,13 +137,13 @@ void Filterer::parseConfigFile(std::string configFile) {
 /// @param fileName : name of the file to check
 /// @param contents : string pointer containing the contents of the file
 /// @return : boolean true if the file passes the filter
-bool Filterer::checkPotentialFile(std::string fileName,
-                                  std::shared_ptr<std::string> contents) {
+bool Filterer::checkPotentialFile(std::string fileName) {
   std::ifstream file(fileName);
   std::stringstream buffer;
   std::cout << fileName << std::endl;
 
   if (file.is_open()) {
+    // Old logic for Macro filtering, could be handled by AST Action
     std::regex allowedHeadersPattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
     std::regex macroPattern("macro"); // Place holder for if we allow macros
     std::string line;
@@ -250,8 +250,7 @@ int Filterer::run() {
   /// Loop over all c files in filter list and run through the checker before
   /// creating the AST
   for (std::string fileName : filesToFilter) {
-    std::shared_ptr<std::string> contents = std::make_shared<std::string>();
-    if (checkPotentialFile(fileName, contents)) {
+    if (checkPotentialFile(fileName)) {
       std::filesystem::path oldPath(fileName);
       std::filesystem::path newPath(std::filesystem::current_path() /
                                     configuration.filterDir);
@@ -280,7 +279,8 @@ int Filterer::run() {
         return 1;
       }
 
-      /// Set args for AST creation
+      /// Set args for AST creation order does matter
+      /// all args are passed to "clang" which is used for AST creation
       std::vector<std::string> args = std::vector<std::string>({
         "clang",
         "-extra-arg=-xc",
@@ -339,10 +339,6 @@ int Filterer::run() {
       llvm::outs() << tool.run(&factory) << "\n";
 
       output.close();
-
-      if (config->at("debug")) {
-        std::cout << *contents << std::endl;
-      }
 
       if (config->at("debug") && std::filesystem::exists(newPath)) {
         std::ifstream file(newPath.string());

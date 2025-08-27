@@ -2,7 +2,6 @@
 
 #include <filesystem>
 #include <map>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,8 +25,7 @@ public:
   /// and adds to the contents pointer as needed returning true on a file that
   /// has potential for our tool or false on a undesirable file. The contents
   /// are only populated in the case of the file being desireable
-  bool checkPotentialFile(std::string                  fileName,
-                          std::shared_ptr<std::string> contents);
+  bool checkPotentialFile(std::string                  fileName);
 
   /// Finds all C files in a path 
   /// single file path or dir are both acceptable

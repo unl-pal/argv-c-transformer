@@ -15,7 +15,6 @@ void RemoveConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   llvm::outs() << "Starting Removal\n";
   if (_toRemove->size()) {
     RemoveFuncVisitor Visitor(&Context, _Rewriter, _toRemove, _NeededTypes);
-    // Visitor.TraverseTranslationUnitDecl(Context.getTranslationUnitDecl());
     Visitor.TraverseDecl(Context.getTranslationUnitDecl());
   }
   llvm::outs() << "Ending Removal\n";

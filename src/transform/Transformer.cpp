@@ -61,7 +61,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
   // std::filesystem::path preprocessedPath = std::filesystem::path("preprocessed");
 
   // Keeps people from being able to write files outside of the project folder for now
-  // Eliminates the filteredFiles part of the path
+  // Eliminates the "filteredFiles" part of the path
   for (const std::filesystem::path &component : path) {
     if (component.string() != configuration.filterDir && component.string() != "..") {
       srcPath /= component;
@@ -86,6 +86,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   std::cout << "Setting Comp Options" << std::endl;
 
+  // Arguments needed for Clang to accurately generate our ASTs
   std::vector<std::string> compOptionsArgs({
     "clang",
     "-extra-arg=-xc",
@@ -93,7 +94,6 @@ bool Transformer::transformFile(std::filesystem::path path) {
     path.string(),
     "-extra-arg=-resource-dir=" + resourceDir,
     "-extra-arg=-fparse-all-comments",
-    // "--",
   });
 
   int argc = compOptionsArgs.size();
@@ -179,6 +179,9 @@ int Transformer::transformAll(std::filesystem::path path, int count) {
   return count;
 }
 
+// Check if the benchmark is compilable after transformation and remove
+// non-compilable benchmarks if set to in the configuration file or keep for
+// debugging
 int Transformer::checkCompilable(std::filesystem::path path) {
   static llvm::cl::OptionCategory myToolCategory("CheckCompiles");
 
@@ -190,10 +193,8 @@ int Transformer::checkCompilable(std::filesystem::path path) {
     "-extra-arg=-xc",
     "-extra-arg=-I",
     "-extra-arg=-resource-dir=" + resourceDir,
-    "verifier.c",
+    "verifier.c", // dummy verify file is needed to resolve extern Verifier Functions
     path.string(),
-    // "-extra-arg=-w",
-    // "-extra-arg=-fparse-all-comments",
   });
 
   int argc = compOptionsArgs.size();
@@ -224,10 +225,12 @@ int Transformer::checkCompilable(std::filesystem::path path) {
                                  optionsParser.getSourcePathList());
 
   // Show the number of errors only not the errors themselves to avoid clutter
+  // Can be changed for diagnostic purposes if desired
   clang::DiagnosticConsumer diagConsumer;
   tool.setDiagnosticConsumer(&diagConsumer);
 
   // tool.run(clang::tooling::newFrontendActionFactory<clang::PreprocessOnlyAction>().get());
+  // This is the same as running "clang -xc -fsyntax-only `file-name` verifier.c"
   tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
 
   // If there are errors do not count the file as compilable
@@ -237,7 +240,7 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   return 1;
 }
 
-/// TODO MAKE THE PARSERS MORE SECURE!!
+/// TODO MAKE THE CONFIG PARSERS MORE SECURE!!
 void Transformer::parseConfig(std::string configFile) {
   std::ifstream file(configFile);
   if (!std::filesystem::exists(configFile)) {

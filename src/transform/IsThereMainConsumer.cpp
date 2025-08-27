@@ -38,25 +38,14 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   std::set<clang::DeclRefExpr*> callsToMake;
   IsThereMainHandler Handler(callsToMake);
 
-  // Currently not in use...
-  // MatchFinder.addMatcher(
-  // translationUnitDecl(
-  // traverse(clang::TraversalKind::TK_IgnoreUnlessSpelledInSource, decl()
-  // .bind("allDecls"))),
-  // &Handler);
-
+  // Identify the main function via a matcher and assign to the "main" tag
   MatchFinder.addMatcher(
     functionDecl(
       isMain()
     ).bind("main"),
     &Handler);
 
-  // MatchFinder.addMatcher(
-  //   functionDecl(
-  //     clang::ast_matchers::matchesName("main")
-  //   ).bind("main"),
-  //   &Handler);
-
+  // Identify all other functions and add to the "function" tag for call check
   MatchFinder.addMatcher(
     functionDecl(
       unless(
@@ -66,31 +55,38 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
         ))).bind("functions"),
     &Handler);
 
+  // Run all matchers on the context
   MatchFinder.matchAST(Context);
 
+  // Variables used in the for loop and beyond
   clang::TranslationUnitDecl *TD = Context.getTranslationUnitDecl();
   clang::SourceManager &mgr = Context.getSourceManager();
   std::vector<clang::Stmt*> stmts;
 
-  for (clang::DeclRefExpr *call : callsToMake) {
+  llvm::outs() << "Calls to Make: " << callsToMake.size() << "\n";
+  for (clang::DeclRefExpr *call : callsToMake) { // ends line ... needs rework
     std::vector<clang::Expr*> tempArgs({});
     std::vector<clang::ParmVarDecl*> vars({});
+    // get the function declaration for the call to make to get all param info
     if (clang::NamedDecl *namedDecl = call->getFoundDecl()) {
       if (clang::FunctionDecl *func = namedDecl->getAsFunction()) {
         if (!func->param_empty()) {
+          // Set param info into the vars vector for use in call
           vars = func->parameters().vec();
         }
       }
     }
 
-    llvm::outs() << "Calls to Make: " << callsToMake.size() << "\n";
+    // For each 
     for (clang::ParmVarDecl *var : vars) {
+      // get the parameter original type
       clang::QualType varType = var->getOriginalType();
+      // outdated as we can handle pointers
       if (varType->isPointerType() || varType->isArrayType()) {
         break;
       }
-      // varType->dump();
 
+      // Clean up discrepencies between ClangAST naming and ArgC src code
       std::string varTypeString = varType->isBooleanType() ? "bool" : varType.getAsString();
       std::replace(varTypeString.begin(), varTypeString.end(), ' ', '_');
       std::replace(varTypeString.begin(), varTypeString.end(), '*', '\0');
@@ -100,9 +96,11 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
       clang::IdentifierInfo *info = &Context.Idents.get("__VERIFIER_nondet_" + varTypeString);
 
+      // Get the VERIFIER function declaration info if it exists or create if missing
       clang::DeclarationName name(info);
       clang::DeclContextLookupResult result = TD->lookup(name);
       clang::FunctionDecl *verifier;
+      // If no verifier function declaration found build and add one
       if (result.empty()) {
         clang::SourceLocation insertFirst;
         for (clang::Decl *decl : TD->decls()) {
@@ -178,6 +176,7 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
         verifier = result.find_first<clang::FunctionDecl>();
       }
 
+      // create a call for the verifier function found or created
       clang::DeclRefExpr *verifierCall = clang::DeclRefExpr::Create(
         Context,
         verifier->getQualifierLoc(),
@@ -200,7 +199,6 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
         var->getLocation(),
         clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto)
       );
-      // tempExpr->dumpColor();
       tempArgs.push_back(tempExpr);
     }
 
@@ -208,6 +206,7 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       break;
     }
 
+    // For each parameter add a corresponding verifier call
     llvm::outs() << "Args Size: " << tempArgs.size() << "\n";
     clang::CallExpr *callExpr = clang::CallExpr::Create(
       Context,
@@ -218,11 +217,11 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       call->getLocation(),
       clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto)
     );
-    // callExpr->dumpColor();
     stmts.emplace_back(callExpr);
-  }
+  } // end of for (clang::DeclRefExpr *call : callsToMake) on line 67
 
   clang::FunctionDecl* mainFunc;
+  // Create main function if missing
   if (!Handler.HasMain()) {
     llvm::outs() << "Building Main\n";
     clang::SourceLocation loc = mgr.getLocForEndOfFile(mgr.getMainFileID());
@@ -285,13 +284,18 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       clang::VarDecl::CreateDeserialized(Context, TD->getGlobalID())
     );
 
+    // add a return statement to the newly formed body
     stmts.emplace_back(returnStmt);
   } else {
     mainFunc = TD->lookup(&Context.Idents.get("main")).find_first<clang::FunctionDecl>();
+    // add original body to the beginning of the new body
     stmts.emplace(stmts.begin(), mainFunc->getBody());
   }
+
+  // save the current location occupied by the new or existing main function
   clang::SourceRange oldRange = mainFunc->getSourceRange();
 
+  // create the body from all the added statements and old body if exists
   clang::CompoundStmt *body = clang::CompoundStmt::Create(
     Context,
     stmts,
@@ -300,16 +304,20 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     mainFunc->getBodyRBrace()
   );
 
+  // Set main to use the new body
   mainFunc->setBody(body);
+
+  // use string and string stream to use the built in print to stream function
   std::string mainString = "";
   llvm::raw_string_ostream tempStream(mainString);
   mainFunc->print(tempStream, 0, false);
   if (!Handler.HasMain()) {
     // llvm::outs() << "Did Not Have Main\n";
+    // Place the new main function at the end of the main file if newly created
     _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainString);
   } else {
     if (oldRange.isValid() && _Rewriter.isRewritable(mainFunc->getLocation())) {
-      // _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainString);
+      // Replace the old main function with the new main if already existed
       _Rewriter.ReplaceText(oldRange, mainString);
     } else {
       llvm::outs() << "Oops\n";

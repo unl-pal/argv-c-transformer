@@ -213,6 +213,7 @@ CountNodesVisitor::ReportAttributes() {
   return *_allFunctions;
 }
 
+// USED ONLY FOR DEBUGGING PURPOSES
 void CountNodesVisitor::PrintReport(std::string fileName) {
   std::cout << fileName << std::endl;
   for (const std::pair<std::string, attributes*> func : *_allFunctions) {

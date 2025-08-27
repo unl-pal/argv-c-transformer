@@ -11,9 +11,7 @@ FilterFunctionsConsumer::FilterFunctionsConsumer(
 }
 
 void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &context) {
-  llvm::outs() << "Filtering Files\n";
   FilterFunctions();
-  llvm::outs() << "Filtered Files\n";
 }
 
 void FilterFunctionsConsumer::FilterFunctions() {
@@ -89,6 +87,5 @@ void FilterFunctionsConsumer::FilterFunctions() {
     } else if (attr.WhileLoops < _Config->at("minWhileLoops")) {
       _ToRemove->push_back(key);
     }
-    // llvm::outs() << "End: " << key << "\n";
   }
 }

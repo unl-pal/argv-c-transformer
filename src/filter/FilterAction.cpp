@@ -29,19 +29,25 @@ std::unique_ptr<clang::ASTConsumer>
 FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
                                 llvm::StringRef          filename) {
 
-  // Only expand directive macros
-  //  What qualifies as directive
+  // Only expand directive macros such as pragmas
+  // Not in use as it hinders all "include"s and renders benchmark uncompilable
   // compiler.getPreprocessor().SetMacroExpansionOnlyInDirectives();
 
   llvm::outs() << "Created ASTConsumer" << "\n";
+  // Create the AST used for the entire filter action and filter action only
   compiler.createASTContext();
 
+  // All functions to filter through
   std::unordered_map<std::string, CountNodesVisitor::attributes *> *toFilter =
     new std::unordered_map<std::string, CountNodesVisitor::attributes *>();
+  // Functions to be removed
   std::vector<std::string> *toRemove = new std::vector<std::string>();
+  // __VERIFIER types that will be required
   std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
   llvm::outs() << "Created To Filter and Remove Vars" << "\n";
 
+  // TempVector simplifies cast for multiplexor due to compiler attempts to
+  // optimize and interpret vector as all one type which breaks the code
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(std::make_unique<CountingConsumer>(_Types, toFilter));
   tempVector.emplace_back(
@@ -52,6 +58,7 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
   llvm::outs() << "Created Temp Vector" << "\n";
 
   // Multiplexor of all consumers that will be run over the same AST
+  // use move from temp to avoid compiler optimizations that may break the code
   std::unique_ptr<clang::MultiplexConsumer> result =
     std::make_unique<clang::MultiplexConsumer>(std::move(tempVector));
 
@@ -62,6 +69,7 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
 
 bool FilterAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   llvm::outs() << "Begin Source File Action" << "\n";
+  // Sets up the Rewriter before AST actions
   _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
   bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
   return result;
@@ -69,5 +77,6 @@ bool FilterAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
 
 void FilterAction::EndSourceFileAction() {
   llvm::outs() << "End Source File Action" << "\n";
+  // Writes the edited buffer to the new filtered file location
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }

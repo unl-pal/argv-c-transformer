@@ -17,10 +17,7 @@ AddMainVisitor::AddMainVisitor(clang::ASTContext       *c,
 bool AddMainVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
   if (!D) return false;
 
-  // std::string returnTypeName = returnType.getAsString();
-  // llvm::outs() << returnTypeName << "\n";
-  // std::replace(returnTypeName.begin(), returnTypeName.end(), ' ', '_');
-  // for (clang::Decl *decl : D->)
+  // Create a main function for benchmarks missing main and add to the tree at the end of the file
   clang::SourceLocation loc = D->decls_end()->getPreviousDecl()->getLocation();
   clang::IdentifierInfo *funcName = &_Context->Idents.get("main");
   clang::DeclarationName declName(funcName);
@@ -37,15 +34,21 @@ bool AddMainVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
     nullptr,
     clang::SC_Extern
   );
+
   newFunction->setReferenced();
   newFunction->setIsUsed();
+
+  // set the new function to expect a body to be added later
   newFunction->setWillHaveBody(true);
+
+  // Add Main to the tree
   D->addDecl(newFunction);
   _Rewriter.InsertTextAfter(loc, newFunction->getReturnType().getAsString() + " " + newFunction->getNameAsString() + "() {\n");
   clang::SourceRange range;
   loc = newFunction->getLocation();
   range.setBegin(loc);
 
+  // Set up main body to call all necessary functions to insure total code coverage
   clang::Stmt *body = newFunction->getBody();
   for (std::string name : _FunctionsToCall) {
     clang::IdentifierInfo *funcCallName = &_Context->Idents.get(name);
@@ -55,6 +58,7 @@ bool AddMainVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
     int i = 0;
     std::string verifierName = "__Verifier_non_det_";
     newFunction->getBody();
+    // Replace all parameters in the function call with calls to __VERIFIER functions
     for (clang::ParmVarDecl *parm : func->parameters()) {
       clang::ValueDecl *tempDecl = func;
       clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*_Context, func->getQualifierLoc(), loc, tempDecl, false, loc, parm->getType(), clang::ExprValueKind::VK_LValue);
@@ -66,11 +70,8 @@ bool AddMainVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
       loc = loc.getLocWithOffset(tempName.size());
     }
     _Rewriter.InsertText(loc, ");\n");
-    // loc.isPairOfFileLocations(SourceLocation Start, SourceLocation End)
   }
-  _Rewriter.InsertTextAfter(loc, "}");
-  // loc = loc.getLocWithOffset(tempName.size());
-
-  // return clang::RecursiveASTVisitor<AddMainVisitor>::VisitTranslationUnitDecl(D);
+  // Close the body
+  _Rewriter.InsertTextAfter(loc, "}"); // Check if this is a duplicate line
   return true;
 }

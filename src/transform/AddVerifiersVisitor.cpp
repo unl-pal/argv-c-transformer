@@ -30,14 +30,11 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
   
   clang::SourceLocation loc;
   if (firstNode && firstNode->getSourceRange().isValid()){
-    // firstNode->dumpColor();
 
     loc = mgr.translateLineCol(mgr.getMainFileID(), mgr.getSpellingLineNumber(firstNode->getLocation()), 1);
     if (clang::RawComment *comment = _C->getRawCommentForDeclNoCache(firstNode)) {
-      // if (comment) {
         llvm::outs() << comment->getRawText(mgr) << "\n";
         loc = comment->getBeginLoc();
-      // }
     }
   } else {
     loc = mgr.translateLineCol(mgr.getMainFileID(), 1, 1);
@@ -49,21 +46,19 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
 
   std::string nondetName = "__VERIFIER_nondet_";
   for (clang::QualType returnType : *_NeededTypes) {
-    // std::string returnTypeName;
 
     // Should probably have a enum or def somewhere with all supported
     // verrifiers to draw on for situations like this, or in config?
     if (!returnType->isBuiltinType() &&
         !returnType->isBooleanType() &&
-        !returnType->isArrayType() &&
         !returnType->isAnyCharacterType() &&
-        !returnType->isVoidType() &&
         !returnType->isAnyPointerType()
     ) {
       continue;
     }
 
     bool isPointer = returnType->isAnyPointerType();
+    // Fix ClangAST and ArgC names to src code discrepencies
     std::string returnTypeName = returnType->isBooleanType() ? "bool" : returnType.getAsString();
     returnTypeName = isPointer ? "pointer" : returnTypeName;
     llvm::outs() << returnTypeName << "\n";
@@ -72,13 +67,17 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
     if (!std::strcmp(&returnTypeName.at(returnTypeName.size() - 1), "_")) {
       returnTypeName.pop_back();
     }
+
+    // Get the look up info for the potentially needed verifier
     clang::IdentifierInfo *funcName = &_C->Idents.get(nondetName + returnTypeName);
     clang::DeclarationName declName(funcName);
+    // Check if the verifier is already in the tree
     if (!D->lookup(declName).empty()) {
       continue;
     }
     clang::FunctionProtoType::ExtProtoInfo epi;
 
+    // Handle all pointers to void* type conversion
     clang::QualType funcQualType;
     if (isPointer) {
       funcQualType = _C->getFunctionType(_C->VoidPtrTy, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
@@ -86,6 +85,7 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
       funcQualType = _C->getFunctionType(returnType, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
     }
 
+    // Create the new verifier with the appropriate return type
     clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
       *_C,
       D,
@@ -97,9 +97,11 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
       clang::SC_Extern
     );
 
+    // Set used and reference for AST meta knowledge
     newFunction->setReferenced();
     newFunction->setIsUsed();
 
+    // Create dummy parameter variable to finish verifier signature
     clang::ParmVarDecl *vParm = clang::ParmVarDecl::Create(
       *_C,
       newFunction->getDeclContext(),
@@ -112,14 +114,16 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
       nullptr
     );
 
+    // Add the dummy void parameter to the verifier code
     newFunction->setParams({vParm});
     vParm->setOwningFunction(newFunction);
     newFunction->addDecl(vParm);
     D->addDecl(newFunction);
+    // Check for valid write location and add verifier to the main file
     if (loc.isValid() && mgr.isInMainFile(loc)) {
+      // Use string and string stream to utilize built-in print to stream to create string
       std::string verifierString = "";
       llvm::raw_string_ostream tempStream(verifierString);
-      // newFunction->getAsFunction()->print(tempStream, 0, true);
       newFunction->print(tempStream);
       llvm::outs() << verifierString << " - The String\n";
       _Rewriter.InsertTextBefore(loc, verifierString + ";\n");

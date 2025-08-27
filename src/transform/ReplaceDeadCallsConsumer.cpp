@@ -9,6 +9,11 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/raw_ostream.h>
 
+/*
+ * Dead calls are different from just the calls to removed functions and handle
+ * C language specific features, static, inline and extern functions as well
+ * clean up for the transformer generated or modified code
+ */
 ReplaceDeadCallsConsumer::ReplaceDeadCallsConsumer(std::set<clang::QualType> *neededTypes, clang::Rewriter &rewriter) : _NeededTypes(neededTypes), _Rewriter(rewriter) {
 }
 
