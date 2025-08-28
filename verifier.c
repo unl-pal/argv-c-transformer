@@ -32,3 +32,7 @@ bool __VERIFIER_nondet_bool(void) {
 void* __VERIFIER_nondet_pointer(void) {
    return (void*)(5);
 }
+
+void reach_error() {
+
+}
