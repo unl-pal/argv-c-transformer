@@ -309,5 +309,32 @@ static void matrix_mul_point(float out[3], float in[3], float M[4][4])
 }
 
 int main(void) {
+    float M[4][4];
+    float O[4][4];
+    float I[4][4];
+    float temp;
+    for (int i=0; i<4; i++)
+    {
+        for (int j=0; j<4; j++)
+        {
+            temp = __VERIFIER_nondet_float();
+            M[i][j] = temp;
+            O[i][j] = temp;
+        }
+    }
+
+    int result = matrix_invert(M, I);
+
+    __VERIFIER_assert(result ||
+                      M[0][0] * I[0][0] +
+                      M[1][0] * I[0][1] +
+                      M[2][0] * I[0][2] +
+                      M[3][0] * I[0][3] == 1);
+
+    __VERIFIER_assert(result ||
+                      M[0][1] * I[0][0] +
+                      M[1][1] * I[0][1] +
+                      M[2][1] * I[0][2] +
+                      M[3][1] * I[0][3] == 0);
     return 0;
 }
