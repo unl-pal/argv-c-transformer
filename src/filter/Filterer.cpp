@@ -1,21 +1,42 @@
 #include "include/Filterer.hpp"
+#include "FrontendFactoryWithArgs.hpp"
 
-#include "Filter.h"
-#include "include/Remove.h"
-
+#include <algorithm>
+#include <clang/AST/Type.h>
 #include <clang/Lex/Preprocessor.h>
+#include <clang/Rewrite/Core/Rewriter.h>
+#include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <regex>
 #include <string>
-#include <unordered_map>
-#include <utility>
 
-Filterer::Filterer(){};
+const int defaultDebugLevel = 0;
+const bool defaultKeepCompilesOnly = true;
+const std::string defaultFilterDir = "filteredFiles";
+const std::string defaultDatabaseDir = "database";
+/// Not yet implemented in code - currently handled by scripts
+const bool defaultWipeOldBenchmarks = true;
 
+Filterer::Filterer(std::string configFile){
+  typesRequested = std::vector<unsigned int>();
+  typeNames = std::vector<std::string>();
+  configuration.debugLevel = defaultDebugLevel;
+  configuration.filterDir = defaultFilterDir;
+  configuration.databaseDir = defaultDatabaseDir;
+  configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
+  parseConfigFile(configFile);
+
+};
+
+// Parse the config file for all settings as well as a list of desired types
+/// TODO MAKE THE PARSERS MORE SECURE!!
 void Filterer::parseConfigFile(std::string configFile) {
   std::ifstream file(configFile);
   if (!std::filesystem::exists(configFile)) {
@@ -25,33 +46,86 @@ void Filterer::parseConfigFile(std::string configFile) {
   }
   if (file.is_open()) {
     std::cout << "Using: " << configFile << " Specified Settings" << std::endl;
-    std::regex pattern("^\\ *(\\w+)\\ *=\\ *([0-9]+|\\w+)$");
+    std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|[\\w\\s,]+|[\\w/-_.]+)$");
     std::string line;
     std::smatch match;
     while (std::getline(file, line)) {
       if (std::regex_search(line, match, pattern)) {
         std::string key = match[1];
-        if (config.count(key)) {
-          std::string value = match[2];
+        std::string value = match[2];
+        // Add the value to the config if the key is a member of the map
+        if (config->count(key)) {
           try {
             int i = std::stoi(value);
-            config[key] = i;
+            config->at(key) = i;
           } catch (...) {
-          } if (value == "false" || value == "False") {
-            config[key] = 0;
+          } 
+          // For true false values convert to 1s and 0s
+          if (value == "false" || value == "False") {
+            config->at(key) = 0;
           } else if (value == "true" || value == "True") {
-            config[key] = 1;
+            config->at(key) = 1;
           }
+        }
+        // For types go through all given types and add only supported types to the list
+        else if (key == "type" || key == "Type") {
+          std::vector<std::string> allTypes = std::vector<std::string>();
+          std::regex typePattern("([\\w]+)");
+          std::smatch typeMatches;
+          std::regex_search(value, typeMatches, typePattern);
+          while (std::regex_search(value, typeMatches, typePattern)) {
+          if (typeMatches[0] == "int" || typeMatches[0] == "Int") {
+            typesRequested.push_back(clang::BuiltinType::Int);
+            typeNames.push_back(typeMatches[0]);
+          } else if (typeMatches[0] == "float" || typeMatches[0] == "Float") {
+            typesRequested.push_back(clang::BuiltinType::Float);
+            typeNames.push_back(typeMatches[0]);
+          } else if (typeMatches[0] == "long" || typeMatches[0] == "Long") {
+            typesRequested.push_back(clang::BuiltinType::Long);
+            typeNames.push_back(typeMatches[0]);
+          } else if (typeMatches[0] == "bool" || typeMatches[0] == "Bool") {
+            typesRequested.push_back(clang::BuiltinType::Bool);
+            typeNames.push_back(typeMatches[0]);
+          } else if (typeMatches[0] == "char" || typeMatches[0] == "Char") {
+            typesRequested.push_back(clang::BuiltinType::UChar);
+            typeNames.push_back(typeMatches[0]);
+            }
+            value = typeMatches.suffix().str();
+          }
+        } else if (key == "databaseDir") {
+          configuration.databaseDir = value;
+          if (!std::filesystem::exists(value)) {
+            std::cout << "There is no directory: " << value
+                      << " to use as Database\nAborting Filtering Attempt"
+                      << std::endl;
+          }
+        } else if (key == "filterDir") {
+          configuration.filterDir = value;
+          if (!std::filesystem::exists(value)) {
+            std::filesystem::create_directory(value);
+          }
+        } else if (key == "debugLevel") {
+          try {
+            configuration.debugLevel = std::stoi(value);
+          } catch (...) {
+            configuration.debugLevel = 0;
+          }
+        } else if (key == "wipeOldBenchmarks") {
+          configuration.wipeOldBenchmarks = (value == "true" || value == "True");
         } else {
           std::cout << "Key: " << key
-                    << " Is Not A Valid Key For Filtering Files" << std::endl;
+            << " Is Not A Valid Key For Filtering Files" << std::endl;
         }
       }
     }
     file.close();
     std::cout << "Using Config Settings:" << std::endl;
-    for (std::pair item : config) {
+    for (std::pair item : *config) {
       std::cout << "Property: " << item.first << "=" << item.second << std::endl;
+    }
+    std::cout << "For Types: " << std::endl;
+    for (std::string T : typeNames) {
+      std::cout << T << std::endl;
     }
   } else {
     std::cerr << "File Failed to Open" << std::endl;
@@ -63,22 +137,23 @@ void Filterer::parseConfigFile(std::string configFile) {
 /// @param fileName : name of the file to check
 /// @param contents : string pointer containing the contents of the file
 /// @return : boolean true if the file passes the filter
-bool Filterer::checkPotentialFile(std::string fileName,
-                                  std::shared_ptr<std::string> contents) {
+bool Filterer::checkPotentialFile(std::string fileName) {
   std::ifstream file(fileName);
   std::stringstream buffer;
   std::cout << fileName << std::endl;
 
   if (file.is_open()) {
-    std::regex pattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
+    // Old logic for Macro filtering, could be handled by AST Action
+    std::regex allowedHeadersPattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
+    std::regex macroPattern("macro"); // Place holder for if we allow macros
     std::string line;
     std::smatch match;
     int count = 0;
     while (std::getline(file, line)) {
-      if (std::regex_search(line, match, pattern)) {
+      if (std::regex_search(line, match, allowedHeadersPattern)) {
         if (std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) !=
             stdLibNames.end()) {
-        } else if (!config["useNonStdHeaders"]) {
+        } else if (!config->at("useNonStdHeaders")) {
           file.close();
           return false;
         }
@@ -89,14 +164,11 @@ bool Filterer::checkPotentialFile(std::string fileName,
       buffer << line << std::endl;
     }
     file.close();
-    if (count < config["minFileLoC"]) {
-      *contents = "";
+    if (count < config->at("minFileLoC")) {
       return false;
-    } else if (count > config["maxFileLoC"]) {
-      *contents = "";
+    } else if (count > config->at("maxFileLoC")) {
       return false;
     } else {
-      *contents += buffer.str();
       return true;
     }
   } else {
@@ -105,11 +177,12 @@ bool Filterer::checkPotentialFile(std::string fileName,
   }
 }
 
+// Searches through the directory and identifies all c files, adding to array
 int Filterer::getAllCFiles(std::filesystem::path pathObject,
                            std::vector<std::string> &filesToFilter,
                            int numFiles) {
   if (!std::filesystem::exists(pathObject)) {
-    if (config["debug"]) {
+    if (config->at("debug")) {
       std::cout << "Path: " << " Does Not Exist" << std::endl;
     }
     return 0;
@@ -117,21 +190,21 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   if (std::filesystem::is_regular_file(pathObject)) {
     if (pathObject.has_extension()) {
       if (pathObject.extension() == ".c") {
-        if (config["debug"]) {
+        if (config->at("debug")) {
           std::cout << "File: " << pathObject.filename()
                     << " Added To Filter List" << std::endl;
         }
         filesToFilter.push_back(pathObject.string());
         return 1;
       } else {
-        if (config["debug"]) {
+        if (config->at("debug")) {
           std::cout << "File: " << pathObject.filename() << " is Not a C File"
                     << std::endl;
         }
         return 0;
       }
     } else {
-      if (config["debug"]) {
+      if (config->at("debug")) {
         std::cout << "File: " << pathObject.filename() << " Has No Extension"
                   << std::endl;
       }
@@ -144,7 +217,7 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
     }
     return numFiles;
   } else {
-    if (config["debug"]) {
+    if (config->at("debug")) {
       std::cout << "Path: " << pathObject.filename() << " Ignored" << std::endl;
     }
     return 0;
@@ -152,177 +225,137 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   return 0;
 }
 
-std::vector<std::string> Filterer::filterFunctions(
-  std::unordered_map<std::string, CountNodesVisitor::attributes *> functions) {
-  std::vector<std::string> functionsToRemove;
-  for (std::pair<std::string, CountNodesVisitor::attributes*> func : functions) {
-    std::string key = func.first;
-    CountNodesVisitor::attributes *attr = func.second;
-    if (key == "Program") {
-      continue;
-    } else if (attr->numIfStmt < config["minNumIfStmt"]) {
-      functionsToRemove.push_back(key);
-    } else if (attr->numLoopFor > config["maxNumLoopFor"]) {
-      functionsToRemove.push_back(key);
-    } else if (attr->numLoopWhile > config["maxNumLoopWhile"]) {
-      functionsToRemove.push_back(key);
-    } else if (attr->numVarRefInt < config["minNumVarRefInt"]) {
-      functionsToRemove.push_back(key);
-    } else if (attr->numOpCompare < config["minNumOpCompare"]) {
-      functionsToRemove.push_back(key);
-    }
-  }
-  return functionsToRemove;
-}
-
+// Debug statement creator for filterer, not fully implemented in the file nor
+// with the severity  flag value
 void Filterer::debugInfo(std::string info) {
-  if (config["debug"]) {
+  if (config->at("debug")) {
     std::cout << info << std::endl;
   }
 }
 
 /// Main driver for the Filter System
-int Filterer::run(int argc, char **argv) {
+int Filterer::run() {
+
   std::cout << "starting" << std::endl;
-  if (argc == 4) {
-    parseConfigFile(argv[2]);
 
-    std::filesystem::path pathObject(argv[1]);
+  std::filesystem::path pathObject(configuration.databaseDir);
 
-    std::vector<std::string> filesToFilter = std::vector<std::string>();
+  std::vector<std::string> filesToFilter = std::vector<std::string>();
 
-    std::cout << "Path: " << pathObject.string() << std::endl;
-    /// Check Path exists and get list of files to filter
-    int filesFound = getAllCFiles(pathObject, filesToFilter, 0);
-    debugInfo("Files Found: " + std::to_string(filesFound));
+  std::cout << "Path: " << pathObject.string() << std::endl;
+  /// Check Path exists and get list of files to filter
+  int filesFound = getAllCFiles(pathObject, filesToFilter, 0);
+  debugInfo("Files Found: " + std::to_string(filesFound));
 
-    /// Set args for AST creation
-    std::vector<std::string> args = std::vector<std::string>();
-    args.push_back("-fparse-all-comments");
-    args.push_back(std::string("-resource-dir=") + argv[3]);
-
-    // string indent to use for organizing debug statements
-    std::string indent = "    "; // TODO something about this, is it needed?
-    std::string hello = "// ---------------------------------\n"
-                        "// !! This File Has Been Filtered !!\n"
-                        "// ---------------------------------\n";
-
-    /// Loop over all c files in filter list and run through the checker before
-    /// creating the AST
-    for (std::string fileName : filesToFilter) {
-      std::shared_ptr<std::string> contents = std::make_shared<std::string>();
-      *contents += hello;
-      if (checkPotentialFile(fileName, contents)) {
-        std::filesystem::path oldPath(fileName);
-        std::filesystem::path newPath(std::filesystem::current_path() /
-                                      "filteredFiles");
-        /// set up the new path in filteredFiles to keep directory structure
-        for (const std::filesystem::path &component : oldPath) {
-          if (component.string() != oldPath.begin()->string() &&
-              component.string() != "..") {
-            newPath /= component;
-          }
+  /// Loop over all c files in filter list and run through the checker before
+  /// creating the AST
+  for (std::string fileName : filesToFilter) {
+    if (checkPotentialFile(fileName)) {
+      std::filesystem::path oldPath(fileName);
+      std::filesystem::path newPath(std::filesystem::current_path() /
+                                    configuration.filterDir);
+      /// set up the new path in filteredFiles to keep directory structure
+      // prevent writing outside the project directory for now
+      for (const std::filesystem::path &component : oldPath) {
+        if (component.string() != ".."
+          || component.string() == configuration.databaseDir) {
+          newPath /= component;
         }
-
-        /// Use args and file content to generate
-        std::cout << "Creating astUnit for: " << fileName << std::endl;
-
-        std::unique_ptr<clang::ASTUnit> astUnit =
-          clang::tooling::buildASTFromCodeWithArgs(*contents, args,
-                                                   newPath.string());
-        if (config["debug"]) {
-          std::cout << *contents << std::endl;
-        }
-
-        if (!astUnit) {
-          std::cerr << "Failed to build AST for: " << fileName << std::endl;
-          continue;
-        }
-
-        clang::ASTContext &Context = astUnit->getASTContext();
-
-        if (config["debug"]) {
-          std::cout << indent << "Diagnostics" << std::endl;
-          astUnit->getDiagnostics();
-          Context.PrintStats();
-        }
-
-        std::cout << "Main File Name: " << astUnit->getMainFileName().str()
-                  << std::endl;
-        std::cout << "Creating Counting Visitor" << std::endl;
-        CountNodesVisitor countVisitor(&Context);
-
-        std::cout << indent << "Traversing AST" << std::endl;
-        countVisitor.TraverseAST(Context);
-
-        if (config["debug"]) {
-          std::cout << indent << "Printing Report" << std::endl;
-          countVisitor.PrintReport(fileName);
-        }
-
-        std::unordered_map<std::string, CountNodesVisitor::attributes*> functions = countVisitor.ReportAttributes();
-        std::vector<std::string> functionsToRemove = filterFunctions(functions);
-
-        // If all funtions besides the global 'function', Program, which holds
-        // all variables and declarations made outside of functions are removed
-        // then do not add the file
-        if (functions.size() && functions.size() - functionsToRemove.size() <= 1) {
-          std::cout << "No Potential Funtions In: " << fileName << std::endl;
-          std::cout << "Moving to Next Potential File" << std::endl;
-          continue;
-        }
-
-        std::filesystem::create_directories(newPath.parent_path());
-
-        clang::Rewriter Rewrite;
-        Rewrite.setSourceMgr(Context.getSourceManager(),
-                             astUnit->getLangOpts());
-        if (functionsToRemove.size()) {
-          std::cout << indent << "Removing Nodes\n";
-          for (std::string node : functionsToRemove) {
-            std::cout << indent << indent << node + "\n";
-          }
-          std::cout << std::endl;
-          // Rewrite.setSourceMgr(astUnit->getSourceManager(),
-          RemoveFuncVisitor RemoveFunctionsVisitor(&Context, Rewrite,
-                                                   functionsToRemove);
-          RemoveFunctionsVisitor.TraverseAST(Context);
-        }
-
-        std::cout << "Writing File" << std::endl;
-        // Rewrite.setSourceMgr(Context.getSourceManager(),
-        //                      astUnit->getLangOpts());
-        // Rewrite.getEditBuffer(Context.getSourceManager().getFileID(Context.getFullLoc(astUnit->getSourceManager().dump()))).write(llvm::outs());
-        // Rewrite.getEditBuffer(Context.getSourceManager().getFileID(Context.getTranslationUnitDecl()->getLocation())).write(llvm::outs());
-        Rewrite.InsertTextBefore(Context.getTranslationUnitDecl()->decls_begin()->getBeginLoc(), "// ========== Try Again Filter ==========\n");
-        std::error_code ec;
-        llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
-        Rewrite.getEditBuffer(Context.getSourceManager().getFileID(astUnit->getStartOfMainFileID())).write(output);
-        // std::ofstream file(newPath.string());
-        // std::cout << Rewrite.overwriteChangedFiles() << std::endl;
-        std::cout << "Finished Rewrite step" << std::endl;
-
-
-        if (config["debug"] && std::filesystem::exists(newPath)) {
-          std::ifstream file(newPath.string());
-          std::stringstream buffer;
-
-          if (file.is_open()) {
-            buffer << file.rdbuf();
-            const std::string fileContents = buffer.str();
-            std::cout << fileContents << std::endl;
-          } else {
-            file.close();
-          }
-        }
-      } else {
-        std::cerr << "File: " << fileName << " Does Not Meet Criteria"
-                  << std::endl;
       }
+
+      llvm::outs() << "Setting Up Common Options Parser\n";
+
+      static llvm::cl::OptionCategory myToolCategory("filterer");
+
+      clang::IgnoringDiagConsumer diagConsumer;
+
+      std::string resourceDir;
+      try {
+        resourceDir = std::getenv("CLANG_RESOURCES");
+      } catch (...) {
+        std::cout << "Please set the CLANG_RESOURCES environment vairable "
+                     "before proceeding"
+                  << std::endl;
+        return 1;
+      }
+
+      /// Set args for AST creation order does matter
+      /// all args are passed to "clang" which is used for AST creation
+      std::vector<std::string> args = std::vector<std::string>({
+        "clang",
+        "-extra-arg=-xc",
+        "-extra-arg=-I",
+        oldPath.string(),
+        "-extra-arg=-resource-dir=" + resourceDir,
+        "-extra-arg=-fparse-all-comments",
+        // "-extra-arg=-Wdocumentation",
+      });
+
+      int argc = args.size();
+
+      char** argv = new char*[argc + 1];
+
+      for (int i=0; i<argc; i++) {
+        argv[i] = new char[args[i].length() + 1];
+        std::strcpy(argv[i], args[i].c_str());
+      }
+
+      argv[argc] = nullptr;
+
+      if (argv == nullptr) {
+        return 1;
+      }
+
+      std::filesystem::create_directories(newPath.parent_path());
+
+      std::error_code ec;
+      llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
+
+      llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
+        clang::tooling::CommonOptionsParser::create(argc, (const char **)argv,
+                                                    myToolCategory);
+      if (!expectedParser) {
+        llvm::errs() << expectedParser.takeError();
+        return 1;
+      }
+
+      clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
+
+      llvm::outs() << "Building the Tool\n";
+
+      clang::tooling::ClangTool tool(optionsParser.getCompilations(),
+                                     optionsParser.getSourcePathList());
+
+      llvm::outs() << "Diagnostic Options\n";
+
+      tool.setDiagnosticConsumer(&diagConsumer);
+
+      llvm::outs() << "Creating Factory\n";
+
+      FrontendFactoryWithArgs factory(config, typesRequested, output);
+
+      llvm::outs() << "Run the Tool\n";
+
+      llvm::outs() << tool.run(&factory) << "\n";
+
+      output.close();
+
+      if (config->at("debug") && std::filesystem::exists(newPath)) {
+        std::ifstream file(newPath.string());
+        std::stringstream buffer;
+
+        if (file.is_open()) {
+          buffer << file.rdbuf();
+          const std::string fileContents = buffer.str();
+          std::cout << fileContents << std::endl;
+        } else {
+          file.close();
+        }
+      }
+    } else {
+      std::cerr << "File: " << fileName << " Does Not Meet Criteria"
+        << std::endl;
     }
-  } else {
-    std::cout << "Incorrect Number of Args" << std::endl;
-    return 1;
   }
   return 0;
 }

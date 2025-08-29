@@ -2,30 +2,41 @@
 
 #include <filesystem>
 #include <string>
-#include <vector>
+
+/// Configurations used in the transform section of the tool
+struct transformConfigs {
+  int debugLevel;
+  bool keepCompilesOnly;
+  std::string filterDir;
+  std::string benchmarkDir;
+  bool wipeOldBenchmarks;
+};
 
 class Transformer {
 public:
-  bool getFileContents(std::string fileName, std::shared_ptr<std::string> contents);
-  bool transformFile(std::filesystem::path path, std::vector<std::string> &args);
-  bool transformAll(std::filesystem::path path, std::vector<std::string> &args);
-  void parseConfig();
-  int run(std::string filePath, std::string resources);
+  /// Constructor
+  Transformer(std::string configFile);
+
+  /// Creates the frontend action to transform a file
+  bool transformFile(std::filesystem::path path);
+
+  /// Recurses through all files and initializes the transformFile Function
+  int transformAll(std::filesystem::path path, int count);
+
+  /// Check that the transformed file compiles without errors
+  int checkCompilable(std::filesystem::path path);
+
+  /// Parses the configuration file to determine location of files to filter
+  /// where to store benchmarks
+  /// what the debug level is
+  /// whether or not to keep benchmarks that do not compile
+  void parseConfig(std::string configFile);
+
+  /// Driver for the transformer that is called by full or transform to run the
+  /// transformer on code specified by the given arguments
+  int run();
 
 private:
-  struct configs {
-    int minLoC;
-    int maxLoC;
-    int minIf;
-    int maxLoop;
-    int minLoop;
-    int minNumCompareInt;
-    int minNumOpBinary;
-    int minNumOpUnary;
-    int minNumVarInt;
-    int maxNumVarFloat;
-    int maxNumVarString;
-    int maxNumVarPoint;
-    int maxNumVarStruct;
-  };
+  // std::filesystem::path _ConfigFile;
+  struct transformConfigs configuration;
 };

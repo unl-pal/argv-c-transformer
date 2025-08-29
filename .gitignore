@@ -1,19 +1,16 @@
+result
+
 temp/
 build/
 bin/
-<<<<<<< HEAD
 
-samples/TheAlgorithmsC/
-samples/EggListener.c
-=======
-database/
 /samples/TheAlgorithmsC/
 /samples/EggListener.c
->>>>>>> feature/4/jckreg/transformComments
-preprocessed/*
-filteredFiles/*
-benchmark/*
-database/*
+/samples/OG/
+/preprocessed/*
+/filteredFiles/*
+/benchmark/*
+/database/*
 
 compile_commands.json
 
@@ -23,3 +20,5 @@ compile_commands.json
 *.ast
 
 *.zig*
+
+/notes/
