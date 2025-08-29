@@ -2,7 +2,6 @@
 
 #include <filesystem>
 #include <map>
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -10,6 +9,7 @@ struct filterConfigs {
   std::string databaseDir;
   std::string filterDir;
   int debugLevel;
+  bool wipeOldBenchmarks;
 };
 
 class Filterer {
@@ -25,8 +25,7 @@ public:
   /// and adds to the contents pointer as needed returning true on a file that
   /// has potential for our tool or false on a undesirable file. The contents
   /// are only populated in the case of the file being desireable
-  bool checkPotentialFile(std::string                  fileName,
-                          std::shared_ptr<std::string> contents);
+  bool checkPotentialFile(std::string                  fileName);
 
   /// Finds all C files in a path 
   /// single file path or dir are both acceptable
@@ -49,7 +48,7 @@ private:
     "stdatomic.h", "stdbit.h",   "stdbool.h", "stdckdint.h", "stddef.h",
     "stdint.h",    "stdio.h",    "stdlib.h",  "stdmchar.h",  "stdnoreturn.h",
     "string.h",    "tgmath.h",   "threads.h", "time.h",      "uchar.h",
-    "wchar.h",     "wctype.h"};
+    "wchar.h",     "wctype.h", "string"};
 
   std::vector<unsigned int> typesRequested;
   std::vector<std::string> typeNames;
@@ -59,7 +58,7 @@ private:
     {"debug", 1},
     // {"debugLevel", 0},
     {"maxCallFunc", 99999},
-    {"maxFileLoC", 2000},
+    {"maxFileLoC", 99999},
     {"maxForLoops", 99999},
     {"maxFunctions", 99999},
     {"maxIfStmt", 99999},
@@ -76,7 +75,7 @@ private:
     {"maxTypeVariables", 99999},
     {"maxWhileLoops", 99999},
     {"minCallFunc", 0},
-    {"minFileLoC", 5},
+    {"minFileLoC", 0},
     {"minForLoops", 0},
     {"minFunctions", 0},
     {"minIfStmt", 0},

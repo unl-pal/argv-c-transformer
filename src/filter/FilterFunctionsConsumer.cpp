@@ -11,7 +11,6 @@ FilterFunctionsConsumer::FilterFunctionsConsumer(
 }
 
 void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &context) {
-  llvm::outs() << "Filtering Files\n";
   FilterFunctions();
 }
 
@@ -20,72 +19,72 @@ void FilterFunctionsConsumer::FilterFunctions() {
   for (const std::pair<std::string, CountNodesVisitor::attributes*> func : *_ToFilter) {
     std::string key = func.first;
     llvm::outs() << "Key: " << key << "\n";
-    CountNodesVisitor::attributes *attr = func.second;
+    CountNodesVisitor::attributes attr = *func.second;
     if (key == "Program" || key == "main") {
       continue;
-    } else if (attr->ForLoops > _Config->at("maxForLoops")) {
+    } else if (attr.ForLoops > _Config->at("maxForLoops")) {
       _ToRemove->push_back(key);
-    } else if (attr->WhileLoops > _Config->at("maxWhileLoops")) {
+    } else if (attr.WhileLoops > _Config->at("maxWhileLoops")) {
       _ToRemove->push_back(key);
-    } else if (attr->CallFunc > _Config->at("maxCallFunc")) {
+    } else if (attr.CallFunc > _Config->at("maxCallFunc")) {
       _ToRemove->push_back(key);
-    } else if (attr->Functions > _Config->at("maxFunctions")) {
+    } else if (attr.Functions > _Config->at("maxFunctions")) {
       _ToRemove->push_back(key);
-    } else if (attr->IfStmt > _Config->at("maxIfStmt")) {
+    } else if (attr.IfStmt > _Config->at("maxIfStmt")) {
       _ToRemove->push_back(key);
-    } else if (attr->Param > _Config->at("maxParam")) {
+    } else if (attr.Param > _Config->at("maxParam")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeArithmeticOperation > _Config->at("maxTypeArithmeticOperation")) {
+    } else if (attr.TypeArithmeticOperation > _Config->at("maxTypeArithmeticOperation")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeCompareOperation > _Config->at("maxTypeCompareOperation")) {
+    } else if (attr.TypeCompareOperation > _Config->at("maxTypeCompareOperation")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeComparisons > _Config->at("maxTypeComparisons")) {
+    } else if (attr.TypeComparisons > _Config->at("maxTypeComparisons")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeIfStmt > _Config->at("maxTypeIfStmt")) {
+    } else if (attr.TypeIfStmt > _Config->at("maxTypeIfStmt")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeParameters > _Config->at("maxTypeParameters")) {
+    } else if (attr.TypeParameters > _Config->at("maxTypeParameters")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypePostfix > _Config->at("maxTypePostfix")) {
+    } else if (attr.TypePostfix > _Config->at("maxTypePostfix")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypePrefix > _Config->at("maxTypePrefix")) {
+    } else if (attr.TypePrefix > _Config->at("maxTypePrefix")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeUnaryOperation > _Config->at("maxTypeUnaryOperation")) {
+    } else if (attr.TypeUnaryOperation > _Config->at("maxTypeUnaryOperation")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeVariableReference > _Config->at("maxTypeVariableReference")) {
+    } else if (attr.TypeVariableReference > _Config->at("maxTypeVariableReference")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeVariables > _Config->at("maxTypeVariables")) {
+    } else if (attr.TypeVariables > _Config->at("maxTypeVariables")) {
       _ToRemove->push_back(key);
-    } else if (attr->CallFunc < _Config->at("minCallFunc")) {
+    } else if (attr.CallFunc < _Config->at("minCallFunc")) {
       _ToRemove->push_back(key);
-    } else if (attr->ForLoops < _Config->at("minForLoops")) {
+    } else if (attr.ForLoops < _Config->at("minForLoops")) {
       _ToRemove->push_back(key);
-    } else if (attr->Functions < _Config->at("minFunctions")) {
+    } else if (attr.Functions < _Config->at("minFunctions")) {
       _ToRemove->push_back(key);
-    } else if (attr->IfStmt < _Config->at("minIfStmt")) {
+    } else if (attr.IfStmt < _Config->at("minIfStmt")) {
       _ToRemove->push_back(key);
-    } else if (attr->Param < _Config->at("minParam")) {
+    } else if (attr.Param < _Config->at("minParam")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeArithmeticOperation < _Config->at("minTypeArithmeticOperation")) {
+    } else if (attr.TypeArithmeticOperation < _Config->at("minTypeArithmeticOperation")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeCompareOperation < _Config->at("minTypeCompareOperation")) {
+    } else if (attr.TypeCompareOperation < _Config->at("minTypeCompareOperation")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeComparisons < _Config->at("minTypeComparisons")) {
+    } else if (attr.TypeComparisons < _Config->at("minTypeComparisons")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeIfStmt < _Config->at("minTypeIfStmt")) {
+    } else if (attr.TypeIfStmt < _Config->at("minTypeIfStmt")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeParameters < _Config->at("minTypeParameters")) {
+    } else if (attr.TypeParameters < _Config->at("minTypeParameters")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypePostfix < _Config->at("minTypePostfix")) {
+    } else if (attr.TypePostfix < _Config->at("minTypePostfix")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypePrefix < _Config->at("minTypePrefix")) {
+    } else if (attr.TypePrefix < _Config->at("minTypePrefix")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeUnaryOperation < _Config->at("minTypeUnaryOperation")) {
+    } else if (attr.TypeUnaryOperation < _Config->at("minTypeUnaryOperation")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeVariableReference < _Config->at("minTypeVariableReference")) {
+    } else if (attr.TypeVariableReference < _Config->at("minTypeVariableReference")) {
       _ToRemove->push_back(key);
-    } else if (attr->TypeVariables < _Config->at("minTypeVariables")) {
+    } else if (attr.TypeVariables < _Config->at("minTypeVariables")) {
       _ToRemove->push_back(key);
-    } else if (attr->WhileLoops < _Config->at("minWhileLoops")) {
+    } else if (attr.WhileLoops < _Config->at("minWhileLoops")) {
       _ToRemove->push_back(key);
     }
   }

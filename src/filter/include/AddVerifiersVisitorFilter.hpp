@@ -9,13 +9,13 @@
 #include <llvm/Support/raw_ostream.h>
 #include <set>
 
-class AddVerifiersVisitor : public clang::RecursiveASTVisitor<AddVerifiersVisitor> {
+class AddVerifiersVisitorFilter : public clang::RecursiveASTVisitor<AddVerifiersVisitorFilter> {
 public:
   /// Creates Verifier functions and writes to the output
   /// @param - c context of the tree used
   /// @param - output to be written to
   /// @param - neededTypes types of verifier functions needed to complete the code
-  AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output,
+  AddVerifiersVisitorFilter(clang::ASTContext *c, llvm::raw_fd_ostream &output,
                       std::set<clang::QualType> *neededTypes,
                       clang::Rewriter &rewriter);
 

@@ -1,9 +1,19 @@
+/* 
+* LICENSE INFO
+*
+* COPYRIGHT INFO
+*
+*/
+
+/// How to tutorial thingy
+
 #include <string.h>
 #include <stdbool.h>
 
+bool anotherBool = true;
+
 // comment by local external function
 extern int elsewhere(int x);
-
 // comments for the var decl
 int a0 = 0;
 int a1 = 1;
@@ -11,8 +21,6 @@ int a2 = 2;
 
 int ara[3] = {0, 1, 2};
 int b0;
-
-bool anotherBool = true;
 
 struct thing {
   float f;
@@ -30,8 +38,12 @@ int doesThing(int input) {
 
 // comments for the function to remove
 // badFunc3 comment
-int empty() {
-  return 1;
+bool emptyBoolCall() {
+  return a1 == a2;
+}
+
+char* returnsString() {
+  return "string";
 }
 
 // removeMe comment
@@ -44,7 +56,7 @@ int main() {
   struct thing myThing;
   struct thing *myThing2 = &myThing;
   myThing.b = true;
-  char *s1 = "";
+  const char *s1 = returnsString();
   char *s2 = "";
   char *s3 = "thing";
 
@@ -65,9 +77,16 @@ int main() {
     ++a0;
   }
 
-  int y = empty();
+  bool y = emptyBoolCall();
 
-  int z = hasInput(a2)+ empty();
+  y = emptyBoolCall() && anotherBool;
+
+  int z;
+  if (emptyBoolCall() || y) {
+    z = hasInput(a2) + a1;
+  } else {
+    z = 0;
+  }
 
   // comments by the removed function call
   int x = hasInput(z) * y;

@@ -3,11 +3,13 @@
 #include <filesystem>
 #include <string>
 
+/// Configurations used in the transform section of the tool
 struct transformConfigs {
   int debugLevel;
   bool keepCompilesOnly;
   std::string filterDir;
   std::string benchmarkDir;
+  bool wipeOldBenchmarks;
 };
 
 class Transformer {

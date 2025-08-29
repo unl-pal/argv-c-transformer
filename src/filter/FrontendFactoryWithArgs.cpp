@@ -22,7 +22,5 @@ std::unique_ptr<clang::FrontendAction> FrontendFactoryWithArgs::create() {
 
 bool FrontendFactoryWithArgs::runInvocation(std::shared_ptr<clang::CompilerInvocation> Invocation, clang::FileManager *Files, std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps, clang::DiagnosticConsumer *DiagConsumer) {
   llvm::outs() << "Running Invocation\n";
-
-  // return true;
   return clang::tooling::FrontendActionFactory::runInvocation(Invocation, Files, PCHContainerOps, DiagConsumer);
 }

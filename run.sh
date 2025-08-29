@@ -21,9 +21,9 @@ ninja -C build filter transform
 
 set +e
 
-echo "=================================== Reset Directories ==================================="
-rm -r filteredFiles/*
-rm -r benchmark/*
+# echo "=================================== Reset Directories ==================================="
+# rm -r filteredFiles/*
+# rm -r benchmark/*
 
 set -e
 
@@ -36,3 +36,5 @@ echo "=================================== Run Filter ===========================
 
 echo "=================================== Run Transform ==================================="
 ./build/transform "$configFile"
+
+# find benchmark -empty -delete

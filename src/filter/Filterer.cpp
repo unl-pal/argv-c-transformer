@@ -17,9 +17,20 @@
 #include <regex>
 #include <string>
 
+const int defaultDebugLevel = 0;
+const bool defaultKeepCompilesOnly = true;
+const std::string defaultFilterDir = "filteredFiles";
+const std::string defaultDatabaseDir = "database";
+/// Not yet implemented in code - currently handled by scripts
+const bool defaultWipeOldBenchmarks = true;
+
 Filterer::Filterer(std::string configFile){
   typesRequested = std::vector<unsigned int>();
   typeNames = std::vector<std::string>();
+  configuration.debugLevel = defaultDebugLevel;
+  configuration.filterDir = defaultFilterDir;
+  configuration.databaseDir = defaultDatabaseDir;
+  configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
   parseConfigFile(configFile);
 
 };
@@ -82,16 +93,16 @@ void Filterer::parseConfigFile(std::string configFile) {
             value = typeMatches.suffix().str();
           }
         } else if (key == "databaseDir") {
-          if (std::filesystem::exists(value)) {
-            configuration.databaseDir = value;
-          } else {
-            configuration.databaseDir = "database";
+          configuration.databaseDir = value;
+          if (!std::filesystem::exists(value)) {
+            std::cout << "There is no directory: " << value
+                      << " to use as Database\nAborting Filtering Attempt"
+                      << std::endl;
           }
         } else if (key == "filterDir") {
-          if (std::filesystem::exists(value)) {
-            configuration.filterDir = value;
-          } else {
-            configuration.filterDir = "filteredFiles";
+          configuration.filterDir = value;
+          if (!std::filesystem::exists(value)) {
+            std::filesystem::create_directory(value);
           }
         } else if (key == "debugLevel") {
           try {
@@ -99,6 +110,8 @@ void Filterer::parseConfigFile(std::string configFile) {
           } catch (...) {
             configuration.debugLevel = 0;
           }
+        } else if (key == "wipeOldBenchmarks") {
+          configuration.wipeOldBenchmarks = (value == "true" || value == "True");
         } else {
           std::cout << "Key: " << key
             << " Is Not A Valid Key For Filtering Files" << std::endl;
@@ -117,9 +130,6 @@ void Filterer::parseConfigFile(std::string configFile) {
   } else {
     std::cerr << "File Failed to Open" << std::endl;
     std::cout << "Using Default Settings" << std::endl;
-    configuration.debugLevel = 0;
-    configuration.filterDir = "filtereredFiles";
-    configuration.databaseDir = "database";
   }
 }
 
@@ -127,19 +137,20 @@ void Filterer::parseConfigFile(std::string configFile) {
 /// @param fileName : name of the file to check
 /// @param contents : string pointer containing the contents of the file
 /// @return : boolean true if the file passes the filter
-bool Filterer::checkPotentialFile(std::string fileName,
-                                  std::shared_ptr<std::string> contents) {
+bool Filterer::checkPotentialFile(std::string fileName) {
   std::ifstream file(fileName);
   std::stringstream buffer;
   std::cout << fileName << std::endl;
 
   if (file.is_open()) {
-    std::regex pattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
+    // Old logic for Macro filtering, could be handled by AST Action
+    std::regex allowedHeadersPattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
+    std::regex macroPattern("macro"); // Place holder for if we allow macros
     std::string line;
     std::smatch match;
     int count = 0;
     while (std::getline(file, line)) {
-      if (std::regex_search(line, match, pattern)) {
+      if (std::regex_search(line, match, allowedHeadersPattern)) {
         if (std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) !=
             stdLibNames.end()) {
         } else if (!config->at("useNonStdHeaders")) {
@@ -154,13 +165,10 @@ bool Filterer::checkPotentialFile(std::string fileName,
     }
     file.close();
     if (count < config->at("minFileLoC")) {
-      *contents = "";
       return false;
     } else if (count > config->at("maxFileLoC")) {
-      *contents = "";
       return false;
     } else {
-      *contents += buffer.str();
       return true;
     }
   } else {
@@ -242,15 +250,15 @@ int Filterer::run() {
   /// Loop over all c files in filter list and run through the checker before
   /// creating the AST
   for (std::string fileName : filesToFilter) {
-    std::shared_ptr<std::string> contents = std::make_shared<std::string>();
-    if (checkPotentialFile(fileName, contents)) {
+    if (checkPotentialFile(fileName)) {
       std::filesystem::path oldPath(fileName);
       std::filesystem::path newPath(std::filesystem::current_path() /
-                                    "filteredFiles");
+                                    configuration.filterDir);
       /// set up the new path in filteredFiles to keep directory structure
       // prevent writing outside the project directory for now
       for (const std::filesystem::path &component : oldPath) {
-        if (component.string() != "..") {
+        if (component.string() != ".."
+          || component.string() == configuration.databaseDir) {
           newPath /= component;
         }
       }
@@ -271,15 +279,16 @@ int Filterer::run() {
         return 1;
       }
 
-      /// Set args for AST creation
+      /// Set args for AST creation order does matter
+      /// all args are passed to "clang" which is used for AST creation
       std::vector<std::string> args = std::vector<std::string>({
         "clang",
-        oldPath.string(),
-        "-extra-arg=-fparse-all-comments",
-        "-extra-arg=-resource-dir=" + resourceDir,
-        "-extra-arg=-Wdocumentation",
         "-extra-arg=-xc",
-        "-extra-arg=-I"
+        "-extra-arg=-I",
+        oldPath.string(),
+        "-extra-arg=-resource-dir=" + resourceDir,
+        "-extra-arg=-fparse-all-comments",
+        // "-extra-arg=-Wdocumentation",
       });
 
       int argc = args.size();
@@ -330,10 +339,6 @@ int Filterer::run() {
       llvm::outs() << tool.run(&factory) << "\n";
 
       output.close();
-
-      if (config->at("debug")) {
-        std::cout << *contents << std::endl;
-      }
 
       if (config->at("debug") && std::filesystem::exists(newPath)) {
         std::ifstream file(newPath.string());

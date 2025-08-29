@@ -17,6 +17,7 @@
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <llvm/ADT/IntrusiveRefCntPtr.h>
 #include <llvm/ADT/StringRef.h>
@@ -26,9 +27,24 @@
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
 #include <regex>
+#include <string>
+#include <system_error>
 #include <vector>
 
+const int defaultDebugLevel = 0;
+const bool defaultKeepCompilesOnly = true;
+const std::string defaultFilterDir = "filteredFiles";
+const std::string defaultBenchmarkDir = "benchmarks";
+/// Not yet implemented in code - currently handled by scripts
+const bool defaultWipeOldBenchmarks = true;
+
 Transformer::Transformer(std::string configFile) : configuration() {
+  /// Set default values - figure out if this
+  configuration.debugLevel = defaultDebugLevel;
+  configuration.keepCompilesOnly = defaultKeepCompilesOnly;
+  configuration.filterDir = defaultFilterDir;
+  configuration.benchmarkDir = defaultBenchmarkDir;
+  configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
   parseConfig(configFile);
 }
 
@@ -40,12 +56,14 @@ bool Transformer::transformFile(std::filesystem::path path) {
   if (!std::filesystem::exists(path)) return false;
   std::filesystem::path full = std::filesystem::current_path() / path;
 
-  std::filesystem::path srcPath = std::filesystem::path("benchmark");
-  std::filesystem::path preprocessedPath = std::filesystem::path("preprocessed");
+  std::filesystem::path srcPath = std::filesystem::path(configuration.benchmarkDir);
+  /// May want this later for .i files that could be used for expanding macros
+  // std::filesystem::path preprocessedPath = std::filesystem::path("preprocessed");
+
   // Keeps people from being able to write files outside of the project folder for now
-  // Eliminates the filteredFiles part of the path
+  // Eliminates the "filteredFiles" part of the path
   for (const std::filesystem::path &component : path) {
-    if (component.string() != "filteredFiles" && component.string() != "..") {
+    if (component.string() != configuration.filterDir && component.string() != "..") {
       srcPath /= component;
     }
   }
@@ -68,14 +86,14 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   std::cout << "Setting Comp Options" << std::endl;
 
+  // Arguments needed for Clang to accurately generate our ASTs
   std::vector<std::string> compOptionsArgs({
     "clang",
-    path.string(),
-    // "--",
-    "-extra-arg=-fparse-all-comments",
-    "-extra-arg=-resource-dir=" + resourceDir,
     "-extra-arg=-xc",
-    "-extra-arg=-I"
+    "-extra-arg=-I",
+    path.string(),
+    "-extra-arg=-resource-dir=" + resourceDir,
+    "-extra-arg=-fparse-all-comments",
   });
 
   int argc = compOptionsArgs.size();
@@ -134,8 +152,8 @@ bool Transformer::transformFile(std::filesystem::path path) {
     }
     return 0;
   }
-
   return 1;
+
 }
 
 // Recursive algorithm for traversing the file structure and searching for 
@@ -161,6 +179,9 @@ int Transformer::transformAll(std::filesystem::path path, int count) {
   return count;
 }
 
+// Check if the benchmark is compilable after transformation and remove
+// non-compilable benchmarks if set to in the configuration file or keep for
+// debugging
 int Transformer::checkCompilable(std::filesystem::path path) {
   static llvm::cl::OptionCategory myToolCategory("CheckCompiles");
 
@@ -171,11 +192,9 @@ int Transformer::checkCompilable(std::filesystem::path path) {
     "-extra-arg=-fsyntax-only",
     "-extra-arg=-xc",
     "-extra-arg=-I",
-    "-extra-arg=-w",
     "-extra-arg=-resource-dir=" + resourceDir,
-    "verifier.c",
-    path.string()
-    // "-extra-arg=-fparse-all-comments",
+    "verifier.c", // dummy verify file is needed to resolve extern Verifier Functions
+    path.string(),
   });
 
   int argc = compOptionsArgs.size();
@@ -206,10 +225,12 @@ int Transformer::checkCompilable(std::filesystem::path path) {
                                  optionsParser.getSourcePathList());
 
   // Show the number of errors only not the errors themselves to avoid clutter
+  // Can be changed for diagnostic purposes if desired
   clang::DiagnosticConsumer diagConsumer;
   tool.setDiagnosticConsumer(&diagConsumer);
 
   // tool.run(clang::tooling::newFrontendActionFactory<clang::PreprocessOnlyAction>().get());
+  // This is the same as running "clang -xc -fsyntax-only `file-name` verifier.c"
   tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
 
   // If there are errors do not count the file as compilable
@@ -219,7 +240,7 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   return 1;
 }
 
-/// TODO MAKE THE PARSERS MORE SECURE!!
+/// TODO MAKE THE CONFIG PARSERS MORE SECURE!!
 void Transformer::parseConfig(std::string configFile) {
   std::ifstream file(configFile);
   if (!std::filesystem::exists(configFile)) {
@@ -238,16 +259,17 @@ void Transformer::parseConfig(std::string configFile) {
         std::string value = match[2];
         // Add the value to the config if the key is a member of the map
         if (key == "benchmarkDir") {
-          if (std::filesystem::exists(value)) {
-            configuration.benchmarkDir = value;
-          } else {
-            configuration.benchmarkDir = "database";
+          configuration.benchmarkDir = value;
+          if (!std::filesystem::exists(value)) {
+            std::filesystem::create_directory(value);
           }
         } else if (key == "filterDir") {
-          if (std::filesystem::exists(value)) {
-            configuration.filterDir = value;
-          } else {
-            configuration.filterDir = "filteredFiles";
+          configuration.filterDir = value;
+          if (!std::filesystem::exists(value)) {
+            std::cout << "There is no directory: " << value
+                      << " to use as Filter Directory\n"
+                      << "Aborting Filtering Attempt"
+                      << std::endl;
           }
         } else if (key == "debugLevel") {
           try {
@@ -257,6 +279,8 @@ void Transformer::parseConfig(std::string configFile) {
           }
         } else if (key == "keepCompilesOnly"){
           configuration.keepCompilesOnly = (value == "true" || value == "True");
+        } else if (key == "wipeOldBenchmarks") {
+          configuration.wipeOldBenchmarks = (value == "true" || value == "True");
         }
       }
     }
@@ -264,10 +288,6 @@ void Transformer::parseConfig(std::string configFile) {
   } else {
     std::cerr << "File Failed to Open" << std::endl;
     std::cout << "Using Default Settings" << std::endl;
-    configuration.debugLevel = 0;
-    configuration.keepCompilesOnly = false;
-    configuration.filterDir = "filtereredFiles";
-    configuration.benchmarkDir = "benchmark";
   }
 }
 

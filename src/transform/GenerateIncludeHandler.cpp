@@ -8,9 +8,9 @@
 #include <llvm/Support/raw_ostream.h>
 
 GenerateIncludeHandler::GenerateIncludeHandler(clang::SourceManager &mgr, llvm::raw_fd_ostream &output)
-			: _AllInc(),
-			_Mgr(mgr),
-			_Output(output) {}
+  : _AllInc(),
+  _Mgr(mgr),
+  _Output(output) {}
 
 void
 GenerateIncludeHandler::run(const clang::ast_matchers::MatchFinder::MatchResult &Result) {
