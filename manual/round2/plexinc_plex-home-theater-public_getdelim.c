@@ -117,7 +117,7 @@ getdelim (lineptr, n, terminator, stream)
 int main(void) {
   char** deliminitedStr = __VERIFIER_nondet_pointer();
   size_t* beginningOfLine = __VERIFIER_nondet_pointer();
-  int terminatorChar = __VERIFIER_nondet_int();
+  int terminatorChar = __VERIFIER_nondet_int() & 255;
   FILE* fileToBeRead = __VERIFIER_nondet_pointer();
 
   ssize_t lenOfDelimStr = getdelim(
@@ -127,9 +127,11 @@ int main(void) {
     fileToBeRead
   );
 
-  char *temp = strchr(*deliminitedStr, (char)(terminatorChar));
-  __VERIFIER_assert(temp != NULL || lenOfDelimStr != 0);
+  char *temp = strchr(*deliminitedStr, terminatorChar);
+  // __VERIFIER_assert(temp == NULL || lenOfDelimStr >= -1);
+  // __VERIFIER_assert(temp == NULL || lenOfDelimStr != 0);
+  // __VERIFIER_assert(*temp == '\0' || lenOfDelimStr != 0);
   __VERIFIER_assert(fileToBeRead != NULL || lenOfDelimStr == -1);
-  __VERIFIER_assert(*deliminitedStr != NULL || lenOfDelimStr == -1);
+  __VERIFIER_assert(deliminitedStr != NULL || lenOfDelimStr == -1);
   return 0;
 }

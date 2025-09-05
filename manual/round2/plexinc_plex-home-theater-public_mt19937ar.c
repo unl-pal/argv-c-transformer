@@ -86,7 +86,7 @@ void init_genrand(unsigned long s)
 void init_by_array(unsigned long init_key[], unsigned long key_length)
 {
     int i, j, k;
-    init_genrand((unsigned long long)(__VERIFIER_nondet_longlong()));
+    init_genrand(__VERIFIER_nondet_longlong());
     i=1; j=0;
     k = (N>key_length ? N : key_length);
     for (; k; k--) {

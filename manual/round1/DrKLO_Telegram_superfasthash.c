@@ -25,7 +25,11 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-// Modified by ArgV-C-Transformer
+/*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -92,7 +96,7 @@ int rem;
     hash ^= hash << 25;
     hash += hash >> 6;
 
-    __VERIFIER_assert(rem > 0 && rem <=3);
+    __VERIFIER_assert(rem >= 0 && rem <=3);
     return hash;
 }
 

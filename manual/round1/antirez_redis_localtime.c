@@ -30,7 +30,11 @@
  * designed to work with what time(NULL) may return, and to support Redis
  * logging of the dates, it's not really a complete implementation. */
 
-// Modified by ArgV-C-Transformer
+/*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
 
 extern void abort();
 void reach_error();
@@ -84,7 +88,7 @@ void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
         tmp->tm_year++;
     }
     tmp->tm_yday = days;  /* Number of day of the current year. */
-    __VERIFIER_assert(tmp->tm_yday < 365);
+    __VERIFIER_assert(tmp->tm_yday < 365 + is_leap_year(tmp->tm_year));
 
     /* We need to calculate in which month and day of the month we are. To do
      * so we need to skip days according to how many days there are in each
@@ -100,7 +104,7 @@ void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
 
     tmp->tm_mday = days+1;  /* Add 1 since our 'days' is zero-based. */
     tmp->tm_year -= 1900;   /* Surprisingly tm_year is year-1900. */
-    __VERIFIER_assert(tmp->tm_mday <= 365 && tmp->tm_mday > 0);
+    __VERIFIER_assert(tmp->tm_mday <= 365 + is_leap_year(tmp->tm_year) && tmp->tm_mday > 0);
 }
 
 #ifdef LOCALTIME_TEST_MAIN

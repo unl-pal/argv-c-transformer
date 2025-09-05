@@ -25,7 +25,11 @@
    +----------------------------------------------------------------------+
  */
 
-// Modified by ArgV-C-Transformer and PACLab Team
+/*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
 
 extern void * __VERIFIER_nondet_pointer(void);
 extern double __VERIFIER_nondet_double(void);

@@ -125,7 +125,7 @@ int main() {
   );
 
   char *temp = strchr(*deliminitedStr, (char)(terminatorChar));
-  __VERIFIER_assert(temp != NULL || lenOfDelimStr != 0);
+  __VERIFIER_assert(*temp != '\0' || lenOfDelimStr != 0);
   __VERIFIER_assert(fileToBeRead != NULL || lenOfDelimStr == -1);
   __VERIFIER_assert(*deliminitedStr != NULL || lenOfDelimStr == -1);
   return 0;

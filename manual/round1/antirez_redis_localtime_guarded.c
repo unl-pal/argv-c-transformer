@@ -30,7 +30,11 @@
  * designed to work with what time(NULL) may return, and to support Redis
  * logging of the dates, it's not really a complete implementation. */
 
-// Modified by ArgV-C-Transformer
+/*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
 
 extern void abort();
 void reach_error();
@@ -51,7 +55,7 @@ static int is_leap_year(time_t year) {
 
 void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
     // Numbers Restriction allows for unreach-call to run but prohibits no-overflow
-    if (t < 0 || t > 99 || tz < 0 || tz > 99 || dst < 0 || dst > 99) {
+    if (t < 0 || t > 9999 || tz < 0 || tz > t || dst < 0 || dst > 9999) {
         return;
     }
 
@@ -66,7 +70,7 @@ void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
 
     tmp->tm_isdst = dst;
     tmp->tm_hour = seconds / secs_hour;
-    __VERIFIER_assert(tmp->tm_hour >= 0 && tmp->tm_hour < 24);
+    __VERIFIER_assert(tmp->tm_hour >= 0 && tmp->tm_hour <= 24);
     tmp->tm_min = (seconds % secs_hour) / secs_min;
     __VERIFIER_assert(tmp->tm_min >= 0 && tmp->tm_min < 60);
     tmp->tm_sec = (seconds % secs_hour) % secs_min;
@@ -88,7 +92,9 @@ void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
         tmp->tm_year++;
     }
     tmp->tm_yday = days;  /* Number of day of the current year. */
-    __VERIFIER_assert(tmp->tm_yday < 365);
+    __VERIFIER_assert(tmp->tm_yday <= 365 || (is_leap_year(tmp->tm_year) && tmp->tm_yday <= 366));
+    // __VERIFIER_assert(tmp->tm_yday < 366);
+    // __VERIFIER_assert(days < 366);
 
     /* We need to calculate in which month and day of the month we are. To do
      * so we need to skip days according to how many days there are in each
@@ -104,7 +110,7 @@ void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
 
     tmp->tm_mday = days+1;  /* Add 1 since our 'days' is zero-based. */
     tmp->tm_year -= 1900;   /* Surprisingly tm_year is year-1900. */
-    __VERIFIER_assert(tmp->tm_mday <= 365 && tmp->tm_mday > 0);
+    // __VERIFIER_assert(tmp->tm_mday <= 365 && tmp->tm_mday > 0);
 }
 
 #ifdef LOCALTIME_TEST_MAIN

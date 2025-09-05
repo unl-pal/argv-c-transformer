@@ -5,9 +5,8 @@ input_files: 'antirez_redis_localtime_guarded.c'
 properties:
   - property_file: ../properties/unreach-call.prp
     expected_verdict: true
-  # - property_file: ../properties/no-overflow.prp
-  #   expected_verdict: true # Currently cannot seem to compute
-  # should be usable with multi threading I believe
+  - property_file: ../properties/no-overflow.prp
+    expected_verdict: true
 
 options:
   language: C

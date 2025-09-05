@@ -34,7 +34,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-// Modified by ArgV-C-Transformer
+/*
+ * Aug 27, 2025
+ * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
+ * a benchmark for Static Verification tools
+*/
 
 #include <stdarg.h>
 #include <stdio.h> 

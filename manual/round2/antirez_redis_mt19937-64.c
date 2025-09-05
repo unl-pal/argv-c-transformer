@@ -93,7 +93,7 @@ void init_by_array64(unsigned long long init_key[],
                      unsigned long long key_length)
 {
     unsigned long long i, j, k;
-    init_genrand64((unsigned long long)(__VERIFIER_nondet_longlong()));
+    init_genrand64(__VERIFIER_nondet_longlong());
     i=1; j=0;
     k = (NN>key_length ? NN : key_length);
     for (; k; k--) {
