@@ -36,7 +36,7 @@
 extern void abort();
 void reach_error();
 
-extern uint __VERIFIER_nondet_uint(void);
+extern unsigned int __VERIFIER_nondet_uint(void);
 
 void __VERIFIER_assert(int cond);
 
