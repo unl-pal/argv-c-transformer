@@ -284,10 +284,9 @@ int Filterer::run() {
       std::vector<std::string> args = std::vector<std::string>({
         "clang",
         "-extra-arg=-xc",
-        "-extra-arg=-I",
-        oldPath.string(),
         "-extra-arg=-resource-dir=" + resourceDir,
         "-extra-arg=-fparse-all-comments",
+        oldPath.string(),
         // "-extra-arg=-Wdocumentation",
       });
 

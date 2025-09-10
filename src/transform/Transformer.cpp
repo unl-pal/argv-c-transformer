@@ -90,10 +90,9 @@ bool Transformer::transformFile(std::filesystem::path path) {
   std::vector<std::string> compOptionsArgs({
     "clang",
     "-extra-arg=-xc",
-    "-extra-arg=-I",
-    path.string(),
     "-extra-arg=-resource-dir=" + resourceDir,
     "-extra-arg=-fparse-all-comments",
+    path.string(),
   });
 
   int argc = compOptionsArgs.size();
@@ -191,10 +190,9 @@ int Transformer::checkCompilable(std::filesystem::path path) {
     "clang",
     "-extra-arg=-fsyntax-only",
     "-extra-arg=-xc",
-    "-extra-arg=-I",
     "-extra-arg=-resource-dir=" + resourceDir,
-    "verifier.c", // dummy verify file is needed to resolve extern Verifier Functions
     path.string(),
+    "verifier.c", // dummy verify file is needed to resolve extern Verifier Functions
   });
 
   int argc = compOptionsArgs.size();

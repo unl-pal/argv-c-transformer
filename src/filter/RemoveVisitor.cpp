@@ -32,12 +32,12 @@ bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   if(!D) return false;
   if (_mgr.isInMainFile(D->getLocation())) {
     llvm::outs() << D->getNameAsString() << " is being checked" << "\n";
+    // Do not remove or attempt to edit functions within macros as the loc
+    // is an un-writable location
+    if (D->getLocation().isMacroID()) {
+      return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
+    }
     for (std::string& name : *_toRemove) {
-      if (name == D->getNameAsString() && D->getLocation().isValid() && D->getLocation().isMacroID()) {
-        // Do not remove or attempt to edit functions within macros as the loc
-        // is an un-writable location
-        return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
-      }
       // If the function is the main function move on else wise
       if (name == D->getNameAsString() && !D->isMain()) {
         clang::SourceLocation zero = _mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(D->getLocation()), 1);
@@ -72,7 +72,9 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
     // up in transform action due to a loss in context for the function calls
     // that if the AST later evaluates always returns an int as the return value
     // due to how the c language is structured. Everything is an int in the end
-    if (clang::FunctionDecl *func = E->getDirectCallee()) {
+    // if (clang::FunctionDecl *func = E->getDirectCallee()) {
+    if (clang::Decl *calleeDecl = E->getCalleeDecl()) {
+    if (clang::FunctionDecl *func = calleeDecl->getAsFunction()) {
       std::string name = func->getNameAsString();
       llvm::outs() << name << " call is being checked" << "\n";
       clang::QualType returnType = E->getCallReturnType(*_C);
@@ -109,9 +111,9 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
           if (newReturnTypeName.size()) {
             // Use the pointer logic to set up the casts for verifier pointer to
             // the correct return type for the function called
-            isPointer ? newName += "(" + returnTypeName + ")(" : newName;
+            // isPointer ? newName += "(" + returnTypeName + ")(" : newName;
             newName += "__VERIFIER_nondet_" + newReturnTypeName + "()";
-            isPointer ? newName += ")" : newName;
+            // isPointer ? newName += ")" : newName;
             clang::SourceRange range;
             range.setBegin(E->getBeginLoc());
             range.setEnd(E->getEndLoc());
@@ -129,6 +131,7 @@ bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
             }
           }
         }
+      }
       }
     }
   }
