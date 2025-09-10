@@ -29,23 +29,6 @@ find_package(LLVM REQUIRED)
 # Can be used to enforce downloader to run before filter?
 # add_dependencies(filter download)
 
-file(GLOB_RECURSE MANUAL_FILES "manual/*.c"
-  # ./manual/round2/CheckBigBitfield.c
-  # ./manual/round2/TestQnanhibit.c
-  # ./manual/round2/calcnewt.c
-  # ./manual/round2/dehex.c
-  # ./manual/round2/enhex.c
-  # ./manual/round2/fastjson.c
-  # ./manual/round2/getdelim.c
-  # ./manual/round2/getdelimog.c
-  # ./manual/round2/mt19937-64.c
-  # ./manual/round2/mt19937ar.c
-  # ./manual/round2/sorts.c
-)
-
-add_library(sample_c_files OBJECT ${MANUAL_FILES})
-target_compile_features(sample_c_files PRIVATE c_std_99)
-
 set(HEADERS_FILTER
   src/filter/include
 )
