@@ -6,7 +6,7 @@
  * Aug 27, 2025
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
-*/
+ */
 
 // Copyright (c) 2010, Paul Hsieh
 // All rights reserved.
@@ -42,70 +42,105 @@ extern void abort();
 void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
-extern void * __VERIFIER_nondet_pointer(void);
+extern char __VERIFIER_nondet_char(void);
+extern void __VERIFIER_assume(int expression);
 
-void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
-
-#undef get16bits
-#if (defined(__GNUC__) && defined(__i386__)) || defined(__WATCOMC__) \
-  || defined(_MSC_VER) || defined (__BORLANDC__) || defined (__TURBOC__)
-#define get16bits(d) (*((const uint16_t *) (d)))
-#endif
-
-#if !defined (get16bits)
-#define get16bits(d) ((((uint32_t)(((const uint8_t *)(d))[1])) << 8)\
-                       +(uint32_t)(((const uint8_t *)(d))[0]) )
-#endif
-
-uint32_t SuperFastHash (const char * data, int len) {
-uint32_t hash = len, tmp;
-int rem;
-
-    if (len <= 0 || data == NULL) return 0;
-
-    rem = len & 3; // is the same as % 4 but better optimized and works with <0
-    len >>= 2;
-
-    /* Main loop */
-    for (;len > 0; len--) {
-        hash  += get16bits (data);
-        tmp    = (get16bits (data+2) << 11) ^ hash;
-        hash   = (hash << 16) ^ tmp;
-        data  += 2*sizeof (uint16_t);
-        hash  += hash >> 11;
-    }
-    __VERIFIER_assert(len == 0);
-
-    /* Handle end cases */
-    switch (rem) {
-        case 3: hash += get16bits (data);
-                hash ^= hash << 16;
-                hash ^= ((signed char)data[sizeof (uint16_t)]) << 18;
-                hash += hash >> 11;
-                break;
-        case 2: hash += get16bits (data);
-                hash ^= hash << 11;
-                hash += hash >> 17;
-                break;
-        case 1: hash += (signed char)*data;
-                hash ^= hash << 10;
-                hash += hash >> 1;
-    }
-
-    /* Force "avalanching" of final 127 bits */
-    hash ^= hash << 3;
-    hash += hash >> 5;
-    hash ^= hash << 4;
-    hash += hash >> 17;
-    hash ^= hash << 25;
-    hash += hash >> 6;
-
-    __VERIFIER_assert(rem >= 0 && rem <=3);
-    return hash;
+void __VERIFIER_assert(int cond) {
+  if (!cond) {
+    reach_error();
+    abort();
+  }
 }
 
+#undef get16bits
+#if (defined(__GNUC__) && defined(__i386__)) || defined(__WATCOMC__) ||        \
+    defined(_MSC_VER) || defined(__BORLANDC__) || defined(__TURBOC__)
+#define get16bits(d) (*((const uint16_t *)(d)))
+#endif
+
+#if !defined(get16bits)
+#define get16bits(d)                                                           \
+  ((((uint32_t)(((const uint8_t *)(d))[1])) << 8) +                            \
+   (uint32_t)(((const uint8_t *)(d))[0]))
+#endif
+
+// could(/should?) replace ^macro:
+// static inline uint16_t get16bits(const char *data) {
+//  ((((uint32_t)(((const uint8_t *)(data))[1])) << 8)\
+//  +(uint32_t)(((const uint8_t *)(data))[0]) );
+
+uint32_t SuperFastHash(const char *data, int len) {
+  uint32_t hash = len, tmp;
+  int rem;
+
+  if (len <= 0 || data == NULL)
+    return 0;
+
+  rem = len & 3; // is the same as % 4 but better optimized and works with <0
+  len >>= 2;
+
+  /* Main loop */
+  for (; len > 0; len--) {
+    hash += get16bits(data);
+    tmp = (get16bits(data + 2) << 11) ^ hash;
+    hash = (hash << 16) ^ tmp;
+    data += 2 * sizeof(uint16_t);
+    hash += hash >> 11;
+  }
+  __VERIFIER_assert(len == 0);
+
+  /* Handle end cases */
+  switch (rem) {
+  case 3:
+    hash += get16bits(data);
+    hash ^= hash << 16;
+    hash ^= ((signed char)data[sizeof(uint16_t)]) << 18;
+    hash += hash >> 11;
+    break;
+  case 2:
+    hash += get16bits(data);
+    hash ^= hash << 11;
+    hash += hash >> 17;
+    break;
+  case 1:
+    hash += (signed char)*data;
+    hash ^= hash << 10;
+    hash += hash >> 1;
+  }
+
+  /* Force "avalanching" of final 127 bits */
+  hash ^= hash << 3;
+  hash += hash >> 5;
+  hash ^= hash << 4;
+  hash += hash >> 17;
+  hash ^= hash << 25;
+  hash += hash >> 6;
+
+  __VERIFIER_assert(rem >= 0 && rem <= 3);
+  return hash;
+}
+
+// Arg-C verification harness
 int main(void) {
-    uint32_t result = SuperFastHash (__VERIFIER_nondet_pointer(), __VERIFIER_nondet_int());
-    return result;
-    __VERIFIER_assert(0);
+  int len = __VERIFIER_nondet_int();
+
+  __VERIFIER_assume(len < 1024);
+
+  char *data = NULL;
+  if (len > 0) {
+    data = (char *)malloc(len);
+
+    __VERIFIER_assume(data != NULL);
+
+    for (int i = 0; i < len; i++) {
+      data[i] = __VERIFIER_nondet_char();
+    }
+  }
+  uint32_t result = SuperFastHash(data, len);
+
+  if (data != NULL) {
+    free(data);
+  }
+
+  return result;
 }

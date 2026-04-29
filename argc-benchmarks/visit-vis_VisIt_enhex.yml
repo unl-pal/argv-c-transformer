@@ -5,6 +5,11 @@ input_files: 'visit-vis_VisIt_enhex.c'
 properties:
   - property_file: ../properties/unreach-call.prp
     expected_verdict: true
+  - property_file: ../properties/valid-memsafety.prp
+    expected_verdict: true
+  - property_file: ../properties/termination.prp
+    expected_verdict: true
+
 
 options:
   language: C

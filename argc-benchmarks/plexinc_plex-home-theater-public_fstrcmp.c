@@ -35,8 +35,9 @@
    +----------------------------------------------------------------------+
  */
 
-extern void * __VERIFIER_nondet_pointer(void);
-extern double __VERIFIER_nondet_double(void);
+extern int __VERIFIER_nondet_int(void);
+extern char __VERIFIER_nondet_char(void);
+extern void __VERIFIER_assume(int expression);
 
 extern void abort();
 void reach_error();
@@ -131,12 +132,26 @@ fstrcmp (const char *string1, const char *string2, double minimum)
 } // extern "C"
 #endif
 
-int main(void)
-{
-  double result = fstrcmp(__VERIFIER_nondet_pointer(),
-                          __VERIFIER_nondet_pointer(),
-                          __VERIFIER_nondet_double());
+#define MAX_BOUND 12
+int main(void) {
+    char s1[MAX_BOUND];
+    char s2[MAX_BOUND];
 
-  __VERIFIER_assert(result >= 0.0 && result <=1.0);
-  return result;
+    for (int i = 0; i < MAX_BOUND; i++) {
+        s1[i] = __VERIFIER_nondet_char();
+        s2[i] = __VERIFIER_nondet_char();
+    }
+
+    int len1 = __VERIFIER_nondet_int();
+    int len2 = __VERIFIER_nondet_int();
+    __VERIFIER_assume(len1 >= 0 && len1 < MAX_BOUND);
+    __VERIFIER_assume(len2 >= 0 && len2 < MAX_BOUND);
+    s1[len1] = '\0';
+    s2[len2] = '\0';
+
+    double result = fstrcmp(s1, s2, 0.0);
+
+    __VERIFIER_assert(0.0 <= result && result <= 1.0);
+
+    return 0;
 }

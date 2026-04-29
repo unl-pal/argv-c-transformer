@@ -6,7 +6,7 @@
  * Aug 27, 2025
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
-*/
+ */
 
 /* endinconv.c -- Endian conversions utilities.
  *
@@ -41,104 +41,84 @@ extern void abort();
 void reach_error();
 
 extern unsigned int __VERIFIER_nondet_uint(void);
+extern unsigned long long __VERIFIER_nondet_ulonglong(void);
 
-void __VERIFIER_assert(int cond);
+void __VERIFIER_assert(int cond) {
+  if (!cond) {
+    reach_error();
+    abort();
+  }
+};
 
 void memrev16(void *p) {
-    unsigned char *x = p, t;
+  unsigned char *x = p, t;
 
-    t = x[0];
-    x[0] = x[1];
-    x[1] = t;
+  t = x[0];
+  x[0] = x[1];
+  x[1] = t;
 }
 
 /* Toggle the 32 bit unsigned integer pointed by *p from little endian to
  * big endian */
 void memrev32(void *p) {
-    unsigned char *x = p, t;
+  unsigned char *x = p, t;
 
-    t = x[0];
-    x[0] = x[3];
-    x[3] = t;
-    t = x[1];
-    x[1] = x[2];
-    x[2] = t;
+  t = x[0];
+  x[0] = x[3];
+  x[3] = t;
+  t = x[1];
+  x[1] = x[2];
+  x[2] = t;
 }
 
 /* Toggle the 64 bit unsigned integer pointed by *p from little endian to
  * big endian */
 void memrev64(void *p) {
-    unsigned char *x = p, t;
+  unsigned char *x = p, t;
 
-    t = x[0];
-    x[0] = x[7];
-    x[7] = t;
-    t = x[1];
-    x[1] = x[6];
-    x[6] = t;
-    t = x[2];
-    x[2] = x[5];
-    x[5] = t;
-    t = x[3];
-    x[3] = x[4];
-    x[4] = t;
+  t = x[0];
+  x[0] = x[7];
+  x[7] = t;
+  t = x[1];
+  x[1] = x[6];
+  x[6] = t;
+  t = x[2];
+  x[2] = x[5];
+  x[5] = t;
+  t = x[3];
+  x[3] = x[4];
+  x[4] = t;
 }
 
 uint16_t intrev16(uint16_t v) {
-    memrev16(&v);
-    return v;
+  memrev16(&v);
+  return v;
 }
 
 uint32_t intrev32(uint32_t v) {
-    memrev32(&v);
-    return v;
+  memrev32(&v);
+  return v;
 }
 
 uint64_t intrev64(uint64_t v) {
-    memrev64(&v);
-    return v;
+  memrev64(&v);
+  return v;
 }
 
-#ifdef REDIS_TEST
-#include <stdio.h>
-
-#define UNUSED(x) (void)(x)
-int endianconvTest(int argc, char *argv[], int flags) {
-    char buf[32];
-
-    UNUSED(argc);
-    UNUSED(argv);
-    UNUSED(flags);
-
-    snprintf(buf,sizeof(buf),"ciaoroma");
-    memrev16(buf);
-    printf("%s\n", buf);
-
-    snprintf(buf,sizeof(buf),"ciaoroma");
-    memrev32(buf);
-    printf("%s\n", buf);
-
-    snprintf(buf,sizeof(buf),"ciaoroma");
-    memrev64(buf);
-    printf("%s\n", buf);
-
-    return 0;
-}
-#endif
-
+// Arg-C verification harness
 int main(void) {
 
-    uint16_t original_16 = (uint16_t)__VERIFIER_nondet_uint();
-    uint16_t reversed_16 = intrev16(original_16);
-    __VERIFIER_assert(original_16 == intrev16(reversed_16));
+  uint16_t original_16 = (uint16_t)__VERIFIER_nondet_uint();
+  uint16_t reversed_16 = intrev16(original_16);
+  __VERIFIER_assert(original_16 == intrev16(reversed_16));
 
-    uint32_t original_32 = (uint32_t)__VERIFIER_nondet_uint();
-    uint32_t reversed_32 = intrev32(original_32);
-    __VERIFIER_assert(original_32 == intrev32(reversed_32));
+  uint32_t original_32 = (uint32_t)__VERIFIER_nondet_uint();
+  uint32_t reversed_32 = intrev32(original_32);
+  __VERIFIER_assert(original_32 == intrev32(reversed_32));
 
-    uint64_t original_64 = (uint64_t)__VERIFIER_nondet_uint();
-    uint64_t reversed_64 = intrev64(original_64);
-    __VERIFIER_assert(original_64 == intrev64(reversed_64));
+  uint64_t original_64 = (uint64_t)__VERIFIER_nondet_ulonglong();
+  uint64_t reversed_64 = intrev64(original_64);
+  __VERIFIER_assert(original_64 == intrev64(reversed_64));
 
-    return 0;
+  return 0;
 }

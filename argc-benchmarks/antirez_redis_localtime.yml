@@ -4,12 +4,12 @@ input_files: 'antirez_redis_localtime.c'
 
 properties:
   - property_file: ../properties/no-overflow.prp
-    expected_verdict: false
+    expected_verdict: true
   - property_file: ../properties/unreach-call.prp
-    expected_verdict: false
-  # should be usable with multi threading I believe
+    expected_verdict: true
+  - property_file: ../properties/termination.prp
+    expected_verdict: true
 
 options:
   language: C
-  data_model: LP64
-
+  data_model: ILP32

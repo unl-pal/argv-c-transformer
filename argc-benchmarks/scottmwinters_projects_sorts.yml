@@ -4,8 +4,12 @@ input_files: 'scottmwinters_projects_sorts.c'
 
 properties:
   - property_file: ../properties/unreach-call.prp
+    expected_verdict: true
+  - property_file: ../properties/valid-memsafety.prp
     expected_verdict: false
+    subproperty: valid-deref
   - property_file: ../properties/termination.prp
+    expected_verdict: true
 
 options:
   language: C

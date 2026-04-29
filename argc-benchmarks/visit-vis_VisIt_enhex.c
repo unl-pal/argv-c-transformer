@@ -6,7 +6,7 @@
  * Aug 27, 2025
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
-*/
+ */
 
 /*
   Copyright (C) 2004, 2003, 2002 University of Utah
@@ -35,102 +35,124 @@
 **    cc -o enhex enhex.c
 */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
 #include <string.h>
 
 extern void abort();
 void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
-extern void* __VERIFIER_nondet_pointer(void);
+extern char __VERIFIER_nondet_char(void);
+extern void __VERIFIER_assume(int expression);
 
-void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
+void __VERIFIER_assert(int cond) {
+  if (!cond) {
+    reach_error();
+    abort();
+  }
+}
 
-int
-enhexColumns = 70;  /* number of characters per line */
+int enhexColumns = 70; /* number of characters per line */
 
-void
-enhexUsage(char *me) {
+void enhexUsage(char *me) {
   /*                       0   1     2   (2/3) */
   fprintf(stderr, "usage: %s <in> [<out>]\n", me);
   fprintf(stderr, " <in>: file to read raw data from\n");
   fprintf(stderr, "<out>: file to write hex data to; "
-          "uses stdout by default\n");
+                  "uses stdout by default\n");
   fprintf(stderr, " \"-\" can be used to refer to stdin/stdout\n");
   exit(1);
 }
 
-void
-enhexFclose(FILE *file) {
-  
-  if (!( stdin == file || stdout == file )) {
+void enhexFclose(FILE *file) {
+
+  if (!(stdin == file || stdout == file)) {
     fclose(file);
   }
 }
 
-int
-enhexTable[16] = {
-  '0', '1', '2', '3', '4', '5', '6', '7',
-  '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
-};
+int enhexTable[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
+                      '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
 
+int original_main(int argc, char *argv[]) {
+  char *me, *inS, *outS;
+  FILE *fin, *fout;
+  int car = 0, col;
 
-int main() {
-    int argc = __VERIFIER_nondet_int();
-    char** argv = __VERIFIER_nondet_pointer();
-    char *me, *inS, *outS;
-    FILE *fin, *fout;
-    int car = 0, col;
-    me = argv[0];
-    if (!(2 == argc || 3 == argc))
+  me = argv[0];
+  if (!(2 == argc || 3 == argc))
+    enhexUsage(me);
+
+  inS = argv[1];
+  if (!strcmp("-", inS)) {
+    fin = stdin;
+// #ifdef _WIN32
+//     _setmode(_fileno(fin), _O_BINARY);
+// #endif
+  } else {
+    fin = fopen(inS, "rb");
+    if (!fin) {
+      fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n", me, inS,
+              strerror(errno));
+      enhexUsage(me);
+    }
+  }
+  if (2 == argc) {
+    fout = stdout;
+  } else {
+    outS = argv[2];
+    if (!strcmp("-", outS)) {
+      fout = stdout;
+    } else {
+      fout = fopen(outS, "w");
+      if (!fout) {
+        fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"w\"): %s\n\n", me, outS,
+                strerror(errno));
         enhexUsage(me);
-        __VERIFIER_assert(0);
-    inS = argv[1];
-    if (!strcmp("-", inS)) {
-        fin = stdin;
-    } else {
-        fin = fopen(inS, "rb");
-        if (!fin) {
-            fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n", me, inS, strerror((*__errno_location())));
-            enhexUsage(me);
-            __VERIFIER_assert(0);
-        }
+      }
     }
-    __VERIFIER_assert(fin != NULL);
-    if (2 == argc) {
-        fout = stdout;
-    } else {
-        outS = argv[2];
-        if (!strcmp("-", outS)) {
-            fout = stdout;
-        } else {
-            fout = fopen(outS, "w");
-            if (!fout) {
-                fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"w\"): %s\n\n", me, outS, strerror((*__errno_location())));
-                enhexUsage(me);
-            }
-        }
+  }
+
+  col = 0;
+  car = fgetc(fin);
+  while (EOF != car) {
+    if (col > enhexColumns) {
+      fprintf(fout, "\n");
+      col = 0;
     }
-    __VERIFIER_assert(fout != NULL);
-    col = 0;
+    fprintf(fout, "%c%c", enhexTable[car >> 4], enhexTable[car & 15]);
+    col += 2;
     car = fgetc(fin);
-    while ((-1) != car)
-    {
-        __VERIFIER_assert(car >= 0 && car < 256);
-        if (col > enhexColumns) {
-            fprintf(fout, "\n");
-            col = 0;
-        }
-        fprintf(fout, "%c%c", enhexTable[car >> 4], enhexTable[car & 15]);
-        col += 2;
-        car = fgetc(fin);
+  }
+  if (2 != col) {
+    fprintf(fout, "\n");
+  }
+
+  enhexFclose(fin);
+  enhexFclose(fout);
+  exit(0);
+}
+
+// Arg-C verification harness
+int main() {
+  int argc = __VERIFIER_nondet_int();
+  __VERIFIER_assume(argc >= 0 && argc <= 4);
+
+  int BOUND = 16;
+  char argv_data[4][16];
+  char *argv[4];
+  for (int i = 0; i < 4; i++) {
+    argv[i] = argv_data[i];
+  }
+  for (int i = 0; i < argc; i++) {
+    for (int j = 0; j < BOUND - 1; j++) {
+      argv[i][j] = __VERIFIER_nondet_char();
     }
-    if (2 != col) {
-        fprintf(fout, "\n");
-    }
-    enhexFclose(fin);
-    enhexFclose(fout);
-    exit(0);
+    argv[i][BOUND - 1] = '\0';
+  }
+
+  original_main(argc, argv);
+  return 0;
 }

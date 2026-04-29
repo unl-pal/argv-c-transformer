@@ -33,7 +33,7 @@
 extern void abort();
 void reach_error();
 
-extern void * __VERIFIER_nondet_pointer(void);
+extern unsigned int __VERIFIER_nondet_uint(void);
 
 void __VERIFIER_assert(int cond) {if (!cond) {reach_error(); abort(); } }
 
@@ -65,8 +65,15 @@ int rand_r (unsigned int *seed)
 
 int main(void)
 {
-    int result = rand_r(__VERIFIER_nondet_pointer());
-    __VERIFIER_assert(result >= 0);
-    return result;
-    __VERIFIER_assert(0);
+    unsigned int seed = __VERIFIER_nondet_uint();
+    unsigned int replay_seed = seed;
+
+    int result = rand_r(&seed);
+    int replay_result = rand_r(&replay_seed);
+
+    __VERIFIER_assert(result >= 0 && result <= 0x7FFFFFFF);
+    __VERIFIER_assert(replay_result == result);
+    __VERIFIER_assert(replay_seed == seed);
+
+    return 0;
 }

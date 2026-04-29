@@ -4,7 +4,7 @@
  * Aug 27, 2025
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
-*/
+ */
 
 #import <stdio.h>
 #import <stdlib.h>
@@ -12,19 +12,25 @@
 
 static int SIZE = 15;
 
+// Arg-C: Verification functions
+// ----------------------------------
 extern void abort();
 void reach_error();
-void reach_error() {};
 
-extern unsigned int __VERIFIER_nondet_uint(void);
+extern unsigned int __VERIFIER_nondet_int(void);
 
-void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
-
-void __VERIFIER_assert_array(int list[15], int sorted[15]) {
-	for (int i=0; i<15; i++) {
-		__VERIFIER_assert(list[i] == sorted[i]);
-	}
+void __VERIFIER_assert(int cond) {
+  if (!cond) {
+    reach_error();
+    abort();
+  }
 }
+void __VERIFIER_assert_sorted(int *array) {
+  for (int i = 0; i < SIZE - 1; i++) {
+    __VERIFIER_assert(array[i] <= array[i + 1]);
+  }
+}
+// ----------------------------------
 
 void unsort(int *p);
 void print(int *p);
@@ -35,155 +41,183 @@ void quick(int *p);
 void merge(int *p, int n);
 void mergeHelp(int *l1, int s1, int *l2, int s2, int *p);
 
-int main() {
-	int list[15] = {0, 5, 2, 1, 2, 3, 6, 8, 9, 5, 2, 1, 2, 3, 4};
-	int sorted[15] = {0, 1, 1, 2, 2, 2, 2, 3, 3, 4, 5, 5, 6, 8, 9};
-	int *p, *s;
-	p = list;
-	s = sorted;
-	bubble(p);
-	__VERIFIER_assert_array(p, s);
-	unsort(p);
-	insertion(p);
-	__VERIFIER_assert_array(p, s);
-	unsort(p);
-	selection(p);
-	__VERIFIER_assert_array(p, s);
-	unsort(p);
-	unsort(p);
-	merge(p, SIZE);
-	__VERIFIER_assert_array(p, s);
-	return 0;
-}
+// Old main function from source
+
+// int main() {
+// 	int list[15] = { 0, 5, 2, 1, 2, 3, 6, 8, 9, 5, 2, 1, 2, 3, 4};
+// 	int *p;
+// 	p = list;
+// 	bubble(p);
+// 	unsort(p);
+// 	insertion(p);
+// 	unsort(p);
+// 	selection(p);
+// 	unsort(p);
+// 	unsort(p);
+// 	merge(p, SIZE);
+// 	return 0;
+// }
 
 void unsort(int *p) {
-	printf("UNSORT\n");
-	int i, j;
-	for(i = SIZE; i > 0; i--) {
-		j = __VERIFIER_nondet_uint() % SIZE;
-		__VERIFIER_assert(j >= 0 && j < SIZE);
-		p[j] = p[i];
-	}
+  printf("UNSORT\n");
+  int i, j;
+  for (i = SIZE; i > 0; i--) {
+    j = rand() % SIZE;
+    p[j] = p[i];
+  }
 }
 
 void print(int *p) {
- 	int i;
-	for(i = 0; i < SIZE; i++) {
-		printf("i[%d] = %d\n", i, p[i]);
-	}
+  int i;
+  for (i = 0; i < SIZE; i++) {
+    printf("i[%d] = %d\n", i, p[i]);
+  }
 }
 
 void bubble(int *p) {
-	printf("BUBBLE SORT\n");
-	int i, j;
-	
-	for(i = 0; i < SIZE; i++) {
-		for(j = 0; j < SIZE; j++) {
-			if(p[i] < p[j]) { //swapping with XOR for funsies
-				p[i] = p[i] ^ p[j];
-				p[j] = p[i] ^ p[j];
-				p[i] = p[i] ^ p[j];
-				__VERIFIER_assert(p[i] != p[j]);
-			}
-		}
-	}
-	__VERIFIER_assert(p[0] <= p[SIZE-1]);
+  printf("BUBBLE SORT\n");
+  int i, j;
+
+  for (i = 0; i < SIZE; i++) {
+    for (j = 0; j < SIZE; j++) {
+      if (p[i] < p[j]) { // swapping with XOR for funsies
+        p[i] = p[i] ^ p[j];
+        p[j] = p[i] ^ p[j];
+        p[i] = p[i] ^ p[j];
+      }
+    }
+  }
 }
 
 void insertion(int *p) {
-	printf("INSERTION SORT\n");
-	int i, j;
-	int temp;
-	for(i=1;i<SIZE;i++) {
-		j=i;
-		while(j>0 && p[j-1] > p[j]) {
-			temp = p[j];
-			p[j] = p[j-1];
-			p[j-1] = temp;
-			j=j-1;
-		}
-	}
-	__VERIFIER_assert(p[0] <= p[SIZE-1]);
+  printf("INSERTION SORT\n");
+  int i, j;
+  int temp;
+  for (i = 1; i < SIZE; i++) {
+    j = i;
+    while (j > 0 && p[j - 1] > p[j]) {
+      temp = p[j];
+      p[j] = p[j - 1];
+      p[j - 1] = temp;
+      j = j - 1;
+    }
+  }
 }
 
 void selection(int *p) {
-	printf("SELECTION SORT\n");
-	int i, j;
-	int temp, tempMin;
-	for(i=0;i<SIZE-1;i++) {
-		tempMin = i;
-		for(j=i+1; j<SIZE;j++) {
-			if(p[tempMin] > p[j]) {
-				tempMin = j;
-			}
-		}
-		temp = p[i];
-		p[i] = p[tempMin];
-		p[tempMin] = temp;
-	}
-	__VERIFIER_assert(p[0] <= p[SIZE-1]);
+  printf("SELECTION SORT\n");
+  int i, j;
+  int temp, tempMin;
+  for (i = 0; i < SIZE - 1; i++) {
+    tempMin = i;
+    for (j = i + 1; j < SIZE; j++) {
+      if (p[tempMin] > p[j]) {
+        tempMin = j;
+      }
+    }
+    temp = p[i];
+    p[i] = p[tempMin];
+    p[tempMin] = temp;
+  }
 }
 
-void quick(int *p){}
+void quick(int *p) {}
 
 void merge(int *p, int n) {
-	printf("n: %d\n", n);
-	int i;
-	int *l1, *l2;
-	int s1, s2;
+  printf("n: %d\n", n);
+  int i;
+  int *l1, *l2;
+  int s1, s2;
 
-	if(n < 2) {
-		return;
-	}
-	s1 = n/2;
-	s2 = n-s1;
-	l1 = (int*)malloc(sizeof(int)* s1);
-	l2 = (int*)malloc(sizeof(int)* s2);
+  if (n < 2) {
+    return;
+  }
+  s1 = n / 2;
+  s2 = n - s1;
+  l1 = (int *)malloc(sizeof(int) * s1);
+  l2 = (int *)malloc(sizeof(int) * s2);
 
-	for(i =0; i<s1; i++){
-		l1[i] = p[i];
-	}
-	for(i=0; i<s2; i++){
-		l2[i] = p[i+s1];
-	}
+  for (i = 0; i < s1; i++) {
+    l1[i] = p[i];
+  }
+  for (i = 0; i < s2; i++) {
+    l2[i] = p[i + s1];
+  }
 
-	merge(l1,s1);
-	merge(l2,s2);
+  merge(l1, s1);
+  merge(l2, s2);
 
-	mergeHelp(l1, s1, l2, s2, p);
-	free(l1);
-	free(l2);
-	__VERIFIER_assert(p[0] <= p[n - 1]);
+  mergeHelp(l1, s1, l2, s2, p);
+  free(l1);
+  free(l2);
 }
 
 void mergeHelp(int *l1, int s1, int *l2, int s2, int *p) {
-	int i,j,k;
-	i=0;
-	j=0;
-	k=0;
+  int i, j, k;
+  i = 0;
+  j = 0;
+  k = 0;
 
-	while(i < s1 && j < s2) {
-		if(l1[i] <= l2[j]) {
-			p[k] = l1[i];
-			i++;
-			k++;
-		}
-		else {
-			p[k] = l2[j];
-			j++;
-			k++;
-		}
-	}
-	while (i < s1) {
-		p[k] = l1[i];
-		i++;
-		k++;
-	}
-	while (j < s2) {
-		p[k] = l2[j];
-		j++;
-		k++;
-	}
-	__VERIFIER_assert(p[0] <= p[k]);
+  while (i < s1 && j < s2) {
+    if (l1[i] <= l2[j]) {
+      p[k] = l1[i];
+      i++;
+      k++;
+    } else {
+      p[k] = l2[j];
+      j++;
+      k++;
+    }
+  }
+  while (i < s1) {
+    p[k] = l1[i];
+    i++;
+    k++;
+  }
+  while (j < s2) {
+    p[k] = l2[j];
+    j++;
+    k++;
+  }
 }
 
+// Arg-C verification harness
+int main() {
+  int bubble_list[SIZE];
+  int insertion_list[SIZE];
+  int selection_list[SIZE];
+  int merge_list[SIZE];
+
+  for (int i = 0; i < SIZE; i++) {
+    bubble_list[i] = __VERIFIER_nondet_int();
+    insertion_list[i] = __VERIFIER_nondet_int();
+    selection_list[i] = __VERIFIER_nondet_int();
+    merge_list[i] = __VERIFIER_nondet_int();
+  }
+
+  insertion(insertion_list);
+  __VERIFIER_assert_sorted(insertion_list);
+
+  selection(selection_list);
+  __VERIFIER_assert_sorted(selection_list);
+
+  merge(merge_list, SIZE);
+  __VERIFIER_assert_sorted(merge_list);
+
+  // bubble sorts descending
+  bubble(bubble_list);
+  for (int i = 0; i < SIZE - 1; i++) {
+    __VERIFIER_assert(bubble_list[i] >= bubble_list[i + 1]);
+  }
+
+  unsort(bubble_list); // unsafe: immediate deref
+  int not_sorted = 0;
+  for (int i = 0; i < SIZE - 1; i++) {
+    if (bubble_list[i] > bubble_list[i + 1]) {
+      not_sorted = 1;
+    }
+  }
+  __VERIFIER_assert(not_sorted);
+
+  return 0;
+}

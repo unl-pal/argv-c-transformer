@@ -188,10 +188,17 @@ double genrand64_real3(void) {
 
 // Arg-C verification harness
 int main(void) {
-  init_genrand64(__VERIFIER_nondet_ulonglong());
+#define KEY_LEN 4
+  unsigned long long init_key[KEY_LEN];
+
+  for (int i = 0; i < KEY_LEN; i++) {
+    init_key[i] = __VERIFIER_nondet_ulonglong();
+  }
+
+  init_by_array64(init_key, KEY_LEN);
 
   long long r63 = genrand64_int63();
-  __VERIFIER_assert(r63 >= 0 && r63 <= 0x7FFFFFFFFFFFFFFLL);
+  __VERIFIER_assert(r63 >= 0 && r63 <= 0x7FFFFFFFFFFFFFFFLL);
 
   unsigned long long r64 = genrand64_int64();
   __VERIFIER_assert(r64 <= 0xFFFFFFFFFFFFFFFFULL);

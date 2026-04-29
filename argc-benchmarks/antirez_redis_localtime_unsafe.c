@@ -133,7 +133,7 @@ int main(void) {
 
   __VERIFIER_assume(dst == 0 || dst == 1);
   __VERIFIER_assume(tz >= -12 * 3600 && tz <= 14 * 3600);
-  __VERIFIER_assume(t >= 14*3600 && t <= 2147483647);
+  __VERIFIER_assume(t <= 2147483647); // unsafe without lowerbound
 
   nolocks_localtime(&my_tm, t, tz, dst);
 

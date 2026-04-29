@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: Copyright (C) 1991, 1992, 1995, 1996, 1997 Free Software Foundation, Inc.
-// SPDX-License-Identifier: LGPLv2.0 or later
+// SPDX-FileCopyrightText: Copyright (C) 1991, 1992, 1995, 1996, 1997 Free
+// Software Foundation, Inc. SPDX-License-Identifier: LGPLv2.0 or later
 // SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
 
 /* Copyright (C) 1991, 1992, 1995, 1996, 1997 Free Software Foundation, Inc.
@@ -25,20 +25,26 @@
  * Aug 27, 2025
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
-*/
+ */
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 extern void abort();
 void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
-extern void* __VERIFIER_nondet_pointer(void);
+extern char __VERIFIER_nondet_char(void);
+extern void __VERIFIER_assume(int expression);
 
-void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
+void __VERIFIER_assert(int cond) {
+  if (!cond) {
+    reach_error();
+    abort();
+  }
+}
 
 /* Read up to (and including) a TERMINATOR from STREAM into *LINEPTR
    (and null-terminate it). *LINEPTR is a pointer returned from malloc (or
@@ -46,37 +52,35 @@ void __VERIFIER_assert(int cond) { if(!cond) { reach_error(); abort(); } }
    necessary.  Returns the number of characters read (not including the
    null terminator), or -1 on error or EOF.  */
 
-ssize_t
-getdelim (lineptr, n, terminator, stream)
-     char **lineptr;
-     size_t *n;
-     int terminator;
-     FILE *stream;
+ssize_t getdelim(lineptr, n, terminator, stream)
+char **lineptr;
+size_t *n;
+int terminator;
+FILE *stream;
 {
   char *line, *p;
   size_t size, copy;
 
-  if (stream == NULL || lineptr == NULL || n == NULL)
-    {
-      errno = EINVAL;
-      return -1;
-    }
+  if (stream == NULL || lineptr == NULL || n == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
 
-  if (ferror (stream))
+  if (ferror(stream))
     return -1;
 
   /* Make sure we have a line buffer to start with.  */
   if (*lineptr == NULL || *n < 2) /* !seen and no buf yet need 2 chars.  */
-    {
-#ifndef	MAX_CANON
-#define	MAX_CANON	256
+  {
+#ifndef MAX_CANON
+#define MAX_CANON 256
 #endif
-      line = realloc (*lineptr, MAX_CANON);
-      if (line == NULL)
-	return -1;
-      *lineptr = line;
-      *n = MAX_CANON;
-    }
+    line = realloc(*lineptr, MAX_CANON);
+    if (line == NULL)
+      return -1;
+    *lineptr = line;
+    *n = MAX_CANON;
+  }
 
   line = *lineptr;
   size = *n;
@@ -84,58 +88,60 @@ getdelim (lineptr, n, terminator, stream)
   copy = size;
   p = line;
 
-      while (1)
-	{
-	  size_t len;
+  while (1) {
+    size_t len;
 
-	  while (--copy > 0)
-	    {
-	      register int c = getc (stream);
-	      if (c == EOF)
-		goto lose;
-	      else if ((*p++ = c) == terminator)
-		goto win;
-	    }
+    while (--copy > 0) {
+      register int c = getc(stream);
+      if (c == EOF)
+        goto lose;
+      else if ((*p++ = c) == terminator)
+        goto win;
+    }
 
-	  /* Need to enlarge the line buffer.  */
-	  len = p - line;
-	  size *= 2;
-	  line = realloc (line, size);
-	  if (line == NULL)
-	    goto lose;
-	  *lineptr = line;
-	  *n = size;
-	  p = line + len;
-	  copy = size - len;
-	}
+    /* Need to enlarge the line buffer.  */
+    len = p - line;
+    size *= 2;
+    line = realloc(line, size);
+    if (line == NULL)
+      goto lose;
+    *lineptr = line;
+    *n = size;
+    p = line + len;
+    copy = size - len;
+  }
 
- lose:
+lose:
   if (p == *lineptr)
     return -1;
   /* Return a partial line since we got an error in the middle.  */
- win:
+win:
   *p = '\0';
   return p - *lineptr;
 }
 
 int main(void) {
-  char** deliminitedStr = __VERIFIER_nondet_pointer();
-  size_t* beginningOfLine = __VERIFIER_nondet_pointer();
-  int terminatorChar = __VERIFIER_nondet_int() & 255;
-  FILE* fileToBeRead = __VERIFIER_nondet_pointer();
+  char *line = NULL;
+  size_t n = 0;
 
-  ssize_t lenOfDelimStr = getdelim(
-    deliminitedStr,
-    beginningOfLine,
-    terminatorChar,
-    fileToBeRead
-  );
+  FILE dummy_stream;
 
-  char *temp = strchr(*deliminitedStr, terminatorChar);
-  // __VERIFIER_assert(temp == NULL || lenOfDelimStr >= -1);
-  // __VERIFIER_assert(temp == NULL || lenOfDelimStr != 0);
-  // __VERIFIER_assert(*temp == '\0' || lenOfDelimStr != 0);
-  __VERIFIER_assert(fileToBeRead != NULL || lenOfDelimStr == -1);
-  __VERIFIER_assert(deliminitedStr != NULL || lenOfDelimStr == -1);
+  int terminatorChar = __VERIFIER_nondet_int();
+  __VERIFIER_assume(terminatorChar >= 0 && terminatorChar <= 255);
+
+  ssize_t lenOfDelimStr = getdelim(&line, &n, terminatorChar, &dummy_stream);
+
+  if (lenOfDelimStr >= 0) {
+    __VERIFIER_assert(line != NULL);
+
+    __VERIFIER_assert(line[lenOfDelimStr] == '\0');
+  } else {
+    __VERIFIER_assert(lenOfDelimStr == -1);
+  }
+
+  if (line != NULL) {
+    free(line);
+  }
+
   return 0;
 }
