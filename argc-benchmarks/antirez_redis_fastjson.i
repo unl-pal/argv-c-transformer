@@ -767,7 +767,6 @@ extern void abort();
 void reach_error();
 extern int __VERIFIER_nondet_int(void);
 extern void __VERIFIER_nondet_void(void);
-extern void *__VERIFIER_nondet_pointer(void);
 extern char __VERIFIER_nondet_char(void);
 extern void __VERIFIER_assume(int expression);
 void __VERIFIER_assert(int cond) {
@@ -792,8 +791,26 @@ typedef struct exprtoken {
       struct exprtoken **ele;
       size_t len;
     } tuple;
-  };
+  } union_name;
 } exprtoken;
+static exprtoken mock[16];
+static int mock_idx = 0;
+exprtoken* new_exprtoken() {
+  if (mock_idx >= 16) return ((void *)0);
+  return &mock[mock_idx++];
+}
+static char mock_string_pool[8][64];
+static int mock_string_idx = 0;
+char* allocate_string() {
+  if (mock_string_idx >= 8) return ((void *)0);
+  return mock_string_pool[mock_string_idx++];
+}
+static exprtoken* mock_tuple_pool[8][64];
+static int mock_tuple_idx = 0;
+exprtoken** allocate_tuple_array(size_t size) {
+  if (mock_tuple_idx >= 8 || size > 64) return ((void *)0);
+  return mock_tuple_pool[mock_tuple_idx++];
+}
 static int jsonSkipValue(const char **p, const char *end);
 static exprtoken *jsonParseValueToken(const char **p, const char *end);
 static int jsonIsNumberChar(int c) {
@@ -910,15 +927,17 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
   __VERIFIER_assert(*q == '\0' || *q == '"');
   if (q >= end || *q != '"')
     return ((void *)0);
-  exprtoken *t = __VERIFIER_nondet_pointer();
+  exprtoken *t = new_exprtoken();
+  if (!t) return ((void *)0);
   if (!has_esc) {
-    t->str.start = (char *)start;
-    t->str.len = len;
-    t->str.heapstr = ((void *)0);
+    t->union_name.str.start = (char *)start;
+    t->union_name.str.len = len;
+    t->union_name.str.heapstr = ((void *)0);
   } else {
-    char *dst = __VERIFIER_nondet_pointer();
-    t->str.start = t->str.heapstr = dst;
-    t->str.len = len;
+    char *dst = allocate_string();
+    if (!dst) return ((void *)0);
+    t->union_name.str.start = t->union_name.str.heapstr = dst;
+    t->union_name.str.len = len;
     const char *r = start;
     esc = 0;
     while (r < q) {
@@ -957,7 +976,7 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
     }
     *dst = '\0';
   }
-  __VERIFIER_assert(t->str.start + t->str.len == ((void *)0));
+  __VERIFIER_assert(t->union_name.str.start + t->union_name.str.len == ((void *)0));
   *p = q + 1;
   return t;
 }
@@ -980,8 +999,9 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
     return ((void *)0);
   }
   __VERIFIER_assert(idx <= (int)sizeof(buf));
-  exprtoken *t = __VERIFIER_nondet_pointer();
-  t->num = v;
+  exprtoken *t = new_exprtoken();
+  if (!t) return ((void *)0);
+  t->union_name.num = v;
   return t;
 }
 static exprtoken *jsonParseLiteralToken(const char **p, const char *end,
@@ -999,8 +1019,9 @@ static exprtoken *jsonParseLiteralToken(const char **p, const char *end,
     }
   }
   *p += l;
-  exprtoken *t = __VERIFIER_nondet_pointer();
-  t->num = num;
+  exprtoken *t = new_exprtoken();
+  if (!t) return ((void *)0);
+  t->union_name.num = num;
   return t;
 }
 static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
@@ -1008,9 +1029,10 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
     return ((void *)0);
   (*p)++;
   jsonSkipWhiteSpaces(p, end);
-  exprtoken *t = __VERIFIER_nondet_pointer();
-  t->tuple.len = 0;
-  t->tuple.ele = ((void *)0);
+  exprtoken *t = new_exprtoken();
+  if (!t) return ((void *)0);
+  t->union_name.tuple.len = 0;
+  t->union_name.tuple.ele = ((void *)0);
   size_t alloc = 0;
   if (*p < end && **p == ']') {
     (*p)++;
@@ -1022,16 +1044,22 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
       __VERIFIER_nondet_void();
       return ((void *)0);
     }
-    if (t->tuple.len == alloc) {
+    if (t->union_name.tuple.len == alloc) {
       size_t newsize = alloc ? alloc * 2 : 4;
       if (newsize < alloc) {
         return ((void *)0);
       }
-      exprtoken **newele = __VERIFIER_nondet_pointer();
-      t->tuple.ele = newele;
+      exprtoken **newele = allocate_tuple_array(newsize);
+      if (!newele) return ((void *)0);
+      if (t->union_name.tuple.ele != ((void *)0)) {
+        for (size_t i = 0; i < t->union_name.tuple.len; i++) {
+          newele[i] = t->union_name.tuple.ele[i];
+        }
+      }
+      t->union_name.tuple.ele = newele;
       alloc = newsize;
     }
-    t->tuple.ele[t->tuple.len++] = ele;
+    t->union_name.tuple.ele[t->union_name.tuple.len++] = ele;
     jsonSkipWhiteSpaces(p, end);
     if (*p >= end) {
       return ((void *)0);
@@ -1128,31 +1156,38 @@ exprtoken *jsonExtractField(const char *json, size_t json_len,
     return ((void *)0);
   return jsonParseValueToken(&valptr, end);
 }
+int contains_char(const char *str, size_t len, char c) {
+  for (size_t i = 0; i < len; i++) {
+    if (str[i] == c) {
+      return 1;
+    } else if (str[i] == '\0') {
+      return 0;
+    }
+  }
+  return 0;
+}
 int main(void) {
-  int json_len_int = __VERIFIER_nondet_int();
-  int field_len_int = __VERIFIER_nondet_int();
-  __VERIFIER_assume(json_len_int > 0 && json_len_int < 64);
-  __VERIFIER_assume(field_len_int > 0 && field_len_int < 16);
-  size_t json_len = (size_t)json_len_int;
-  size_t field_len = (size_t)field_len_int;
-  char *json = (char *)malloc(json_len);
-  char *field = (char *)malloc(field_len);
-  __VERIFIER_assume(json != ((void *)0) && field != ((void *)0));
-  for (size_t i = 0; i < json_len; i++) {
+  int json_len = __VERIFIER_nondet_int();
+  int field_len = __VERIFIER_nondet_int();
+  __VERIFIER_assume(json_len > 0 && json_len < 16);
+  __VERIFIER_assume(field_len > 0 && field_len < 8);
+  char json[16];
+  char field[8];
+  for (int i = 0; i < json_len; i++) {
     json[i] = __VERIFIER_nondet_char();
   }
-  for (size_t i = 0; i < field_len; i++) {
+  for (int i = 0; i < field_len; i++) {
     field[i] = __VERIFIER_nondet_char();
   }
   json[json_len - 1] = '\0';
   field[field_len - 1] = '\0';
   exprtoken *result =
       jsonExtractField(json, json_len - 1, field, field_len - 1);
-  __VERIFIER_assert(_Generic (0 ? (json) : (void *) 1, const void *: (const char *) (strchr (json, ':')), default: strchr (json, ':')) != ((void *)0) || result == ((void *)0));
-  __VERIFIER_assert(_Generic (0 ? (json) : (void *) 1, const void *: (const char *) (strchr (json, '{')), default: strchr (json, '{')) != ((void *)0) || result == ((void *)0));
-  __VERIFIER_assert(_Generic (0 ? (json) : (void *) 1, const void *: (const char *) (strchr (json, '}')), default: strchr (json, '}')) != ((void *)0) || result == ((void *)0));
-  __VERIFIER_assert(_Generic (0 ? (json) : (void *) 1, const void *: (const char *) (strchr (json, '"')), default: strchr (json, '"')) != ((void *)0) || result == ((void *)0));
-  free(json);
-  free(field);
+  if (result != ((void *)0)) {
+    __VERIFIER_assert(contains_char(json, json_len,'{') &&
+                      contains_char(json, json_len, '}') &&
+                      contains_char(json, json_len, ':') &&
+                      contains_char(json, json_len, '"'));
+  }
   return 0;
 }

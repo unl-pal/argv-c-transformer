@@ -6,7 +6,7 @@
  * Aug 27, 2025
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
-*/
+ */
 
 /*
  * Functions to make fuzzy comparisons between strings.
@@ -14,7 +14,8 @@
  * Derived from PHP 5 similar_text() function
  *
  * The basic algorithm is described in:
- * Oliver [1993] and the complexity is O(N**3) with N == length of longest string
+ * Oliver [1993] and the complexity is O(N**3) with N == length of longest
+ string
 
    +----------------------------------------------------------------------+
    | PHP Version 5                                                        |
@@ -42,17 +43,21 @@ extern void __VERIFIER_assume(int expression);
 extern void abort();
 void reach_error();
 
-void __VERIFIER_assert(int cond) { if (!cond) { reach_error(); abort(); } }
+void __VERIFIER_assert(int cond) {
+  if (!cond) {
+    reach_error();
+    abort();
+  }
+}
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
+// #ifdef __cplusplus
+// extern "C" {
+// #endif
 
 #include <string.h>
 
-static int similar_text(const char *str1, const char *str2, int len1, int len2)
-{
+static int similar_text(const char *str1, const char *str2, int len1,
+                        int len2) {
   int sum;
   int pos1 = 0, pos2 = 0;
   int max = 0;
@@ -62,22 +67,18 @@ static int similar_text(const char *str1, const char *str2, int len1, int len2)
   char *end2 = (char *)str2 + len2;
   int l;
 
-  for (p = (char *)str1; p < end1; p++)
-  {
-    for (q = (char *)str2; q < end2; q++)
-    {
+  for (p = (char *)str1; p < end1; p++) {
+    for (q = (char *)str2; q < end2; q++) {
       for (l = 0; (p + l < end1) && (q + l < end2) && (p[l] == q[l]); l++)
         ;
-      if (l > max)
-      {
+      if (l > max) {
         max = l;
         pos1 = p - str1;
         pos2 = q - str2;
       }
     }
   }
-  if ((sum = max))
-  {
+  if ((sum = max)) {
     if (pos1 && pos2)
       sum += similar_text(str1, str2, pos1, pos2);
 
@@ -106,9 +107,7 @@ static int similar_text(const char *str1, const char *str2, int len1, int len2)
  strings are identical, and a number in between if they are
  similar.  */
 
-double
-fstrcmp (const char *string1, const char *string2, double minimum)
-{
+double fstrcmp(const char *string1, const char *string2, double minimum) {
   int len1, len2, score;
 
   len1 = (int)strlen(string1);
@@ -128,30 +127,33 @@ fstrcmp (const char *string1, const char *string2, double minimum)
   return ((double)score * 2.0 / (len1 + len2));
 }
 
-#ifdef __cplusplus
+// #ifdef __cplusplus
 } // extern "C"
-#endif
+// #endif
 
-#define MAX_BOUND 12
 int main(void) {
-    char s1[MAX_BOUND];
-    char s2[MAX_BOUND];
+  static int MAX_BOUND = 16;
+  char s1[MAX_BOUND];
+  char s2[MAX_BOUND];
 
-    for (int i = 0; i < MAX_BOUND; i++) {
-        s1[i] = __VERIFIER_nondet_char();
-        s2[i] = __VERIFIER_nondet_char();
-    }
+  for (int i = 0; i < MAX_BOUND; i++) {
+    s1[i] = __VERIFIER_nondet_char();
+    s2[i] = __VERIFIER_nondet_char();
+  }
 
-    int len1 = __VERIFIER_nondet_int();
-    int len2 = __VERIFIER_nondet_int();
-    __VERIFIER_assume(len1 >= 0 && len1 < MAX_BOUND);
-    __VERIFIER_assume(len2 >= 0 && len2 < MAX_BOUND);
-    s1[len1] = '\0';
-    s2[len2] = '\0';
+  int len1 = __VERIFIER_nondet_int();
+  int len2 = __VERIFIER_nondet_int();
+  __VERIFIER_assume(len1 >= 0 && len1 < MAX_BOUND);
+  __VERIFIER_assume(len2 >= 0 && len2 < MAX_BOUND);
+  s1[len1] = '\0';
+  s2[len2] = '\0';
 
-    double result = fstrcmp(s1, s2, 0.0);
+  double result1 = fstrcmp(s1, s2, 0.0);
+  double result2 = fstrcmp(s2, s1, 0.0);
+  double identity = fstrcmp(s1, s1, 0.0);
 
-    __VERIFIER_assert(0.0 <= result && result <= 1.0);
+  __VERIFIER_assert(result1 == result2);
+  __VERIFIER_assert(identity == 1.0);
 
-    return 0;
+  return 0;
 }

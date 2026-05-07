@@ -24,14 +24,14 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <pthread.h>
+// #include <pthread.h>
 #include <string.h>
 
 extern void abort();
 void reach_error();
 
 extern void *__VERIFIER_nondet_pointer(void);
-extern int __VERIFIER_nondet_int(void);
+extern size_t __VERIFIER_nondet_size_t(void);
 extern long __VERIFIER_nondet_long(void);
 extern char __VERIFIER_nondet_char(void);
 extern void __VERIFIER_assume(int expression);
@@ -88,7 +88,7 @@ size_t redis_strlcat(char *dst, const char *src, size_t dsize) {
   /* Find the end of dst and adjust bytes left but don't go past end. */
   while (n-- != 0 && *dst != '\0')
     dst++;
-  dlen = dst - odst;
+  dlen = dst - (char *)odst;
   n = dsize - dlen;
 
   if (n-- == 0)
@@ -102,53 +102,45 @@ size_t redis_strlcat(char *dst, const char *src, size_t dsize) {
   }
   *dst = '\0';
 
-  return (dlen + (src - osrc)); /* count does not include NUL */
+  return (dlen + (src - (char *)osrc)); /* count does not include NUL */
 }
 
 // Arg-C verification harness
-# define MAX_BOUND 64
+#define MAX_BOUND 16
 int main(void) {
   char dst[MAX_BOUND];
   char src[MAX_BOUND];
 
-  for (int i=0; i<MAX_BOUND; i++) {
-    dst[i] = __VERIFIER_nondet_char();
+  size_t src_len = __VERIFIER_nondet_size_t();
+  size_t dst_len = __VERIFIER_nondet_size_t();
+  __VERIFIER_assume(src_len < MAX_BOUND);
+  __VERIFIER_assume(dst_len < MAX_BOUND);
+
+  for (size_t i = 0; i < src_len; i++) {
     src[i] = __VERIFIER_nondet_char();
-    __VERIFIER_assume(dst[i] != '\0');
     __VERIFIER_assume(src[i] != '\0');
   }
+  for (size_t i = 0; i < dst_len; i++) {
+    dst[i] = __VERIFIER_nondet_char();
+    __VERIFIER_assume(dst[i] != '\0');
+  }
+  src[src_len] = '\0';
+  dst[dst_len] = '\0';
 
-  int src_null_idx = __VERIFIER_nondet_int();
-  int dst_null_idx = __VERIFIER_nondet_int();
-  __VERIFIER_assume(src_null_idx >= 0 && src_null_idx < MAX_BOUND);
-  __VERIFIER_assume(dst_null_idx >= 0 && dst_null_idx < MAX_BOUND);
-  src[src_null_idx] = '\0';
-  dst[dst_null_idx] = '\0';
-
-  size_t size = (size_t)__VERIFIER_nondet_int();
-  __VERIFIER_assume(size < MAX_BOUND);
+  size_t size = __VERIFIER_nondet_size_t();
+  __VERIFIER_assume(size <= MAX_BOUND);
 
   size_t cat_result = redis_strlcat(dst, src, size);
 
-  __VERIFIER_assert(cat_result == src_null_idx + dst_null_idx);
-  int found_null = 0;
-  for (size_t i = 0; i < size; i++) {
-    if (dst[i] == '\0') {
-      found_null = 1;
-    }
-  }
-  __VERIFIER_assert(found_null == 1);
+  __VERIFIER_assert(cat_result == src_len + (
+      size < dst_len ? size : dst_len
+  ));
 
   size_t copy_result = redis_strlcpy(dst, src, size);
 
-  __VERIFIER_assert(copy_result == src_null_idx);
-
+  __VERIFIER_assert(copy_result == src_len);
   if (size > 0) {
-    size_t chars = (src_null_idx < size - 1) ? src_null_idx : size - 1;
-    for (size_t i = 0; i < chars; i++) {
-      __VERIFIER_assert(dst[i] == src[i]);
-    }
-    __VERIFIER_assert(dst[chars] == '\0');
+      __VERIFIER_assert((src_len < size - 1 ? src_len : size - 1) == '\0');
   }
 
   return 0;

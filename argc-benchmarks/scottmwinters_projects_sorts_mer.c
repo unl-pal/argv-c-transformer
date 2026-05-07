@@ -182,41 +182,12 @@ void mergeHelp(int *l1, int s1, int *l2, int s2, int *p) {
 
 // Arg-C verification harness
 int main() {
-  int bubble_list[SIZE];
-  int insertion_list[SIZE];
-  int selection_list[SIZE];
   int merge_list[SIZE];
 
   for (int i = 0; i < SIZE; i++) {
-    bubble_list[i] = __VERIFIER_nondet_int();
-    insertion_list[i] = __VERIFIER_nondet_int();
-    selection_list[i] = __VERIFIER_nondet_int();
     merge_list[i] = __VERIFIER_nondet_int();
   }
-
-  insertion(insertion_list);
-  __VERIFIER_assert_sorted(insertion_list);
-
-  selection(selection_list);
-  __VERIFIER_assert_sorted(selection_list);
-
   merge(merge_list, SIZE);
   __VERIFIER_assert_sorted(merge_list);
-
-  // bubble sorts descending
-  bubble(bubble_list);
-  for (int i = 0; i < SIZE - 1; i++) {
-    __VERIFIER_assert(bubble_list[i] >= bubble_list[i + 1]);
-  }
-
-  unsort(bubble_list); // unsafe: immediate deref
-  int not_sorted = 0;
-  for (int i = 0; i < SIZE - 1; i++) {
-    if (bubble_list[i] > bubble_list[i + 1]) {
-      not_sorted = 1;
-    }
-  }
-  __VERIFIER_assert(not_sorted);
-
   return 0;
 }

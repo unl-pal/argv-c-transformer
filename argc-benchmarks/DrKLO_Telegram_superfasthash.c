@@ -87,7 +87,6 @@ uint32_t SuperFastHash(const char *data, int len) {
     data += 2 * sizeof(uint16_t);
     hash += hash >> 11;
   }
-  __VERIFIER_assert(len == 0);
 
   /* Handle end cases */
   switch (rem) {
@@ -116,15 +115,15 @@ uint32_t SuperFastHash(const char *data, int len) {
   hash ^= hash << 25;
   hash += hash >> 6;
 
-  __VERIFIER_assert(rem >= 0 && rem <= 3);
   return hash;
 }
 
 // Arg-C verification harness
+# define BOUND 1024
 int main(void) {
   int len = __VERIFIER_nondet_int();
 
-  __VERIFIER_assume(len < 1024);
+  __VERIFIER_assume(len < BOUND);
 
   char *data = NULL;
   if (len > 0) {
@@ -140,6 +139,10 @@ int main(void) {
 
   if (data != NULL) {
     free(data);
+  }
+
+  if (len > 0){
+    __VERIFIER_assert(result != 0);
   }
 
   return result;

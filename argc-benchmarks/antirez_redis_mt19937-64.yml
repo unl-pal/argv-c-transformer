@@ -5,6 +5,8 @@ input_files: 'antirez_redis_mt19937-64.i'
 properties:
   - property_file: ../properties/unreach-call.prp
     expected_verdict: true
+  - property_file: ../properties/valid-memsafety.prp
+    expected_verdict: true
   - property_file: ../properties/no-overflow.prp
     expected_verdict: true
   - property_file: ../properties/termination.prp

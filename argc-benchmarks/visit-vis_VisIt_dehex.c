@@ -55,6 +55,10 @@ void __VERIFIER_assert(int cond) {
   }
 }
 
+char* strerror(int errnum) {
+  return "mocked_strerror";
+}
+
 void dehexUsage(char *me) {
   /*                       0   1     2   (2/3) */
   fprintf(stderr, "usage: %s <in> [<out>]\n", me);
@@ -99,7 +103,6 @@ original_main(int argc, char *argv[]) {
   me = argv[0];
   if (!( 2 == argc || 3 == argc )){
     dehexUsage(me);
-    __VERIFIER_assert(0);
   }
   inS = argv[1];
   if (!strcmp("-", inS)) {
@@ -134,8 +137,9 @@ original_main(int argc, char *argv[]) {
   byte = 0;
   even = 1;
   for (car=fgetc(fin); EOF != car; car=fgetc(fin)) {
+    __VERIFIER_assert(car >= 0 && car <= 255);
     nibble = dehexTable[car & 127];
-    __VERIFIER_assert((car & 127) >= 0 && (car & 127) < 128);
+    __VERIFIER_assert(nibble >= -2 && nibble <= 15);
     if (-2 == nibble) {
       /* its an invalid character */
       break;
@@ -144,11 +148,12 @@ original_main(int argc, char *argv[]) {
       /* its white space */
       continue;
     }
+    __VERIFIER_assert(nibble >= 0 && nibble <= 15);
     if (even) {
-      __VERIFIER_assert(nibble >= 0 && nibble <= 15);
       byte = nibble << 4;
     } else {
       byte += nibble;
+      __VERIFIER_assert(byte >= 0 && byte <= 255);
       if (EOF == fputc(byte, fout)) {
         fprintf(stderr, "%s: error writing!!!\n", me);
         exit(1);
@@ -171,8 +176,8 @@ int main() {
   int argc = __VERIFIER_nondet_int();
   __VERIFIER_assume(argc >= 0 && argc <= 4);
 
-  int BOUND = 16;
-  char argv_data[4][16];
+  int BOUND = 8;
+  char argv_data[4][BOUND];
   char *argv[4];
   for (int i = 0; i < 4; i++) {
     argv[i] = argv_data[i];

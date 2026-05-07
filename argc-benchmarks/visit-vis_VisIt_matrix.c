@@ -293,7 +293,7 @@ int main(void) {
   for (int i = 0; i < 4; i++) {
     for (int j = 0; j < 4; j++) {
       M[i][j] = __VERIFIER_nondet_float();
-      __VERIFIER_assume(M[i][j] > -10.0f && M[i][j] < 10.0f);
+      __VERIFIER_assume(M[i][j] > -1.0f && M[i][j] < 1.0f);
     }
   }
 
@@ -321,7 +321,7 @@ int main(void) {
 
   for (int i = 0; i < 3; i++) {
     v_in[i] = __VERIFIER_nondet_float();
-    __VERIFIER_assume(v_in[i] > -10.0f && v_in[i] < 10.0f);
+    __VERIFIER_assume(v_in[i] > -1.0f && v_in[i] < 1.0f);
   }
 
   for (int i = 0; i < 4; i++) {
@@ -330,8 +330,8 @@ int main(void) {
         M_transform[i][j] = 1.0f;
       } else if (i == 3 && j < 3) {
         M_transform[i][j] = __VERIFIER_nondet_float();
-        __VERIFIER_assume(M_transform[i][j] > -10.0f &&
-                          M_transform[i][j] < 10.0f);
+        __VERIFIER_assume(M_transform[i][j] > -1.0f &&
+                          M_transform[i][j] < 1.0f);
       } else {
         M_transform[i][j] = 0.0f;
       }

@@ -22,3 +22,5 @@ compile_commands.json
 *.zig*
 
 /notes/
+
+/benchmarks/

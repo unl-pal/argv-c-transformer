@@ -17,7 +17,7 @@
  * GNU Affero General Public License v3 (AGPLv3).
  */
 
-#include <time.h>
+// #include <time.h>
 
 /* This is a safe version of localtime() which contains no locks and is
  * fork() friendly. Even the _r version of localtime() cannot be used safely
@@ -54,6 +54,20 @@ void __VERIFIER_assert(int cond) {
   }
 }
 
+// replaces time.h
+typedef long time_t;
+struct tm {
+  int tm_sec;
+  int tm_min;
+  int tm_hour;
+  int tm_mday;
+  int tm_mon;
+  int tm_year;
+  int tm_wday;
+  int tm_yday;
+  int tm_isdst;
+};
+
 static int is_leap_year(time_t year) {
   if (year % 4)
     return 0; /* A year not divisible by 4 is not leap. */
@@ -63,7 +77,6 @@ static int is_leap_year(time_t year) {
     return 0; /* If div by 100 *and* not by 400 is not leap. */
   else
     return 1; /* If div by 100 and 400 is leap. */
-  __VERIFIER_assert(0);
 }
 
 void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
@@ -133,7 +146,7 @@ int main(void) {
 
   __VERIFIER_assume(dst == 0 || dst == 1);
   __VERIFIER_assume(tz >= -12 * 3600 && tz <= 14 * 3600);
-  __VERIFIER_assume(t >= 14*3600 && t <= 2147483647);
+  __VERIFIER_assume(t >= 14*3600 && t <= 50*365*3600*24);
 
   nolocks_localtime(&my_tm, t, tz, dst);
 

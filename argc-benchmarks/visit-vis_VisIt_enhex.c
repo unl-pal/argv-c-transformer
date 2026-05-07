@@ -118,11 +118,24 @@ int original_main(int argc, char *argv[]) {
   col = 0;
   car = fgetc(fin);
   while (EOF != car) {
+    __VERIFIER_assert(car >= 0 && car <= 255);
+    int high_nibble = (car >> 4) & 15;
+    int low_nibble = car & 15;
+    __VERIFIER_assert(high_nibble >= 0 && high_nibble <= 15);
+    __VERIFIER_assert(low_nibble >= 0 && low_nibble <= 15);
+    __VERIFIER_assert((enhexTable[high_nibble] >= '0' &&
+                       enhexTable[high_nibble] <= '9') ||
+                      (enhexTable[high_nibble] >= 'a' &&
+                       enhexTable[high_nibble] <= 'f'));
+    __VERIFIER_assert((enhexTable[low_nibble] >= '0' &&
+                       enhexTable[low_nibble] <= '9') ||
+                      (enhexTable[low_nibble] >= 'a' &&
+                       enhexTable[low_nibble] <= 'f'));
     if (col > enhexColumns) {
       fprintf(fout, "\n");
       col = 0;
     }
-    fprintf(fout, "%c%c", enhexTable[car >> 4], enhexTable[car & 15]);
+    fprintf(fout, "%c%c", enhexTable[high_nibble], enhexTable[low_nibble]);
     col += 2;
     car = fgetc(fin);
   }
@@ -140,8 +153,8 @@ int main() {
   int argc = __VERIFIER_nondet_int();
   __VERIFIER_assume(argc >= 0 && argc <= 4);
 
-  int BOUND = 16;
-  char argv_data[4][16];
+  int BOUND = 8;
+  char argv_data[4][BOUND];
   char *argv[4];
   for (int i = 0; i < 4; i++) {
     argv[i] = argv_data[i];

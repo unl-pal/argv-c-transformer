@@ -961,23 +961,36 @@ void __VERIFIER_assert(int cond) {
     abort();
   }
 }
-ssize_t getdelim(lineptr, n, terminator, stream)
-char **lineptr;
-size_t *n;
-int terminator;
-FILE *stream;
-{
+int mock_errno = 0;
+char *my_realloc(char *ptr, size_t old_size, size_t size) {
+  if (size == 0) {
+    if (ptr != ((void *)0)) free(ptr);
+    return ((void *)0);
+  }
+  char *new_ptr = malloc(size);
+  if (new_ptr != ((void *)0) && ptr != ((void *)0)) {
+    size_t copy_size = old_size < size ? old_size : size;
+    for (size_t i = 0; i < copy_size; i++) {
+      new_ptr[i] = ptr[i];
+    }
+  }
+  if (ptr != ((void *)0)) {
+    free(ptr);
+  }
+  return new_ptr;
+}
+ssize_t getdelim(char **lineptr, size_t *n, int terminator, FILE *stream) {
   char *line, *p;
   size_t size, copy;
   if (stream == ((void *)0) || lineptr == ((void *)0) || n == ((void *)0)) {
-    (*__errno_location ()) = 22;
+    mock_errno = 22;
     return -1;
   }
   if (ferror(stream))
     return -1;
   if (*lineptr == ((void *)0) || *n < 2)
   {
-    line = realloc(*lineptr, 256);
+    line = my_realloc(*lineptr, 0, 256);
     if (line == ((void *)0))
       return -1;
     *lineptr = line;
@@ -998,7 +1011,7 @@ FILE *stream;
     }
     len = p - line;
     size *= 2;
-    line = realloc(line, size);
+    line = my_realloc(line, size / 2, size);
     if (line == ((void *)0))
       goto lose;
     *lineptr = line;
@@ -1015,11 +1028,11 @@ win:
 }
 int main(void) {
   char *line = ((void *)0);
-  size_t n = 0;
+  size_t *n = 0;
   FILE dummy_stream;
   int terminatorChar = __VERIFIER_nondet_int();
   __VERIFIER_assume(terminatorChar >= 0 && terminatorChar <= 255);
-  ssize_t lenOfDelimStr = getdelim(&line, &n, terminatorChar, &dummy_stream);
+  ssize_t lenOfDelimStr = getdelim(&line, n, terminatorChar, &dummy_stream);
   if (lenOfDelimStr >= 0) {
     __VERIFIER_assert(line != ((void *)0));
     __VERIFIER_assert(line[lenOfDelimStr] == '\0');

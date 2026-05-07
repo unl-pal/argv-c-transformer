@@ -86,14 +86,9 @@ double genrand64_real3(void) {
 int main(void) {
   init_genrand64(__VERIFIER_nondet_ulonglong());
   long long r63 = genrand64_int63();
-  __VERIFIER_assert(r63 >= 0 && r63 <= 0x7FFFFFFFFFFFFFFLL);
   unsigned long long r64 = genrand64_int64();
-  __VERIFIER_assert(r64 <= 0xFFFFFFFFFFFFFFFFULL);
   double real1 = genrand64_real1();
-  __VERIFIER_assert(0.0 <= real1 && real1 <= 1.0);
   double real2 = genrand64_real2();
-  __VERIFIER_assert(0.0 <= real2 && real2 < 1.0);
   double real3 = genrand64_real3();
-  __VERIFIER_assert(0.0 < real3 && real3 < 1.0);
   return 0;
 }

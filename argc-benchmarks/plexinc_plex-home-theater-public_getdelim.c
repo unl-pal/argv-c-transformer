@@ -46,18 +46,36 @@ void __VERIFIER_assert(int cond) {
   }
 }
 
+#undef errno
+int mock_errno = 0;
+#define errno mock_errno
+
+char *my_realloc(char *ptr, size_t old_size, size_t size) {
+  if (size == 0) {
+    if (ptr != NULL) free(ptr);
+    return NULL;
+  }
+
+  char *new_ptr = malloc(size);
+  if (new_ptr != NULL && ptr != NULL) {
+    size_t copy_size = old_size < size ? old_size : size;
+    for (size_t i = 0; i < copy_size; i++) {
+      new_ptr[i] = ptr[i];
+    }
+  }
+  if (ptr != NULL) {
+    free(ptr);
+  }
+  return new_ptr;
+}
+
 /* Read up to (and including) a TERMINATOR from STREAM into *LINEPTR
    (and null-terminate it). *LINEPTR is a pointer returned from malloc (or
    NULL), pointing to *N characters of space.  It is realloc'd as
    necessary.  Returns the number of characters read (not including the
    null terminator), or -1 on error or EOF.  */
 
-ssize_t getdelim(lineptr, n, terminator, stream)
-char **lineptr;
-size_t *n;
-int terminator;
-FILE *stream;
-{
+ssize_t getdelim(char **lineptr, size_t *n, int terminator, FILE *stream) {
   char *line, *p;
   size_t size, copy;
 
@@ -75,7 +93,7 @@ FILE *stream;
 #ifndef MAX_CANON
 #define MAX_CANON 256
 #endif
-    line = realloc(*lineptr, MAX_CANON);
+    line = my_realloc(*lineptr, 0, MAX_CANON);
     if (line == NULL)
       return -1;
     *lineptr = line;
@@ -102,7 +120,7 @@ FILE *stream;
     /* Need to enlarge the line buffer.  */
     len = p - line;
     size *= 2;
-    line = realloc(line, size);
+    line = my_realloc(line, size / 2, size);
     if (line == NULL)
       goto lose;
     *lineptr = line;
@@ -122,14 +140,14 @@ win:
 
 int main(void) {
   char *line = NULL;
-  size_t n = 0;
+  size_t *n = 0;
 
   FILE dummy_stream;
 
   int terminatorChar = __VERIFIER_nondet_int();
   __VERIFIER_assume(terminatorChar >= 0 && terminatorChar <= 255);
 
-  ssize_t lenOfDelimStr = getdelim(&line, &n, terminatorChar, &dummy_stream);
+  ssize_t lenOfDelimStr = getdelim(&line, n, terminatorChar, &dummy_stream);
 
   if (lenOfDelimStr >= 0) {
     __VERIFIER_assert(line != NULL);

@@ -54,7 +54,6 @@ void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
 extern void __VERIFIER_nondet_void(void);
-extern void *__VERIFIER_nondet_pointer(void);
 extern char __VERIFIER_nondet_char(void);
 extern void __VERIFIER_assume(int expression);
 
@@ -113,8 +112,37 @@ typedef struct exprtoken {
       struct exprtoken **ele;
       size_t len;
     } tuple; // Tuples are like [1, 2, 3] for "in" operator.
-  };
+  } union_name;
 } exprtoken;
+
+#define MOCK_SIZE 16
+static exprtoken mock[MOCK_SIZE];
+static int mock_idx = 0;
+
+exprtoken* new_exprtoken() {
+  if (mock_idx >= MOCK_SIZE) return NULL;
+  return &mock[mock_idx++];
+}
+
+#define MAX_MOCK_STRINGS 8
+#define MAX_STRING_LEN 64 // Safely bounds our max json_len
+static char mock_string_pool[MAX_MOCK_STRINGS][MAX_STRING_LEN];
+static int mock_string_idx = 0;
+
+char* allocate_string() {
+  if (mock_string_idx >= MAX_MOCK_STRINGS) return NULL;
+  return mock_string_pool[mock_string_idx++];
+}
+
+#define MAX_MOCK_TUPLES 8
+#define MAX_TUPLE_ELEMS 64 
+static exprtoken* mock_tuple_pool[MAX_MOCK_TUPLES][MAX_TUPLE_ELEMS];
+static int mock_tuple_idx = 0;
+
+exprtoken** allocate_tuple_array(size_t size) {
+  if (mock_tuple_idx >= MAX_MOCK_TUPLES || size > MAX_TUPLE_ELEMS) return NULL;
+  return mock_tuple_pool[mock_tuple_idx++];
+}
 
 // Forward declarations.
 static int jsonSkipValue(const char **p, const char *end);
@@ -288,19 +316,21 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
   __VERIFIER_assert(*q == '\0' || *q == '"');
   if (q >= end || *q != '"')
     return NULL; // Unterminated string
-  exprtoken *t = __VERIFIER_nondet_pointer();
+  exprtoken *t = new_exprtoken();
+  if (!t) return NULL;
 
   if (!has_esc) {
     // No escapes, we can point directly into the original JSON string.
-    t->str.start = (char *)start;
-    t->str.len = len;
-    t->str.heapstr = NULL;
+    t->union_name.str.start = (char *)start;
+    t->union_name.str.len = len;
+    t->union_name.str.heapstr = NULL;
   } else {
     // Escapes present, need to allocate and copy/process escapes.
-    char *dst = __VERIFIER_nondet_pointer();
+    char *dst = allocate_string();
+    if (!dst) return NULL;
 
-    t->str.start = t->str.heapstr = dst;
-    t->str.len = len;
+    t->union_name.str.start = t->union_name.str.heapstr = dst;
+    t->union_name.str.len = len;
     const char *r = start;
     esc = 0;
     while (r < q) {
@@ -342,7 +372,7 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
     }
     *dst = '\0'; // Null-terminate the allocated string.
   }
-  __VERIFIER_assert(t->str.start + t->str.len == NULL);
+  __VERIFIER_assert(t->union_name.str.start + t->union_name.str.len == NULL);
   *p = q + 1; // Advance the main pointer past the closing quote.
   return t;
 }
@@ -378,8 +408,9 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
   __VERIFIER_assert(idx <= (int)sizeof(buf));
 
   // If strtod() succeeded, create and return the token..
-  exprtoken *t = __VERIFIER_nondet_pointer();
-  t->num = v;
+  exprtoken *t = new_exprtoken();
+  if (!t) return NULL;
+  t->union_name.num = v;
   return t;
 }
 
@@ -407,8 +438,9 @@ static exprtoken *jsonParseLiteralToken(const char **p, const char *end,
 
   // Literal matched and is correctly terminated.
   *p += l;
-  exprtoken *t = __VERIFIER_nondet_pointer();
-  t->num = num;
+  exprtoken *t = new_exprtoken();
+  if (!t) return NULL;
+  t->union_name.num = num;
   return t;
 }
 
@@ -418,9 +450,10 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
   (*p)++; // Skip '['.
   jsonSkipWhiteSpaces(p, end);
 
-  exprtoken *t = __VERIFIER_nondet_pointer();
-  t->tuple.len = 0;
-  t->tuple.ele = NULL;
+  exprtoken *t = new_exprtoken();
+  if (!t) return NULL;
+  t->union_name.tuple.len = 0;
+  t->union_name.tuple.ele = NULL;
   size_t alloc = 0;
 
   // Handle empty array [].
@@ -438,17 +471,24 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
     }
 
     // Grow allocated space for elements if needed.
-    if (t->tuple.len == alloc) {
+    if (t->union_name.tuple.len == alloc) {
       size_t newsize = alloc ? alloc * 2 : 4;
       // Check for potential overflow if newsize becomes huge.
       if (newsize < alloc) {
         return NULL;
       }
-      exprtoken **newele = __VERIFIER_nondet_pointer();
-      t->tuple.ele = newele;
+      exprtoken **newele = allocate_tuple_array(newsize);
+      if (!newele) return NULL;
+      if (t->union_name.tuple.ele != NULL) {
+        for (size_t i = 0; i < t->union_name.tuple.len; i++) {
+          newele[i] = t->union_name.tuple.ele[i];
+        }
+      }
+
+      t->union_name.tuple.ele = newele;
       alloc = newsize;
     }
-    t->tuple.ele[t->tuple.len++] = ele; // Add element.
+    t->union_name.tuple.ele[t->union_name.tuple.len++] = ele; // Add element.
 
     jsonSkipWhiteSpaces(p, end);
     if (*p >= end) {
@@ -598,42 +638,48 @@ exprtoken *jsonExtractField(const char *json, size_t json_len,
 }
 
 // Arg-C verification harness
+int contains_char(const char *str, size_t len, char c) {
+  for (size_t i = 0; i < len; i++) {
+    if (str[i] == c) {
+      return 1;
+    } else if (str[i] == '\0') {
+      return 0; // Stop at null terminator.
+    }
+  }
+  return 0;
+}
+
+# define MAX_BOUND 16
+# define MAX_LEN 8
 int main(void) {
-  int json_len_int = __VERIFIER_nondet_int();
-  int field_len_int = __VERIFIER_nondet_int();
+  int json_len = __VERIFIER_nondet_int();
+  int field_len = __VERIFIER_nondet_int();
 
-  __VERIFIER_assume(json_len_int > 0 && json_len_int < 64);
-  __VERIFIER_assume(field_len_int > 0 && field_len_int < 16);
+  __VERIFIER_assume(json_len > 0 && json_len < MAX_BOUND);
+  __VERIFIER_assume(field_len > 0 && field_len < MAX_LEN);
 
-  size_t json_len = (size_t)json_len_int;
-  size_t field_len = (size_t)field_len_int;
+  char json[MAX_BOUND];
+  char field[MAX_LEN];
 
-  char *json = (char *)malloc(json_len);
-  char *field = (char *)malloc(field_len);
-
-  __VERIFIER_assume(json != NULL && field != NULL);
-
-  for (size_t i = 0; i < json_len; i++) {
+  for (int i = 0; i < json_len; i++) {
     json[i] = __VERIFIER_nondet_char();
   }
-  for (size_t i = 0; i < field_len; i++) {
+  for (int i = 0; i < field_len; i++) {
     field[i] = __VERIFIER_nondet_char();
   }
 
-  // ensure null termination for assertions
   json[json_len - 1] = '\0';
   field[field_len - 1] = '\0';
 
   exprtoken *result =
       jsonExtractField(json, json_len - 1, field, field_len - 1);
 
-  __VERIFIER_assert(strchr(json, ':') != NULL || result == NULL);
-  __VERIFIER_assert(strchr(json, '{') != NULL || result == NULL);
-  __VERIFIER_assert(strchr(json, '}') != NULL || result == NULL);
-  __VERIFIER_assert(strchr(json, '"') != NULL || result == NULL);
-
-  free(json);
-  free(field);
+  if (result != NULL) {
+    __VERIFIER_assert(contains_char(json, json_len,'{') &&
+                      contains_char(json, json_len, '}') &&
+                      contains_char(json, json_len, ':') &&
+                      contains_char(json, json_len, '"'));
+  }
 
   return 0;
 }
