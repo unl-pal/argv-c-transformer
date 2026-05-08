@@ -1,7 +1,7 @@
 #!/bin/bash
 
 for file in *.i; do
-  gcc -E -P "$file" > "${file%c}"i
+  gcc -E -P "$file" > "${file%i}"c
 done
 
 BENCHMARKS="/home/nat/Repos/bench-defs/sv-benchmarks/c/argc-benchmarks/"

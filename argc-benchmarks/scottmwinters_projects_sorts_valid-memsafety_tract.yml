@@ -1,0 +1,12 @@
+format_version: '2.0'
+
+input_files: 'scottmwinters_projects_sorts_valid-memsafety_tract.c'
+
+properties:
+  - property_file: ../properties/valid-memsafety.prp
+    expected_verdict: false
+    subproperty: valid-deref
+
+options:
+  language: C
+  data_model: LP64

@@ -64,11 +64,6 @@ void __VERIFIER_assert(int cond) {
    (uint32_t)(((const uint8_t *)(d))[0]))
 #endif
 
-// could(/should?) replace ^macro:
-// static inline uint16_t get16bits(const char *data) {
-//  ((((uint32_t)(((const uint8_t *)(data))[1])) << 8)\
-//  +(uint32_t)(((const uint8_t *)(data))[0]) );
-
 uint32_t SuperFastHash(const char *data, int len) {
   uint32_t hash = len, tmp;
   int rem;
@@ -119,27 +114,19 @@ uint32_t SuperFastHash(const char *data, int len) {
 }
 
 // Arg-C verification harness
-# define BOUND 1024
+#define BOUND 4096
 int main(void) {
   int len = __VERIFIER_nondet_int();
 
   __VERIFIER_assume(len < BOUND);
 
-  char *data = NULL;
+  char data[BOUND];
   if (len > 0) {
-    data = (char *)malloc(len);
-
-    __VERIFIER_assume(data != NULL);
-
     for (int i = 0; i < len; i++) {
       data[i] = __VERIFIER_nondet_char();
     }
   }
   uint32_t result = SuperFastHash(data, len);
-
-  if (data != NULL) {
-    free(data);
-  }
 
   if (len > 0){
     __VERIFIER_assert(result != 0);

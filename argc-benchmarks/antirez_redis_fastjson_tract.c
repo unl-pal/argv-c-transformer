@@ -649,30 +649,37 @@ int contains_char(const char *str, size_t len, char c) {
   return 0;
 }
 
-# define MAX_BOUND 16
-# define MAX_LEN 8
+#define MAX_BOUND 10
+#define MAX_LEN 6
 int main(void) {
   int json_len = __VERIFIER_nondet_int();
   int field_len = __VERIFIER_nondet_int();
 
-  __VERIFIER_assume(json_len > 0 && json_len < MAX_BOUND);
-  __VERIFIER_assume(field_len > 0 && field_len < MAX_LEN);
+  __VERIFIER_assume(json_len >= 6 && json_len <= MAX_BOUND);
+  __VERIFIER_assume(field_len >= 2 && field_len <= MAX_LEN);
 
   char json[MAX_BOUND];
   char field[MAX_LEN];
 
-  for (int i = 0; i < json_len; i++) {
+  json[0] = '{';
+  json[1] = '"';
+  for (int i = 2; i < json_len - 3; i++) {
     json[i] = __VERIFIER_nondet_char();
+    __VERIFIER_assume(json[i] == 'a' || json[i] == '"' || json[i] == ':' ||
+                      json[i] == ' ');
   }
+  json[json_len - 3] = '"';
+  json[json_len - 2] = '}';
+  json[json_len - 1] = '\0';
+
   for (int i = 0; i < field_len; i++) {
     field[i] = __VERIFIER_nondet_char();
+    __VERIFIER_assume(field[i] >= 'a' && field[i] <= 'c');
   }
 
-  json[json_len - 1] = '\0';
   field[field_len - 1] = '\0';
 
-  exprtoken *result =
-      jsonExtractField(json, json_len - 1, field, field_len - 1);
+  exprtoken *result = jsonExtractField(json, json_len - 1, field, field_len - 1);
 
   if (result != NULL) {
     __VERIFIER_assert(contains_char(json, json_len,'{') &&

@@ -3,6 +3,7 @@ antirez_redis_endianconv.yml
 antirez_redis_fastjson.yml
 antirez_redis_mt19937-64.yml
 antirez_redis_mt19937-64_array.yml
+antirez_redis_mt19937-64_array_valid-memsafety_tract.yml
 antirez_redis_strl.yml
 plexinc_plex-home-theater-public_fstrcmp.yml
 plexinc_plex-home-theater-public_getdelim.yml
@@ -13,6 +14,9 @@ scottmwinters_projects_sorts_ins.yml
 scottmwinters_projects_sorts_mer.yml
 scottmwinters_projects_sorts_sel.yml
 scottmwinters_projects_sorts_unsort.yml
+scottmwinters_projects_sorts_valid-memsafety_tract.yml
 visit-vis_VisIt_dehex.yml
 visit-vis_VisIt_enhex.yml
+visit-vis_VisIt_enhex_tract.yml
 visit-vis_VisIt_matrix.yml
+visit-vis_VisIt_matrix_tract.yml
