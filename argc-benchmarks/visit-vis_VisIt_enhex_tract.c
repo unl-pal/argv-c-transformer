@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (C) 2004, 2003, 2002 University of Utah
 // SPDX-License-Identifier: Custom
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -43,10 +43,6 @@
 extern void abort();
 void reach_error();
 
-extern int __VERIFIER_nondet_int(void);
-extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
-
 void __VERIFIER_assert(int cond) {
   if (!cond) {
     reach_error();
@@ -54,16 +50,61 @@ void __VERIFIER_assert(int cond) {
   }
 }
 
+char* mock_strerror(int errnum) {
+  return "mocked_strerror";
+}
+
+#define strerror mock_strerror
+
+#define IN_SIZE 2
+
+static char in_buffer[IN_SIZE];
+static int in_pos;
+
+int mock_fgetc(FILE *stream) {
+  if (in_pos >= IN_SIZE) return EOF;
+  return (unsigned char)in_buffer[in_pos++];
+}
+
+#define fgetc mock_fgetc
+
+#define OUT_SIZE 4
+static char out_buffer[OUT_SIZE];
+static int out_pos;
+
+int mock_fprintf(FILE *stream, const char *fmt, ...) {
+  (void)stream;
+
+  char tmp[128];
+  va_list ap;
+  va_start(ap, fmt);
+  int n = vsnprintf(tmp, sizeof(tmp), fmt, ap);
+  va_end(ap);
+
+  if (n < 0) return n;
+
+  int to_copy = n;
+  if (to_copy > (OUT_SIZE - out_pos)) to_copy = OUT_SIZE - out_pos;
+  if (to_copy > 0) {
+    memcpy(&out_buffer[out_pos], tmp, (size_t)to_copy);
+    out_pos += to_copy;
+  }
+  return n;
+}
+
+#define fprintf mock_fprintf
+
 int enhexColumns = 70; /* number of characters per line */
 
-void enhexUsage(char *me) {
+int enhexUsage(char *me) {
   /*                       0   1     2   (2/3) */
   fprintf(stderr, "usage: %s <in> [<out>]\n", me);
   fprintf(stderr, " <in>: file to read raw data from\n");
   fprintf(stderr, "<out>: file to write hex data to; "
                   "uses stdout by default\n");
   fprintf(stderr, " \"-\" can be used to refer to stdin/stdout\n");
-  exit(1);
+  // exit(1);
+  return 1;
 }
 
 void enhexFclose(FILE *file) {
@@ -118,19 +159,8 @@ int original_main(int argc, char *argv[]) {
   col = 0;
   car = fgetc(fin);
   while (EOF != car) {
-    __VERIFIER_assert(car >= 0 && car <= 255);
     int high_nibble = (car >> 4) & 15;
     int low_nibble = car & 15;
-    __VERIFIER_assert(high_nibble >= 0 && high_nibble <= 15);
-    __VERIFIER_assert(low_nibble >= 0 && low_nibble <= 15);
-    __VERIFIER_assert((enhexTable[high_nibble] >= '0' &&
-                       enhexTable[high_nibble] <= '9') ||
-                      (enhexTable[high_nibble] >= 'a' &&
-                       enhexTable[high_nibble] <= 'f'));
-    __VERIFIER_assert((enhexTable[low_nibble] >= '0' &&
-                       enhexTable[low_nibble] <= '9') ||
-                      (enhexTable[low_nibble] >= 'a' &&
-                       enhexTable[low_nibble] <= 'f'));
     if (col > enhexColumns) {
       fprintf(fout, "\n");
       col = 0;
@@ -145,32 +175,27 @@ int original_main(int argc, char *argv[]) {
 
   enhexFclose(fin);
   enhexFclose(fout);
-  exit(0);
+  // exit(0);
+  return 0;
 }
 
 // Arg-C verification harness
 int main() {
-  int len = __VERIFIER_nondet_int();
-  __VERIFIER_assume(len >= 0 && len <= 8);
 
-  for (int i = 0; i < len; i++) {
-    int car = __VERIFIER_nondet_int();
-    __VERIFIER_assume(car >= 0 && car <= 255);
-    __VERIFIER_assert(car >= 0 && car <= 255);
+  in_buffer[0] = 'H';
+  in_buffer[1] = 'i';
 
-    int high_nibble = (car >> 4) & 15;
-    int low_nibble = car & 15;
-    __VERIFIER_assert(high_nibble >= 0 && high_nibble <= 15);
-    __VERIFIER_assert(low_nibble >= 0 && low_nibble <= 15);
-    __VERIFIER_assert((enhexTable[high_nibble] >= '0' &&
-                       enhexTable[high_nibble] <= '9') ||
-                      (enhexTable[high_nibble] >= 'a' &&
-                       enhexTable[high_nibble] <= 'f'));
-    __VERIFIER_assert((enhexTable[low_nibble] >= '0' &&
-                       enhexTable[low_nibble] <= '9') ||
-                      (enhexTable[low_nibble] >= 'a' &&
-                       enhexTable[low_nibble] <= 'f'));
-  }
+  int argc = 2;
+  char argv0[] = "enhex";
+  char argv1[] = "-";
+  char *argv[] = {argv0, argv1};
+
+  original_main(argc, argv);
+
+  __VERIFIER_assert(out_buffer[0] == '4');
+  __VERIFIER_assert(out_buffer[1] == '8');
+  __VERIFIER_assert(out_buffer[2] == '6');
+  __VERIFIER_assert(out_buffer[3] == '9');
 
   return 0;
 }

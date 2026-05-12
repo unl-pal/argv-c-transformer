@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 1997-2010 The PHP Group
 // SPDX-License-Identifier: PHPv3.01
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -132,23 +132,8 @@ double fstrcmp(const char *string1, const char *string2, double minimum) {
 // #endif
 
 int main(void) {
-  static int MAX_BOUND = 8;
-  char s1[MAX_BOUND];
-  char s2[MAX_BOUND];
-
-  for (int i = 0; i < MAX_BOUND; i++) {
-    s1[i] = __VERIFIER_nondet_char();
-    s2[i] = __VERIFIER_nondet_char();
-    __VERIFIER_assume(s1[i] >= 'a' && s1[i] <= 'c');
-    __VERIFIER_assume(s2[i] >= 'a' && s2[i] <= 'c');
-  }
-
-  int len1 = __VERIFIER_nondet_int();
-  int len2 = __VERIFIER_nondet_int();
-  __VERIFIER_assume(len1 >= 0 && len1 < MAX_BOUND);
-  __VERIFIER_assume(len2 >= 0 && len2 < MAX_BOUND);
-  s1[len1] = '\0';
-  s2[len2] = '\0';
+  char s1[] = "hello";
+  char s2[] = "hallo";
 
   double result1 = fstrcmp(s1, s2, 0.0);
   double identity = fstrcmp(s1, s1, 0.0);

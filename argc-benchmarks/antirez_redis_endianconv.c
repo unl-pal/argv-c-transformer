@@ -1,12 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2011-Present, Redis Ltd.
 // SPDX-License-Identifier: RSALv2 or SSPLv1 or AGPLv3
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
-
-/*
- * Aug 27, 2025
- * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
- * a benchmark for Static Verification tools
- */
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /* endinconv.c -- Endian conversions utilities.
  *
@@ -32,10 +26,6 @@
  */
 
 #include <stdint.h>
-#include <stdlib.h>
-
-/* Toggle the 16 bit unsigned integer pointed by *p from little endian to
- * big endian */
 
 extern void abort();
 void reach_error();
@@ -50,6 +40,8 @@ void __VERIFIER_assert(int cond) {
   }
 };
 
+/* Toggle the 16 bit unsigned integer pointed by *p from little endian to
+ * big endian */
 void memrev16(void *p) {
   unsigned char *x = p, t;
 

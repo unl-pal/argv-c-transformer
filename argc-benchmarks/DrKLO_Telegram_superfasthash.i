@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: Copyright (c) 2010, Paul Hsieh
+ * SPDX-License-Identifier: Custom
+ * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+ */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
 typedef unsigned char __u_char;
@@ -640,21 +644,19 @@ uint32_t SuperFastHash(const char *data, int len) {
 }
 int main(void) {
   int len = __VERIFIER_nondet_int();
-  __VERIFIER_assume(len < 1024);
-  char *data = ((void *)0);
+  __VERIFIER_assume(len < 2048);
+  char data[2048];
+  char data_2[2048];
   if (len > 0) {
-    data = (char *)malloc(len);
-    __VERIFIER_assume(data != ((void *)0));
     for (int i = 0; i < len; i++) {
       data[i] = __VERIFIER_nondet_char();
+      data_2[i] = __VERIFIER_nondet_char();
     }
   }
   uint32_t result = SuperFastHash(data, len);
-  if (data != ((void *)0)) {
-    free(data);
-  }
+  uint32_t result_2 = SuperFastHash(data_2, len);
   if (len > 0){
-    __VERIFIER_assert(result != 0);
+    __VERIFIER_assert(result != result_2);
   }
   return result;
 }

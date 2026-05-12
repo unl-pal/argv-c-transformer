@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: Copyright (C) 1991, 1992, 1995, 1996, 1997 Free Software Foundation, Inc.
+ * SPDX-License-Identifier: LGPL-2.0-or-later
+ * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+ */
 
 extern int *__errno_location (void) __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__const__));
 
@@ -962,22 +966,19 @@ void __VERIFIER_assert(int cond) {
   }
 }
 int mock_errno = 0;
-char *my_realloc(char *ptr, size_t old_size, size_t size) {
+char *mock_realloc(char *ptr, size_t size) {
   if (size == 0) {
-    if (ptr != ((void *)0)) free(ptr);
+    if (ptr) free(ptr);
     return ((void *)0);
   }
-  char *new_ptr = malloc(size);
-  if (new_ptr != ((void *)0) && ptr != ((void *)0)) {
-    size_t copy_size = old_size < size ? old_size : size;
-    for (size_t i = 0; i < copy_size; i++) {
-      new_ptr[i] = ptr[i];
-    }
-  }
-  if (ptr != ((void *)0)) {
-    free(ptr);
-  }
+  void *new_ptr = malloc(size);
+  if (ptr) free(ptr);
   return new_ptr;
+}
+int mock_getc(FILE *stream) {
+    int c = __VERIFIER_nondet_int();
+    __VERIFIER_assume((c >= 0 && c < 256) || c == (-1));
+    return c;
 }
 ssize_t getdelim(char **lineptr, size_t *n, int terminator, FILE *stream) {
   char *line, *p;
@@ -986,11 +987,11 @@ ssize_t getdelim(char **lineptr, size_t *n, int terminator, FILE *stream) {
     mock_errno = 22;
     return -1;
   }
-  if (ferror(stream))
+  if ((0))
     return -1;
   if (*lineptr == ((void *)0) || *n < 2)
   {
-    line = my_realloc(*lineptr, 0, 256);
+    line = mock_realloc(*lineptr, 256);
     if (line == ((void *)0))
       return -1;
     *lineptr = line;
@@ -1003,7 +1004,7 @@ ssize_t getdelim(char **lineptr, size_t *n, int terminator, FILE *stream) {
   while (1) {
     size_t len;
     while (--copy > 0) {
-      register int c = getc(stream);
+      register int c = mock_getc(stream);
       if (c == (-1))
         goto lose;
       else if ((*p++ = c) == terminator)
@@ -1011,7 +1012,7 @@ ssize_t getdelim(char **lineptr, size_t *n, int terminator, FILE *stream) {
     }
     len = p - line;
     size *= 2;
-    line = my_realloc(line, size / 2, size);
+    line = mock_realloc(line, size);
     if (line == ((void *)0))
       goto lose;
     *lineptr = line;
@@ -1028,19 +1029,17 @@ win:
 }
 int main(void) {
   char *line = ((void *)0);
-  size_t *n = 0;
+  size_t n = 0;
   FILE dummy_stream;
   int terminatorChar = __VERIFIER_nondet_int();
-  __VERIFIER_assume(terminatorChar >= 0 && terminatorChar <= 255);
-  ssize_t lenOfDelimStr = getdelim(&line, n, terminatorChar, &dummy_stream);
-  if (lenOfDelimStr >= 0) {
-    __VERIFIER_assert(line != ((void *)0));
+  __VERIFIER_assume(terminatorChar >= 0 && terminatorChar < 256);
+  ssize_t lenOfDelimStr = getdelim(&line, &n, terminatorChar, &dummy_stream);
+  if (lenOfDelimStr >= 0 && line) {
+    __VERIFIER_assert(lenOfDelimStr < n);
     __VERIFIER_assert(line[lenOfDelimStr] == '\0');
-  } else {
-    __VERIFIER_assert(lenOfDelimStr == -1);
+    __VERIFIER_assert(n % 256 == 0);
+    __VERIFIER_assert(lenOfDelimStr == 0 || line[lenOfDelimStr - 1] == terminatorChar);
   }
-  if (line != ((void *)0)) {
-    free(line);
-  }
+  if (line) free(line);
   return 0;
 }

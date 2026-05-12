@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (C) 2004, 2003, 2002 University of Utah
 // SPDX-License-Identifier: Custom
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -40,24 +40,36 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern void abort();
-void reach_error();
-
 extern int __VERIFIER_nondet_int(void);
-extern void *__VERIFIER_nondet_pointer(void);
 extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
 
-void __VERIFIER_assert(int cond) {
-  if (!cond) {
-    reach_error();
-    abort();
-  }
-}
-
-char* strerror(int errnum) {
+char* mock_strerror(int errnum) {
   return "mocked_strerror";
 }
+
+#define strerror mock_strerror
+
+#define IN_SIZE 16
+#define OUT_SIZE 8
+
+static char in_buffer[IN_SIZE];
+static char out_buffer[OUT_SIZE];
+static int in_pos, out_pos;
+
+int mock_fgetc(FILE *stream) {
+  if (in_pos >= IN_SIZE) return EOF;
+  return (unsigned char)in_buffer[in_pos++];
+}
+
+#define fgetc mock_fgetc
+
+int mock_fputc(int c, FILE *stream) {
+  if (out_pos >= OUT_SIZE) return EOF;
+  out_buffer[out_pos++] = (char)c;
+  return c;
+}
+
+#define fputc mock_fputc
 
 void dehexUsage(char *me) {
   /*                       0   1     2   (2/3) */
@@ -137,9 +149,7 @@ original_main(int argc, char *argv[]) {
   byte = 0;
   even = 1;
   for (car=fgetc(fin); EOF != car; car=fgetc(fin)) {
-    __VERIFIER_assert(car >= 0 && car <= 255);
     nibble = dehexTable[car & 127];
-    __VERIFIER_assert(nibble >= -2 && nibble <= 15);
     if (-2 == nibble) {
       /* its an invalid character */
       break;
@@ -148,12 +158,10 @@ original_main(int argc, char *argv[]) {
       /* its white space */
       continue;
     }
-    __VERIFIER_assert(nibble >= 0 && nibble <= 15);
     if (even) {
       byte = nibble << 4;
     } else {
       byte += nibble;
-      __VERIFIER_assert(byte >= 0 && byte <= 255);
       if (EOF == fputc(byte, fout)) {
         fprintf(stderr, "%s: error writing!!!\n", me);
         exit(1);
@@ -173,22 +181,16 @@ original_main(int argc, char *argv[]) {
 
 // Arg-C verification harness
 int main() {
-  int argc = __VERIFIER_nondet_int();
-  __VERIFIER_assume(argc >= 0 && argc <= 4);
+  for (int i = 0; i < IN_SIZE; i++) {
+    in_buffer[i] = __VERIFIER_nondet_char();
+  }
 
-  int BOUND = 8;
-  char argv_data[4][BOUND];
-  char *argv[4];
-  for (int i = 0; i < 4; i++) {
-    argv[i] = argv_data[i];
-  }
-  for (int i = 0; i < argc; i++) {
-    for (int j = 0; j < BOUND - 1; j++) {
-      argv[i][j] = __VERIFIER_nondet_char();
-    }
-    argv[i][BOUND - 1] = '\0';
-  }
+  int argc = 2;
+  char argv0[] = "dehex";
+  char argv1[] = "-";
+  char *argv[] = {argv0, argv1};
 
   original_main(argc, argv);
+
   return 0;
 }

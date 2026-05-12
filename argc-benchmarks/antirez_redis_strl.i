@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: Copyright (c) 1998, 2015 Todd C. Miller <millert@openbsd.org>
+ * SPDX-License-Identifier: Custom
+ * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+ */
 
 typedef long unsigned int size_t;
 extern void *memcpy (void *__restrict __dest, const void *__restrict __src,
@@ -146,9 +150,7 @@ extern size_t strlcat (char *__restrict __dest,
 
 extern void abort();
 void reach_error();
-extern void *__VERIFIER_nondet_pointer(void);
-extern int __VERIFIER_nondet_int(void);
-extern long __VERIFIER_nondet_long(void);
+extern unsigned int __VERIFIER_nondet_uint(void);
 extern char __VERIFIER_nondet_char(void);
 extern void __VERIFIER_assume(int expression);
 void __VERIFIER_assert(int cond) {
@@ -181,7 +183,7 @@ size_t redis_strlcat(char *dst, const char *src, size_t dsize) {
   size_t dlen;
   while (n-- != 0 && *dst != '\0')
     dst++;
-  dlen = dst - (char *)odst;
+  dlen = dst - odst;
   n = dsize - dlen;
   if (n-- == 0)
     return (dlen + strlen(src));
@@ -193,43 +195,34 @@ size_t redis_strlcat(char *dst, const char *src, size_t dsize) {
     src++;
   }
   *dst = '\0';
-  return (dlen + (src - (char *)osrc));
+  return (dlen + (src - osrc));
 }
 int main(void) {
-  char dst[64];
-  char src[64];
-  for (int i = 0; i < 64; i++) {
-    dst[i] = __VERIFIER_nondet_char();
+  char dst[16];
+  char src[16];
+  unsigned int src_len = __VERIFIER_nondet_uint();
+  unsigned int dst_len = __VERIFIER_nondet_uint();
+  __VERIFIER_assume(src_len < 16);
+  __VERIFIER_assume(dst_len < 16);
+  for (unsigned int i = 0; i < src_len; i++) {
     src[i] = __VERIFIER_nondet_char();
-    __VERIFIER_assume(dst[i] != '\0');
     __VERIFIER_assume(src[i] != '\0');
   }
-  size_t src_null_idx = (size_t)__VERIFIER_nondet_int();
-  size_t dst_null_idx = (size_t)__VERIFIER_nondet_int();
-  __VERIFIER_assume(src_null_idx >= 0 && src_null_idx < 64);
-  __VERIFIER_assume(dst_null_idx >= 0 && dst_null_idx < 64);
-  src[src_null_idx] = '\0';
-  dst[dst_null_idx] = '\0';
-  size_t size = (size_t)__VERIFIER_nondet_int();
-  __VERIFIER_assume(size < 64);
-  size_t cat_result = redis_strlcat(dst, src, size);
-  size_t expected_dst_len = (size < dst_null_idx) ? size : dst_null_idx;
-  __VERIFIER_assert(cat_result == src_null_idx + expected_dst_len);
-  int found_null = 0;
-  for (size_t i = 0; i < size; i++) {
-    if (dst[i] == '\0') {
-      found_null = 1;
-    }
+  for (unsigned int i = 0; i < dst_len; i++) {
+    dst[i] = __VERIFIER_nondet_char();
+    __VERIFIER_assume(dst[i] != '\0');
   }
-  __VERIFIER_assert(found_null == 1);
+  src[src_len] = '\0';
+  dst[dst_len] = '\0';
+  unsigned int size = __VERIFIER_nondet_uint();
+  __VERIFIER_assume(size <= 16);
+  size_t cat_result = redis_strlcat(dst, src, size);
+  __VERIFIER_assert(cat_result == src_len + (size < dst_len ? size : dst_len));
   size_t copy_result = redis_strlcpy(dst, src, size);
-  __VERIFIER_assert(copy_result == src_null_idx);
+  __VERIFIER_assert(copy_result == src_len);
   if (size > 0) {
-    size_t chars = (src_null_idx < size - 1) ? src_null_idx : size - 1;
-    for (size_t i = 0; i < chars; i++) {
-      __VERIFIER_assert(dst[i] == src[i]);
-    }
-    __VERIFIER_assert(dst[chars] == '\0');
+      size_t term_idx = src_len < size - 1 ? src_len : size - 1;
+      __VERIFIER_assert(dst[term_idx] == '\0');
   }
   return 0;
 }

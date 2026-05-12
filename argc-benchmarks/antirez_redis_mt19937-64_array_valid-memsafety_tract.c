@@ -1,9 +1,9 @@
-// SPDX-FileCopyrightText: Copyright (C) 2004, Makoto Matsumoto and Takuji
-// Nishimura, SPDX-License-Identifier: Custom SPDX-FileCopyrightText: Copyright
-// (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2004, Makoto Matsumoto and Takuji Nishimura
+// SPDX-License-Identifier: Custom
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */

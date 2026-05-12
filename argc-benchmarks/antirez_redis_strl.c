@@ -1,9 +1,9 @@
-// SPDX-FileCopyrightText: Copyright (c) 1998, 2015 Todd C. Miller
-// <millert@openbsd.org> SPDX-License-Identifier: Custom SPDX-FileCopyrightText:
-// Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (c) 1998, 2015 Todd C. Miller <millert@openbsd.org>
+// SPDX-License-Identifier: Custom
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -30,9 +30,7 @@
 extern void abort();
 void reach_error();
 
-extern void *__VERIFIER_nondet_pointer(void);
-extern size_t __VERIFIER_nondet_size_t(void);
-extern long __VERIFIER_nondet_long(void);
+extern unsigned int __VERIFIER_nondet_uint(void);
 extern char __VERIFIER_nondet_char(void);
 extern void __VERIFIER_assume(int expression);
 
@@ -88,7 +86,7 @@ size_t redis_strlcat(char *dst, const char *src, size_t dsize) {
   /* Find the end of dst and adjust bytes left but don't go past end. */
   while (n-- != 0 && *dst != '\0')
     dst++;
-  dlen = dst - (char *)odst;
+  dlen = dst - odst;
   n = dsize - dlen;
 
   if (n-- == 0)
@@ -102,7 +100,7 @@ size_t redis_strlcat(char *dst, const char *src, size_t dsize) {
   }
   *dst = '\0';
 
-  return (dlen + (src - (char *)osrc)); /* count does not include NUL */
+  return (dlen + (src - osrc)); /* count does not include NUL */
 }
 
 // Arg-C verification harness
@@ -111,36 +109,35 @@ int main(void) {
   char dst[MAX_BOUND];
   char src[MAX_BOUND];
 
-  size_t src_len = __VERIFIER_nondet_size_t();
-  size_t dst_len = __VERIFIER_nondet_size_t();
+  unsigned int src_len = __VERIFIER_nondet_uint();
+  unsigned int dst_len = __VERIFIER_nondet_uint();
   __VERIFIER_assume(src_len < MAX_BOUND);
   __VERIFIER_assume(dst_len < MAX_BOUND);
 
-  for (size_t i = 0; i < src_len; i++) {
+  for (unsigned int i = 0; i < src_len; i++) {
     src[i] = __VERIFIER_nondet_char();
     __VERIFIER_assume(src[i] != '\0');
   }
-  for (size_t i = 0; i < dst_len; i++) {
+  for (unsigned int i = 0; i < dst_len; i++) {
     dst[i] = __VERIFIER_nondet_char();
     __VERIFIER_assume(dst[i] != '\0');
   }
   src[src_len] = '\0';
   dst[dst_len] = '\0';
 
-  size_t size = __VERIFIER_nondet_size_t();
+  unsigned int size = __VERIFIER_nondet_uint();
   __VERIFIER_assume(size <= MAX_BOUND);
 
   size_t cat_result = redis_strlcat(dst, src, size);
 
-  __VERIFIER_assert(cat_result == src_len + (
-      size < dst_len ? size : dst_len
-  ));
+  __VERIFIER_assert(cat_result == src_len + (size < dst_len ? size : dst_len));
 
   size_t copy_result = redis_strlcpy(dst, src, size);
 
   __VERIFIER_assert(copy_result == src_len);
   if (size > 0) {
-      __VERIFIER_assert((src_len < size - 1 ? src_len : size - 1) == '\0');
+      size_t term_idx = src_len < size - 1 ? src_len : size - 1;
+      __VERIFIER_assert(dst[term_idx] == '\0');
   }
 
   return 0;

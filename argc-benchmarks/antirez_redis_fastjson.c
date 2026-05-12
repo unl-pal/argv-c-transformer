@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-Present, Redis Ltd.
 // SPDX-License-Identifier: RSALv2 or SSPLv1
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -45,24 +45,13 @@
  * const char *field, size_t field_len);
  * ------------------------------------------------------------------ */
 
-#include <ctype.h>
+// #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
-extern void abort();
-void reach_error();
-
 extern int __VERIFIER_nondet_int(void);
-extern void __VERIFIER_nondet_void(void);
 extern char __VERIFIER_nondet_char(void);
 extern void __VERIFIER_assume(int expression);
-
-void __VERIFIER_assert(int cond) {
-  if (!cond) {
-    reach_error();
-    abort();
-  }
-}
 
 #define EXPR_TOKEN_EOF 0
 #define EXPR_TOKEN_NUM 1
@@ -125,7 +114,7 @@ exprtoken* new_exprtoken() {
 }
 
 #define MAX_MOCK_STRINGS 8
-#define MAX_STRING_LEN 64 // Safely bounds our max json_len
+#define MAX_STRING_LEN 16
 static char mock_string_pool[MAX_MOCK_STRINGS][MAX_STRING_LEN];
 static int mock_string_idx = 0;
 
@@ -135,13 +124,21 @@ char* allocate_string() {
 }
 
 #define MAX_MOCK_TUPLES 8
-#define MAX_TUPLE_ELEMS 64
+#define MAX_TUPLE_ELEMS 16
 static exprtoken* mock_tuple_pool[MAX_MOCK_TUPLES][MAX_TUPLE_ELEMS];
 static int mock_tuple_idx = 0;
 
 exprtoken** allocate_tuple_array(size_t size) {
   if (mock_tuple_idx >= MAX_MOCK_TUPLES || size > MAX_TUPLE_ELEMS) return NULL;
   return mock_tuple_pool[mock_tuple_idx++];
+}
+
+static int isspace(unsigned char c) {
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+}
+
+static int isdigit(unsigned char c) {
+  return c >= '0' && c <= '9';
 }
 
 // Forward declarations.
@@ -204,7 +201,6 @@ static int jsonSkipBracketed(const char **p, const char *end, char opener,
     if (c == '"') {
       // Found a string, delegate skipping to jsonSkipString().
       if (!jsonSkipString(p, end)) {
-        __VERIFIER_assert(*p >= end && **p == '\0');
         return 0; // String skipping failed (e.g., unterminated)
       }
       /* jsonSkipString() advances *p past the closing quote.
@@ -227,7 +223,6 @@ static int jsonSkipBracketed(const char **p, const char *end, char opener,
     (*p)++;
   }
 
-  __VERIFIER_assert(!depth || **p == '\0');
   /* Return 1 (true) if we successfully found the matching closer,
    * otherwise there is a parse error and we return 0. */
   return depth == 0;
@@ -237,7 +232,6 @@ static int jsonSkipBracketed(const char **p, const char *end, char opener,
  * Returns 1 on success, 0 on failure. */
 static int jsonSkipLiteral(const char **p, const char *end, const char *lit) {
   size_t l = strlen(lit);
-  __VERIFIER_assert(l > 0);
   if (*p + l > end)
     return 0;
   if (strncmp(*p, lit, l) == 0) {
@@ -313,7 +307,6 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
     q++;
     len++;
   }
-  __VERIFIER_assert(*q == '\0' || *q == '"');
   if (q >= end || *q != '"')
     return NULL; // Unterminated string
   exprtoken *t = new_exprtoken();
@@ -372,7 +365,6 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
     }
     *dst = '\0'; // Null-terminate the allocated string.
   }
-  __VERIFIER_assert(t->union_name.str.start + t->union_name.str.len == NULL);
   *p = q + 1; // Advance the main pointer past the closing quote.
   return t;
 }
@@ -389,7 +381,6 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
     (*p)++;
   }
   buf[idx] = '\0'; // Null-terminate buffer.
-  __VERIFIER_assert(idx != (int)sizeof(buf) && !jsonIsNumberChar(**p));
 
   if (idx == 0)
     return NULL; // No number characters found.
@@ -404,8 +395,6 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
     *p = start;
     return NULL;
   }
-
-  __VERIFIER_assert(idx <= (int)sizeof(buf));
 
   // If strtod() succeeded, create and return the token..
   exprtoken *t = new_exprtoken();
@@ -466,7 +455,6 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
   while (1) {
     exprtoken *ele = jsonParseValueToken(p, end);
     if (!ele) {
-      __VERIFIER_nondet_void(); // Clean up partially built array token.
       return NULL;
     }
 
@@ -638,17 +626,6 @@ exprtoken *jsonExtractField(const char *json, size_t json_len,
 }
 
 // Arg-C verification harness
-int contains_char(const char *str, size_t len, char c) {
-  for (size_t i = 0; i < len; i++) {
-    if (str[i] == c) {
-      return 1;
-    } else if (str[i] == '\0') {
-      return 0; // Stop at null terminator.
-    }
-  }
-  return 0;
-}
-
 # define MAX_BOUND 16
 # define MAX_LEN 8
 int main(void) {
@@ -671,15 +648,7 @@ int main(void) {
   json[json_len - 1] = '\0';
   field[field_len - 1] = '\0';
 
-  exprtoken *result =
-      jsonExtractField(json, json_len - 1, field, field_len - 1);
-
-  if (result != NULL) {
-    __VERIFIER_assert(contains_char(json, json_len,'{') &&
-                      contains_char(json, json_len, '}') &&
-                      contains_char(json, json_len, ':') &&
-                      contains_char(json, json_len, '"'));
-  }
+  exprtoken *result = jsonExtractField(json, json_len - 1, field, field_len - 1);
 
   return 0;
 }

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 1997-2010 The PHP Group
 // SPDX-License-Identifier: PHPv3.01
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -128,7 +128,7 @@ double fstrcmp(const char *string1, const char *string2, double minimum) {
 }
 
 // #ifdef __cplusplus
-} // extern "C"
+// extern "C"
 // #endif
 
 int main(void) {

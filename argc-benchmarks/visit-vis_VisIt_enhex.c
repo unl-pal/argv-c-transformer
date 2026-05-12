@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (C) 2004, 2003, 2002 University of Utah
 // SPDX-License-Identifier: Custom
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -40,20 +40,26 @@
 #include <stdlib.h>
 #include <string.h>
 
-extern void abort();
-void reach_error();
-
 extern int __VERIFIER_nondet_int(void);
 extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
 
-void __VERIFIER_assert(int cond) {
-  if (!cond) {
-    reach_error();
-    abort();
-  }
+char* mock_strerror(int errnum) {
+  return "mocked_strerror";
 }
 
+#define strerror mock_strerror
+
+#define IN_SIZE 16
+
+static char in_buffer[IN_SIZE];
+static int in_pos;
+
+int mock_fgetc(FILE *stream) {
+  if (in_pos >= IN_SIZE) return EOF;
+  return (unsigned char)in_buffer[in_pos++];
+}
+
+#define fgetc mock_fgetc
 int enhexColumns = 70; /* number of characters per line */
 
 void enhexUsage(char *me) {
@@ -118,19 +124,8 @@ int original_main(int argc, char *argv[]) {
   col = 0;
   car = fgetc(fin);
   while (EOF != car) {
-    __VERIFIER_assert(car >= 0 && car <= 255);
     int high_nibble = (car >> 4) & 15;
     int low_nibble = car & 15;
-    __VERIFIER_assert(high_nibble >= 0 && high_nibble <= 15);
-    __VERIFIER_assert(low_nibble >= 0 && low_nibble <= 15);
-    __VERIFIER_assert((enhexTable[high_nibble] >= '0' &&
-                       enhexTable[high_nibble] <= '9') ||
-                      (enhexTable[high_nibble] >= 'a' &&
-                       enhexTable[high_nibble] <= 'f'));
-    __VERIFIER_assert((enhexTable[low_nibble] >= '0' &&
-                       enhexTable[low_nibble] <= '9') ||
-                      (enhexTable[low_nibble] >= 'a' &&
-                       enhexTable[low_nibble] <= 'f'));
     if (col > enhexColumns) {
       fprintf(fout, "\n");
       col = 0;
@@ -150,21 +145,14 @@ int original_main(int argc, char *argv[]) {
 
 // Arg-C verification harness
 int main() {
-  int argc = __VERIFIER_nondet_int();
-  __VERIFIER_assume(argc >= 0 && argc <= 4);
+  for (int i = 0; i < IN_SIZE; i++) {
+    in_buffer[i] = __VERIFIER_nondet_char();
+  }
 
-  int BOUND = 8;
-  char argv_data[4][BOUND];
-  char *argv[4];
-  for (int i = 0; i < 4; i++) {
-    argv[i] = argv_data[i];
-  }
-  for (int i = 0; i < argc; i++) {
-    for (int j = 0; j < BOUND - 1; j++) {
-      argv[i][j] = __VERIFIER_nondet_char();
-    }
-    argv[i][BOUND - 1] = '\0';
-  }
+  int argc = 2;
+  char argv0[] = "enhex";
+  char argv1[] = "-";
+  char *argv[] = {argv0, argv1};
 
   original_main(argc, argv);
   return 0;

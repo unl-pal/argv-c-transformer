@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: Copyright (C) 2004, Makoto Matsumoto and Takuji Nishimura
+ * SPDX-License-Identifier: Custom
+ * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+ */
 extern void abort();
 void reach_error();
 extern unsigned long long __VERIFIER_nondet_ulonglong(void);

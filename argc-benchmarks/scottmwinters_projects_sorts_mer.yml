@@ -1,12 +1,15 @@
-format_version: '2.0'
+# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+# SPDX-License-Identifier: Apache-2.0
 
-input_files: 'scottmwinters_projects_sorts_mer.c'
+format_version: "2.0"
+
+input_files: "scottmwinters_projects_sorts_mer.c"
 
 properties:
   - property_file: ../properties/unreach-call.prp
     expected_verdict: true
   - property_file: ../properties/valid-memsafety.prp
-    expected_verdict: false
+    expected_verdict: true
     subproperty: valid-deref
   - property_file: ../properties/termination.prp
     expected_verdict: true

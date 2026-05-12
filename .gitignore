@@ -24,3 +24,7 @@ compile_commands.json
 /notes/
 
 /benchmarks/
+
+CLAUDE.md
+
+argc-benchmarks/results*

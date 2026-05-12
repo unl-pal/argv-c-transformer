@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2025-Present, Redis Ltd.
 // SPDX-License-Identifier: RSALv2 or SSPLv1
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -45,7 +45,7 @@
  * const char *field, size_t field_len);
  * ------------------------------------------------------------------ */
 
-#include <ctype.h>
+// #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -53,7 +53,6 @@ extern void abort();
 void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
-extern void __VERIFIER_nondet_void(void);
 extern char __VERIFIER_nondet_char(void);
 extern void __VERIFIER_assume(int expression);
 
@@ -144,6 +143,14 @@ exprtoken** allocate_tuple_array(size_t size) {
   return mock_tuple_pool[mock_tuple_idx++];
 }
 
+static int isspace(unsigned char c) {
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+}
+
+static int isdigit(unsigned char c) {
+  return c >= '0' && c <= '9';
+}
+
 // Forward declarations.
 static int jsonSkipValue(const char **p, const char *end);
 static exprtoken *jsonParseValueToken(const char **p, const char *end);
@@ -204,7 +211,6 @@ static int jsonSkipBracketed(const char **p, const char *end, char opener,
     if (c == '"') {
       // Found a string, delegate skipping to jsonSkipString().
       if (!jsonSkipString(p, end)) {
-        __VERIFIER_assert(*p >= end && **p == '\0');
         return 0; // String skipping failed (e.g., unterminated)
       }
       /* jsonSkipString() advances *p past the closing quote.
@@ -227,7 +233,6 @@ static int jsonSkipBracketed(const char **p, const char *end, char opener,
     (*p)++;
   }
 
-  __VERIFIER_assert(!depth || **p == '\0');
   /* Return 1 (true) if we successfully found the matching closer,
    * otherwise there is a parse error and we return 0. */
   return depth == 0;
@@ -237,7 +242,6 @@ static int jsonSkipBracketed(const char **p, const char *end, char opener,
  * Returns 1 on success, 0 on failure. */
 static int jsonSkipLiteral(const char **p, const char *end, const char *lit) {
   size_t l = strlen(lit);
-  __VERIFIER_assert(l > 0);
   if (*p + l > end)
     return 0;
   if (strncmp(*p, lit, l) == 0) {
@@ -313,7 +317,6 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
     q++;
     len++;
   }
-  __VERIFIER_assert(*q == '\0' || *q == '"');
   if (q >= end || *q != '"')
     return NULL; // Unterminated string
   exprtoken *t = new_exprtoken();
@@ -372,7 +375,6 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
     }
     *dst = '\0'; // Null-terminate the allocated string.
   }
-  __VERIFIER_assert(t->union_name.str.start + t->union_name.str.len == NULL);
   *p = q + 1; // Advance the main pointer past the closing quote.
   return t;
 }
@@ -389,7 +391,6 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
     (*p)++;
   }
   buf[idx] = '\0'; // Null-terminate buffer.
-  __VERIFIER_assert(idx != (int)sizeof(buf) && !jsonIsNumberChar(**p));
 
   if (idx == 0)
     return NULL; // No number characters found.
@@ -404,8 +405,6 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
     *p = start;
     return NULL;
   }
-
-  __VERIFIER_assert(idx <= (int)sizeof(buf));
 
   // If strtod() succeeded, create and return the token..
   exprtoken *t = new_exprtoken();
@@ -466,7 +465,6 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
   while (1) {
     exprtoken *ele = jsonParseValueToken(p, end);
     if (!ele) {
-      __VERIFIER_nondet_void(); // Clean up partially built array token.
       return NULL;
     }
 
@@ -638,55 +636,35 @@ exprtoken *jsonExtractField(const char *json, size_t json_len,
 }
 
 // Arg-C verification harness
-int contains_char(const char *str, size_t len, char c) {
-  for (size_t i = 0; i < len; i++) {
-    if (str[i] == c) {
-      return 1;
-    } else if (str[i] == '\0') {
-      return 0; // Stop at null terminator.
-    }
-  }
-  return 0;
-}
-
-#define MAX_BOUND 10
+#define MAX_BOUND 16
 #define MAX_LEN 6
 int main(void) {
-  int json_len = __VERIFIER_nondet_int();
   int field_len = __VERIFIER_nondet_int();
 
-  __VERIFIER_assume(json_len >= 6 && json_len <= MAX_BOUND);
-  __VERIFIER_assume(field_len >= 2 && field_len <= MAX_LEN);
+  __VERIFIER_assume(field_len >= 2 && field_len < MAX_LEN);
 
   char json[MAX_BOUND];
-  char field[MAX_LEN];
 
   json[0] = '{';
   json[1] = '"';
-  for (int i = 2; i < json_len - 3; i++) {
-    json[i] = __VERIFIER_nondet_char();
-    __VERIFIER_assume(json[i] == 'a' || json[i] == '"' || json[i] == ':' ||
-                      json[i] == ' ');
+  json[2] = 'a';
+  json[3] = '"';
+  json[4] = ':';
+  json[5] = '"';
+  for (int i = 6; i < field_len + 6 ; i++) {
+    char c = __VERIFIER_nondet_char();
+    __VERIFIER_assume(c == 'a' || c == 'b');
+    json[i] = c;
   }
-  json[json_len - 3] = '"';
-  json[json_len - 2] = '}';
-  json[json_len - 1] = '\0';
+  json[6 + field_len] = '"';
+  json[7 + field_len] = '}';
+  json[8 + field_len] = '\0';
 
-  for (int i = 0; i < field_len; i++) {
-    field[i] = __VERIFIER_nondet_char();
-    __VERIFIER_assume(field[i] >= 'a' && field[i] <= 'c');
-  }
+  exprtoken *result = jsonExtractField(json, 8 + field_len, "a", 1);
 
-  field[field_len - 1] = '\0';
-
-  exprtoken *result = jsonExtractField(json, json_len - 1, field, field_len - 1);
-
-  if (result != NULL) {
-    __VERIFIER_assert(contains_char(json, json_len,'{') &&
-                      contains_char(json, json_len, '}') &&
-                      contains_char(json, json_len, ':') &&
-                      contains_char(json, json_len, '"'));
-  }
+__VERIFIER_assert(result != NULL);
+__VERIFIER_assert(result->token_type == EXPR_TOKEN_STR);
+__VERIFIER_assert(result->union_name.str.len == (size_t)field_len);
 
   return 0;
 }

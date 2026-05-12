@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2018-Present, Redis Ltd.
 // SPDX-License-Identifier: RSALv2 or SSPLv1 or AGPLv3
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -131,8 +131,7 @@ void nolocks_localtime(struct tm *tmp, time_t t, time_t tz, int dst) {
 
   tmp->tm_mday = days + 1; /* Add 1 since our 'days' is zero-based. */
   tmp->tm_year -= 1900;    /* Surprisingly tm_year is year-1900. */
-  __VERIFIER_assert(tmp->tm_mday <= 365 + is_leap_year(tmp->tm_year) &&
-                    tmp->tm_mday > 0);
+  __VERIFIER_assert(tmp->tm_mday <= 365 + is_leap_year(tmp->tm_year) && tmp->tm_mday > 0);
 }
 
 // Arg-C verification harness
@@ -144,9 +143,10 @@ int main(void) {
   long tz = __VERIFIER_nondet_long();
   int dst = __VERIFIER_nondet_int();
 
+  // reasonable assumptions, earth timezones and 5 year t span to include leap year
   __VERIFIER_assume(dst == 0 || dst == 1);
   __VERIFIER_assume(tz >= -12 * 3600 && tz <= 14 * 3600);
-  __VERIFIER_assume(t >= 14*3600 && t <= 50*365*3600*24);
+  __VERIFIER_assume(t >= tz && t <= 5*365*3600*24);
 
   nolocks_localtime(&my_tm, t, tz, dst);
 

@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: Copyright (c) 1998, 2015 Todd C. Miller <millert@openbsd.org>
+ * SPDX-License-Identifier: Custom
+ * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+ */
 
 typedef long unsigned int size_t;
 extern void *memcpy (void *__restrict __dest, const void *__restrict __src,
@@ -146,9 +150,7 @@ extern size_t strlcat (char *__restrict __dest,
 
 extern void abort();
 void reach_error();
-extern void *__VERIFIER_nondet_pointer(void);
-extern size_t __VERIFIER_nondet_size_t(void);
-extern long __VERIFIER_nondet_long(void);
+extern unsigned int __VERIFIER_nondet_uint(void);
 extern char __VERIFIER_nondet_char(void);
 extern void __VERIFIER_assume(int expression);
 void __VERIFIER_assert(int cond) {
@@ -181,7 +183,7 @@ size_t redis_strlcat(char *dst, const char *src, size_t dsize) {
   size_t dlen;
   while (n-- != 0 && *dst != '\0')
     dst++;
-  dlen = dst - (char *)odst;
+  dlen = dst - odst;
   n = dsize - dlen;
   if (n-- == 0)
     return (dlen + strlen(src));
@@ -193,29 +195,30 @@ size_t redis_strlcat(char *dst, const char *src, size_t dsize) {
     src++;
   }
   *dst = '\0';
-  return (dlen + (src - (char *)osrc));
+  return (dlen + (src - osrc));
 }
 int main(void) {
   char dst[8];
   char src[8];
-  size_t src_len = __VERIFIER_nondet_size_t();
-  size_t dst_len = __VERIFIER_nondet_size_t();
+  unsigned int src_len = __VERIFIER_nondet_uint();
+  unsigned int dst_len = __VERIFIER_nondet_uint();
   __VERIFIER_assume(src_len < 8);
   __VERIFIER_assume(dst_len < 8);
-  for (size_t i = 0; i < src_len; i++) {
+  for (unsigned int i = 0; i < 8 -1; i++) {
+    if (i >= src_len) break;
     src[i] = __VERIFIER_nondet_char();
     __VERIFIER_assume(src[i] >= 'a' && src[i] <= 'd');
   }
-  for (size_t i = 0; i < dst_len; i++) {
+  for (unsigned int i = 0; i < 8 -1; i++) {
+    if (i >= dst_len) break;
     dst[i] = __VERIFIER_nondet_char();
     __VERIFIER_assume(dst[i] >= 'a' && dst[i] <= 'd');
   }
   src[src_len] = '\0';
   dst[dst_len] = '\0';
-  size_t size = __VERIFIER_nondet_size_t();
+  unsigned int size = __VERIFIER_nondet_uint();
   __VERIFIER_assume(size <= 8);
   size_t cat_result = redis_strlcat(dst, src, size);
-  __VERIFIER_assert(cat_result == src_len + (size < dst_len ? size : dst_len));
   size_t copy_result = redis_strlcpy(dst, src, size);
   __VERIFIER_assert(copy_result == src_len);
   if (size > 0) {

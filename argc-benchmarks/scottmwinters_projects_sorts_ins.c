@@ -1,7 +1,8 @@
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+// SPDX-License-Identifier: Apache-2.0
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -9,14 +10,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static int SIZE = 5;
-
-// Arg-C: Verification functions
-// ----------------------------------
 extern void abort();
 void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
+extern void __VERIFIER_assume(int expression);
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {
@@ -24,12 +22,8 @@ void __VERIFIER_assert(int cond) {
     abort();
   }
 }
-void __VERIFIER_assert_sorted(int *array) {
-  for (int i = 0; i < SIZE - 1; i++) {
-    __VERIFIER_assert(array[i] <= array[i + 1]);
-  }
-}
-// ----------------------------------
+
+static int SIZE = 15;
 
 void unsort(int *p);
 void print(int *p);
@@ -185,11 +179,14 @@ int main() {
   int insertion_list[SIZE];
 
   for (int i = 0; i < SIZE; i++) {
-    insertion_list[i] = __VERIFIER_nondet_int();
+    int num = __VERIFIER_nondet_int();
+    insertion_list[i] = num;
   }
 
   insertion(insertion_list);
-  __VERIFIER_assert_sorted(insertion_list);
+  for (int i = 0; i < SIZE - 1; i++) {
+    __VERIFIER_assert(insertion_list[i] <= insertion_list[i + 1]);
+  }
 
   return 0;
 }

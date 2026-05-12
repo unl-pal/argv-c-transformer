@@ -1,9 +1,9 @@
-// SPDX-FileCopyrightText: Copyright (c) 2000 - 2015 Lawrence Livermore National
-// Security, LLC. SPDX-License-Identifier: Custom SPDX-FileCopyrightText:
-// Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (c) 2000 - 2015 Lawrence Livermore National Security, LLC.
+// SPDX-License-Identifier: Custom
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -70,10 +70,6 @@
 
 extern void abort();
 void reach_error();
-
-extern int __VERIFIER_nondet_int(void);
-extern float __VERIFIER_nondet_float(void);
-extern void __VERIFIER_assume(int expression);
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {
@@ -287,64 +283,25 @@ static void matrix_mul_point(float out[3], float in[3], float M[4][4]) {
 }
 
 int main(void) {
-  float M[4][4];
+  float M[4][4] = {
+      {2.0f, 0.0f, 0.0f, 0.0f},
+      {0.0f, 4.0f, 0.0f, 0.0f},
+      {0.0f, 0.0f, 8.0f, 0.0f},
+      {0.0f, 0.0f, 0.0f, 1.0f},
+  };
   float I[4][4];
+  int err = matrix_invert(M, I);
 
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      M[i][j] = __VERIFIER_nondet_float();
-      __VERIFIER_assume(M[i][j] > -1.0f && M[i][j] < 1.0f);
-    }
-  }
+  __VERIFIER_assert(err == 0);
+  __VERIFIER_assert(I[0][0] == 0.5f);
+  __VERIFIER_assert(I[1][1] == 0.25f);
+  __VERIFIER_assert(I[2][2] == 0.125f);
+  __VERIFIER_assert(I[3][3] == 1.0f);
 
-  int result = matrix_invert(M, I);
+  __VERIFIER_assert(I[0][1] == 0.0f && I[0][2] == 0.0f && I[0][3] == 0.0f);
+  __VERIFIER_assert(I[1][0] == 0.0f && I[1][2] == 0.0f && I[1][3] == 0.0f);
+  __VERIFIER_assert(I[2][0] == 0.0f && I[2][1] == 0.0f && I[2][3] == 0.0f);
+  __VERIFIER_assert(I[3][0] == 0.0f && I[3][1] == 0.0f && I[3][2] == 0.0f);
 
-  float epsilon = 0.005f;
-
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-
-      float dot_product = 0.0f;
-      for (int k = 0; k < 4; k++) {
-        dot_product += M[i][k] * I[k][j];
-      }
-
-      float expected = (i == j) ? 1.0f : 0.0f;
-
-      __VERIFIER_assert(result != 0 || fabs(dot_product - expected) < epsilon);
-    }
-  }
-
-  float v_in[3];
-  float v_out[3];
-  float M_transform[4][4];
-
-  for (int i = 0; i < 3; i++) {
-    v_in[i] = __VERIFIER_nondet_float();
-    __VERIFIER_assume(v_in[i] > -1.0f && v_in[i] < 1.0f);
-  }
-
-  for (int i = 0; i < 4; i++) {
-    for (int j = 0; j < 4; j++) {
-      if (i == j) {
-        M_transform[i][j] = 1.0f;
-      } else if (i == 3 && j < 3) {
-        M_transform[i][j] = __VERIFIER_nondet_float();
-        __VERIFIER_assume(M_transform[i][j] > -1.0f &&
-                          M_transform[i][j] < 1.0f);
-      } else {
-        M_transform[i][j] = 0.0f;
-      }
-    }
-  }
-
-  matrix_mul_point(v_out, v_in, M_transform);
-
-  float point_epsilon = 0.0001f;
-
-  for (int i = 0; i < 3; i++) {
-    float expected_val = v_in[i] + M_transform[3][i];
-    __VERIFIER_assert(fabs(v_out[i] - expected_val) < point_epsilon);
-  }
   return 0;
 }

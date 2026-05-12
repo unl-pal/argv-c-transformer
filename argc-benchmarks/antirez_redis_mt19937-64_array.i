@@ -1,12 +1,8 @@
-extern void abort();
-void reach_error();
+/* SPDX-FileCopyrightText: Copyright (C) 2004, Makoto Matsumoto and Takuji Nishimura
+ * SPDX-License-Identifier: Custom
+ * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+ */
 extern unsigned long long __VERIFIER_nondet_ulonglong(void);
-void __VERIFIER_assert(int cond) {
-  if (!cond) {
-    reach_error();
-    abort();
-  }
-}
 static unsigned long long mt[312];
 static int mti = 312 + 1;
 void init_genrand64(unsigned long long seed) {

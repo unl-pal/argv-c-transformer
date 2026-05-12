@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+# SPDX-License-Identifier: Apache-2.0
+
 format_version: '2.0'
 
 input_files: 'antirez_redis_mt19937-64_array_valid-memsafety_tract.i'

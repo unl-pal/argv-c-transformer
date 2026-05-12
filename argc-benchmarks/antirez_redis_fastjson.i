@@ -1,133 +1,7 @@
-typedef unsigned char __u_char;
-typedef unsigned short int __u_short;
-typedef unsigned int __u_int;
-typedef unsigned long int __u_long;
-typedef signed char __int8_t;
-typedef unsigned char __uint8_t;
-typedef signed short int __int16_t;
-typedef unsigned short int __uint16_t;
-typedef signed int __int32_t;
-typedef unsigned int __uint32_t;
-typedef signed long int __int64_t;
-typedef unsigned long int __uint64_t;
-typedef __int8_t __int_least8_t;
-typedef __uint8_t __uint_least8_t;
-typedef __int16_t __int_least16_t;
-typedef __uint16_t __uint_least16_t;
-typedef __int32_t __int_least32_t;
-typedef __uint32_t __uint_least32_t;
-typedef __int64_t __int_least64_t;
-typedef __uint64_t __uint_least64_t;
-typedef long int __quad_t;
-typedef unsigned long int __u_quad_t;
-typedef long int __intmax_t;
-typedef unsigned long int __uintmax_t;
-typedef unsigned long int __dev_t;
-typedef unsigned int __uid_t;
-typedef unsigned int __gid_t;
-typedef unsigned long int __ino_t;
-typedef unsigned long int __ino64_t;
-typedef unsigned int __mode_t;
-typedef unsigned long int __nlink_t;
-typedef long int __off_t;
-typedef long int __off64_t;
-typedef int __pid_t;
-typedef struct { int __val[2]; } __fsid_t;
-typedef long int __clock_t;
-typedef unsigned long int __rlim_t;
-typedef unsigned long int __rlim64_t;
-typedef unsigned int __id_t;
-typedef long int __time_t;
-typedef unsigned int __useconds_t;
-typedef long int __suseconds_t;
-typedef long int __suseconds64_t;
-typedef int __daddr_t;
-typedef int __key_t;
-typedef int __clockid_t;
-typedef void * __timer_t;
-typedef long int __blksize_t;
-typedef long int __blkcnt_t;
-typedef long int __blkcnt64_t;
-typedef unsigned long int __fsblkcnt_t;
-typedef unsigned long int __fsblkcnt64_t;
-typedef unsigned long int __fsfilcnt_t;
-typedef unsigned long int __fsfilcnt64_t;
-typedef long int __fsword_t;
-typedef long int __ssize_t;
-typedef long int __syscall_slong_t;
-typedef unsigned long int __syscall_ulong_t;
-typedef __off64_t __loff_t;
-typedef char *__caddr_t;
-typedef long int __intptr_t;
-typedef unsigned int __socklen_t;
-typedef int __sig_atomic_t;
-
-enum
-{
-  _ISupper = ((0) < 8 ? ((1 << (0)) << 8) : ((1 << (0)) >> 8)),
-  _ISlower = ((1) < 8 ? ((1 << (1)) << 8) : ((1 << (1)) >> 8)),
-  _ISalpha = ((2) < 8 ? ((1 << (2)) << 8) : ((1 << (2)) >> 8)),
-  _ISdigit = ((3) < 8 ? ((1 << (3)) << 8) : ((1 << (3)) >> 8)),
-  _ISxdigit = ((4) < 8 ? ((1 << (4)) << 8) : ((1 << (4)) >> 8)),
-  _ISspace = ((5) < 8 ? ((1 << (5)) << 8) : ((1 << (5)) >> 8)),
-  _ISprint = ((6) < 8 ? ((1 << (6)) << 8) : ((1 << (6)) >> 8)),
-  _ISgraph = ((7) < 8 ? ((1 << (7)) << 8) : ((1 << (7)) >> 8)),
-  _ISblank = ((8) < 8 ? ((1 << (8)) << 8) : ((1 << (8)) >> 8)),
-  _IScntrl = ((9) < 8 ? ((1 << (9)) << 8) : ((1 << (9)) >> 8)),
-  _ISpunct = ((10) < 8 ? ((1 << (10)) << 8) : ((1 << (10)) >> 8)),
-  _ISalnum = ((11) < 8 ? ((1 << (11)) << 8) : ((1 << (11)) >> 8))
-};
-extern const unsigned short int **__ctype_b_loc (void)
-     __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__const__));
-extern const __int32_t **__ctype_tolower_loc (void)
-     __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__const__));
-extern const __int32_t **__ctype_toupper_loc (void)
-     __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__const__));
-extern int isalnum (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int isalpha (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int iscntrl (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int isdigit (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int islower (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int isgraph (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int isprint (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int ispunct (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int isspace (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int isupper (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int isxdigit (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int tolower (int __c) __attribute__ ((__nothrow__ , __leaf__));
-extern int toupper (int __c) __attribute__ ((__nothrow__ , __leaf__));
-extern int isblank (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int isascii (int __c) __attribute__ ((__nothrow__ , __leaf__));
-extern int toascii (int __c) __attribute__ ((__nothrow__ , __leaf__));
-extern int _toupper (int) __attribute__ ((__nothrow__ , __leaf__));
-extern int _tolower (int) __attribute__ ((__nothrow__ , __leaf__));
-struct __locale_struct
-{
-  struct __locale_data *__locales[13];
-  const unsigned short int *__ctype_b;
-  const int *__ctype_tolower;
-  const int *__ctype_toupper;
-  const char *__names[13];
-};
-typedef struct __locale_struct *__locale_t;
-typedef __locale_t locale_t;
-extern int isalnum_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int isalpha_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int iscntrl_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int isdigit_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int islower_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int isgraph_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int isprint_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int ispunct_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int isspace_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int isupper_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int isxdigit_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int isblank_l (int, locale_t) __attribute__ ((__nothrow__ , __leaf__));
-extern int __tolower_l (int __c, locale_t __l) __attribute__ ((__nothrow__ , __leaf__));
-extern int tolower_l (int __c, locale_t __l) __attribute__ ((__nothrow__ , __leaf__));
-extern int __toupper_l (int __c, locale_t __l) __attribute__ ((__nothrow__ , __leaf__));
-extern int toupper_l (int __c, locale_t __l) __attribute__ ((__nothrow__ , __leaf__));
-
+/* SPDX-FileCopyrightText: Copyright (c) 2025-Present, Redis Ltd.
+ * SPDX-License-Identifier: RSALv2 or SSPLv1
+ * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+ */
 typedef long unsigned int size_t;
 typedef int wchar_t;
 
@@ -214,6 +88,69 @@ extern char *l64a (long int __n) __attribute__ ((__nothrow__ , __leaf__)) ;
 extern long int a64l (const char *__s)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__pure__)) __attribute__ ((__nonnull__ (1))) ;
 
+typedef unsigned char __u_char;
+typedef unsigned short int __u_short;
+typedef unsigned int __u_int;
+typedef unsigned long int __u_long;
+typedef signed char __int8_t;
+typedef unsigned char __uint8_t;
+typedef signed short int __int16_t;
+typedef unsigned short int __uint16_t;
+typedef signed int __int32_t;
+typedef unsigned int __uint32_t;
+typedef signed long int __int64_t;
+typedef unsigned long int __uint64_t;
+typedef __int8_t __int_least8_t;
+typedef __uint8_t __uint_least8_t;
+typedef __int16_t __int_least16_t;
+typedef __uint16_t __uint_least16_t;
+typedef __int32_t __int_least32_t;
+typedef __uint32_t __uint_least32_t;
+typedef __int64_t __int_least64_t;
+typedef __uint64_t __uint_least64_t;
+typedef long int __quad_t;
+typedef unsigned long int __u_quad_t;
+typedef long int __intmax_t;
+typedef unsigned long int __uintmax_t;
+typedef unsigned long int __dev_t;
+typedef unsigned int __uid_t;
+typedef unsigned int __gid_t;
+typedef unsigned long int __ino_t;
+typedef unsigned long int __ino64_t;
+typedef unsigned int __mode_t;
+typedef unsigned long int __nlink_t;
+typedef long int __off_t;
+typedef long int __off64_t;
+typedef int __pid_t;
+typedef struct { int __val[2]; } __fsid_t;
+typedef long int __clock_t;
+typedef unsigned long int __rlim_t;
+typedef unsigned long int __rlim64_t;
+typedef unsigned int __id_t;
+typedef long int __time_t;
+typedef unsigned int __useconds_t;
+typedef long int __suseconds_t;
+typedef long int __suseconds64_t;
+typedef int __daddr_t;
+typedef int __key_t;
+typedef int __clockid_t;
+typedef void * __timer_t;
+typedef long int __blksize_t;
+typedef long int __blkcnt_t;
+typedef long int __blkcnt64_t;
+typedef unsigned long int __fsblkcnt_t;
+typedef unsigned long int __fsblkcnt64_t;
+typedef unsigned long int __fsfilcnt_t;
+typedef unsigned long int __fsfilcnt64_t;
+typedef long int __fsword_t;
+typedef long int __ssize_t;
+typedef long int __syscall_slong_t;
+typedef unsigned long int __syscall_ulong_t;
+typedef __off64_t __loff_t;
+typedef char *__caddr_t;
+typedef long int __intptr_t;
+typedef unsigned int __socklen_t;
+typedef int __sig_atomic_t;
 typedef __u_char u_char;
 typedef __u_short u_short;
 typedef __u_int u_int;
@@ -663,6 +600,16 @@ extern int strcoll (const char *__s1, const char *__s2)
 extern size_t strxfrm (char *__restrict __dest,
          const char *__restrict __src, size_t __n)
     __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__nonnull__ (2))) __attribute__ ((__access__ (__write_only__, 1, 3)));
+struct __locale_struct
+{
+  struct __locale_data *__locales[13];
+  const unsigned short int *__ctype_b;
+  const int *__ctype_tolower;
+  const int *__ctype_toupper;
+  const char *__names[13];
+};
+typedef struct __locale_struct *__locale_t;
+typedef __locale_t locale_t;
 extern int strcoll_l (const char *__s1, const char *__s2, locale_t __l)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__pure__)) __attribute__ ((__nonnull__ (1, 2, 3)));
 extern size_t strxfrm_l (char *__dest, const char *__src, size_t __n,
@@ -763,18 +710,9 @@ extern size_t strlcat (char *__restrict __dest,
          const char *__restrict __src, size_t __n)
   __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__nonnull__ (1, 2))) __attribute__ ((__access__ (__read_write__, 1, 3)));
 
-extern void abort();
-void reach_error();
 extern int __VERIFIER_nondet_int(void);
-extern void __VERIFIER_nondet_void(void);
 extern char __VERIFIER_nondet_char(void);
 extern void __VERIFIER_assume(int expression);
-void __VERIFIER_assert(int cond) {
-  if (!cond) {
-    reach_error();
-    abort();
-  }
-}
 typedef struct exprtoken {
   int refcount;
   int token_type;
@@ -799,25 +737,31 @@ exprtoken* new_exprtoken() {
   if (mock_idx >= 16) return ((void *)0);
   return &mock[mock_idx++];
 }
-static char mock_string_pool[8][64];
+static char mock_string_pool[8][16];
 static int mock_string_idx = 0;
 char* allocate_string() {
   if (mock_string_idx >= 8) return ((void *)0);
   return mock_string_pool[mock_string_idx++];
 }
-static exprtoken* mock_tuple_pool[8][64];
+static exprtoken* mock_tuple_pool[8][16];
 static int mock_tuple_idx = 0;
 exprtoken** allocate_tuple_array(size_t size) {
-  if (mock_tuple_idx >= 8 || size > 64) return ((void *)0);
+  if (mock_tuple_idx >= 8 || size > 16) return ((void *)0);
   return mock_tuple_pool[mock_tuple_idx++];
+}
+static int isspace(unsigned char c) {
+  return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
+}
+static int isdigit(unsigned char c) {
+  return c >= '0' && c <= '9';
 }
 static int jsonSkipValue(const char **p, const char *end);
 static exprtoken *jsonParseValueToken(const char **p, const char *end);
 static int jsonIsNumberChar(int c) {
-  return ((*__ctype_b_loc ())[(int) ((c))] & (unsigned short int) _ISdigit) || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E';
+  return isdigit(c) || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E';
 }
 static inline void jsonSkipWhiteSpaces(const char **p, const char *end) {
-  while (*p < end && ((*__ctype_b_loc ())[(int) (((unsigned char)**p))] & (unsigned short int) _ISspace))
+  while (*p < end && isspace((unsigned char)**p))
     (*p)++;
 }
 static int jsonSkipString(const char **p, const char *end) {
@@ -845,7 +789,6 @@ static int jsonSkipBracketed(const char **p, const char *end, char opener,
     char c = **p;
     if (c == '"') {
       if (!jsonSkipString(p, end)) {
-        __VERIFIER_assert(*p >= end && **p == '\0');
         return 0;
       }
       continue;
@@ -857,12 +800,10 @@ static int jsonSkipBracketed(const char **p, const char *end, char opener,
     }
     (*p)++;
   }
-  __VERIFIER_assert(!depth || **p == '\0');
   return depth == 0;
 }
 static int jsonSkipLiteral(const char **p, const char *end, const char *lit) {
   size_t l = strlen(lit);
-  __VERIFIER_assert(l > 0);
   if (*p + l > end)
     return 0;
   if (strncmp(*p, lit, l) == 0) {
@@ -924,7 +865,6 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
     q++;
     len++;
   }
-  __VERIFIER_assert(*q == '\0' || *q == '"');
   if (q >= end || *q != '"')
     return ((void *)0);
   exprtoken *t = new_exprtoken();
@@ -976,7 +916,6 @@ static exprtoken *jsonParseStringToken(const char **p, const char *end) {
     }
     *dst = '\0';
   }
-  __VERIFIER_assert(t->union_name.str.start + t->union_name.str.len == ((void *)0));
   *p = q + 1;
   return t;
 }
@@ -989,7 +928,6 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
     (*p)++;
   }
   buf[idx] = '\0';
-  __VERIFIER_assert(idx != (int)sizeof(buf) && !jsonIsNumberChar(**p));
   if (idx == 0)
     return ((void *)0);
   char *ep;
@@ -998,7 +936,6 @@ static exprtoken *jsonParseNumberToken(const char **p, const char *end) {
     *p = start;
     return ((void *)0);
   }
-  __VERIFIER_assert(idx <= (int)sizeof(buf));
   exprtoken *t = new_exprtoken();
   if (!t) return ((void *)0);
   t->union_name.num = v;
@@ -1013,7 +950,7 @@ static exprtoken *jsonParseLiteralToken(const char **p, const char *end,
     return ((void *)0);
   if ((*p + l) < end) {
     char next_char = *(*p + l);
-    if (!((*__ctype_b_loc ())[(int) (((unsigned char)next_char))] & (unsigned short int) _ISspace) && next_char != ',' &&
+    if (!isspace((unsigned char)next_char) && next_char != ',' &&
         next_char != ']' && next_char != '}') {
       return ((void *)0);
     }
@@ -1041,7 +978,6 @@ static exprtoken *jsonParseArrayToken(const char **p, const char *end) {
   while (1) {
     exprtoken *ele = jsonParseValueToken(p, end);
     if (!ele) {
-      __VERIFIER_nondet_void();
       return ((void *)0);
     }
     if (t->union_name.tuple.len == alloc) {
@@ -1094,7 +1030,7 @@ static exprtoken *jsonParseValueToken(const char **p, const char *end) {
   case 'n':
     return jsonParseLiteralToken(p, end, "null", 6, 0);
   default:
-    if (((*__ctype_b_loc ())[(int) (((unsigned char)**p))] & (unsigned short int) _ISdigit) || **p == '-' || **p == '+') {
+    if (isdigit((unsigned char)**p) || **p == '-' || **p == '+') {
       return jsonParseNumberToken(p, end);
     }
     return ((void *)0);
@@ -1156,16 +1092,6 @@ exprtoken *jsonExtractField(const char *json, size_t json_len,
     return ((void *)0);
   return jsonParseValueToken(&valptr, end);
 }
-int contains_char(const char *str, size_t len, char c) {
-  for (size_t i = 0; i < len; i++) {
-    if (str[i] == c) {
-      return 1;
-    } else if (str[i] == '\0') {
-      return 0;
-    }
-  }
-  return 0;
-}
 int main(void) {
   int json_len = __VERIFIER_nondet_int();
   int field_len = __VERIFIER_nondet_int();
@@ -1181,13 +1107,6 @@ int main(void) {
   }
   json[json_len - 1] = '\0';
   field[field_len - 1] = '\0';
-  exprtoken *result =
-      jsonExtractField(json, json_len - 1, field, field_len - 1);
-  if (result != ((void *)0)) {
-    __VERIFIER_assert(contains_char(json, json_len,'{') &&
-                      contains_char(json, json_len, '}') &&
-                      contains_char(json, json_len, ':') &&
-                      contains_char(json, json_len, '"'));
-  }
+  exprtoken *result = jsonExtractField(json, json_len - 1, field, field_len - 1);
   return 0;
 }

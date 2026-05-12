@@ -1,10 +1,13 @@
-format_version: '2.0'
+# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+# SPDX-License-Identifier: Apache-2.0
 
-input_files: 'plexinc_plex-home-theater-public_getdelim.i'
+format_version: "2.0"
+
+input_files: "plexinc_plex-home-theater-public_getdelim.i"
 
 properties:
   - property_file: ../properties/unreach-call.prp
-    expected_verdict: true
+    expected_verdict: false
   - property_file: ../properties/valid-memsafety.prp
     expected_verdict: true
   - property_file: ../properties/termination.prp

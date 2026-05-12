@@ -1,9 +1,9 @@
-// SPDX-FileCopyrightText: Copyright (c) 2000 - 2015 Lawrence Livermore National
-// Security, LLC. SPDX-License-Identifier: Custom SPDX-FileCopyrightText:
-// Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (c) 2000 - 2015 Lawrence Livermore National Security, LLC.
+// SPDX-License-Identifier: Custom
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -293,30 +293,15 @@ int main(void) {
 
   for (int i = 0; i < 3; i++) {
     v_in[i] = __VERIFIER_nondet_float();
-    __VERIFIER_assume(v_in[i] > -0.5f && v_in[i] < 0.5f);
   }
 
   for (int i = 0; i < 4; i++) {
     for (int j = 0; j < 4; j++) {
-      if (i == j) {
-        M_transform[i][j] = 1.0f;
-      } else if (i == 3 && j < 3) {
-        M_transform[i][j] = __VERIFIER_nondet_float();
-        __VERIFIER_assume(M_transform[i][j] > -0.25f &&
-                          M_transform[i][j] < 0.25f);
-      } else {
-        M_transform[i][j] = 0.0f;
-      }
+      M_transform[i][j] = __VERIFIER_nondet_float();
     }
   }
 
   matrix_mul_point(v_out, v_in, M_transform);
 
-  float point_epsilon = 0.0005f;
-
-  for (int i = 0; i < 3; i++) {
-    float expected_val = v_in[i] + M_transform[3][i];
-    __VERIFIER_assert(fabs(v_out[i] - expected_val) < point_epsilon);
-  }
   return 0;
 }

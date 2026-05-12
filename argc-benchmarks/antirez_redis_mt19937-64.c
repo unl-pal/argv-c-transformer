@@ -1,9 +1,9 @@
-// SPDX-FileCopyrightText: Copyright (C) 2004, Makoto Matsumoto and Takuji
-// Nishimura, SPDX-License-Identifier: Custom SPDX-FileCopyrightText: Copyright
-// (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2004, Makoto Matsumoto and Takuji Nishimura
+// SPDX-License-Identifier: Custom
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -63,17 +63,7 @@
    email: m-mat @ math.sci.hiroshima-u.ac.jp (remove spaces)
 */
 
-extern void abort();
-void reach_error();
-
 extern unsigned long long __VERIFIER_nondet_ulonglong(void);
-
-void __VERIFIER_assert(int cond) {
-  if (!cond) {
-    reach_error();
-    abort();
-  }
-}
 
 #define NN 312
 #define MM 156

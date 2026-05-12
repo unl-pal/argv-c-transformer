@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2010, Paul Hsieh
 // SPDX-License-Identifier: Custom
-// SPDX-FileCopyrightText: Copyright (C) 2025 The ARG-V Project
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*
- * Aug 27, 2025
+ * May 8, 2026
  * Modified by PACLab Arg-C Transformer v0.0.0 and development team for use as
  * a benchmark for Static Verification tools
  */
@@ -114,22 +114,25 @@ uint32_t SuperFastHash(const char *data, int len) {
 }
 
 // Arg-C verification harness
-#define BOUND 4096
+#define BOUND 2048
 int main(void) {
   int len = __VERIFIER_nondet_int();
 
   __VERIFIER_assume(len < BOUND);
 
   char data[BOUND];
+  char data_2[BOUND];
   if (len > 0) {
     for (int i = 0; i < len; i++) {
       data[i] = __VERIFIER_nondet_char();
+      data_2[i] = __VERIFIER_nondet_char();
     }
   }
   uint32_t result = SuperFastHash(data, len);
+  uint32_t result_2 = SuperFastHash(data_2, len);
 
   if (len > 0){
-    __VERIFIER_assert(result != 0);
+    __VERIFIER_assert(result != result_2);
   }
 
   return result;
