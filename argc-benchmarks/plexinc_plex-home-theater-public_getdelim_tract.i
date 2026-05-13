@@ -1,5 +1,5 @@
-// SPDX-FileCopyrightText: Copyright (C) 2004, 2003, 2002 University of Utah
-// SPDX-License-Identifier: Custom
+// SPDX-FileCopyrightText: Copyright (C) 1991, 1992, 1995, 1996, 1997 Free Software Foundation, Inc.
+// SPDX-License-Identifier: LGPL-2.0-or-later
 // SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 
@@ -923,123 +923,94 @@ extern size_t strlcat (char *__restrict __dest,
          const char *__restrict __src, size_t __n)
   __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__nonnull__ (1, 2))) __attribute__ ((__access__ (__read_write__, 1, 3)));
 
+extern void abort();
+void reach_error();
 extern int __VERIFIER_nondet_int(void);
 extern char __VERIFIER_nondet_char(void);
-char* mock_strerror(int errnum) {
-  return "mocked_strerror";
-}
-static char in_buffer[16];
-static char out_buffer[8];
-static int in_pos, out_pos;
-int mock_fgetc(FILE *stream) {
-  if (in_pos >= 16) return (-1);
-  return (unsigned char)in_buffer[in_pos++];
-}
-int mock_fputc(int c, FILE *stream) {
-  if (out_pos >= 8) return (-1);
-  out_buffer[out_pos++] = (char)c;
-  return c;
-}
-void dehexUsage(char *me) {
-  fprintf(stderr, "usage: %s <in> [<out>]\n", me);
-  fprintf(stderr, " <in>: file to read hex data from\n");
-  fprintf(stderr, "<out>: file to write raw data to; "
-                  "uses stdout by default\n");
-  fprintf(stderr, " \"-\" can be used to refer to stdin/stdout\n");
-  exit(1);
-}
-void dehexFclose(FILE *file) {
-  if (!(stdin == file || stdout == file)) {
-    fclose(file);
+void __VERIFIER_assert(int cond) {
+  if (!cond) {
+    reach_error();
+    abort();
   }
 }
-int dehexTable[128] = {
-    -2, -2, -2, -2, -2, -2, -2, -2, -2, -1,
-    -1, -1, -1, -1, -2, -2, -2, -2, -2, -2,
-    -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-    -2, -2, -1, -2, -2, -2, -2, -2, -2, -2,
-    -2, -2, -2, -2, -2, -2, -2, -2, 0, 1,
-    2, 3, 4, 5, 6, 7, 8, 9, -2, -2,
-    -2, -2, -2, -2, -2, 10, 11, 12, 13, 14,
-    15, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-    -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-    -2, -2, -2, -2, -2, -2, -2, 10, 11, 12,
-    13, 14, 15, -2, -2, -2, -2, -2, -2, -2,
-    -2, -2, -2, -2, -2, -2, -2, -2, -2, -2,
-    -2, -2, -2, -2, -2, -2, -2, -2
-};
-int
-original_main(int argc, char *argv[]) {
-  char *me, *inS, *outS;
-  FILE *fin, *fout;
-  int car=0, byte, nibble, even;
-  me = argv[0];
-  if (!( 2 == argc || 3 == argc )){
-    dehexUsage(me);
+int mock_errno = 0;
+char *mock_realloc(char *ptr, size_t size) {
+  if (size == 0) {
+    if (ptr) free(ptr);
+    return ((void *)0);
   }
-  inS = argv[1];
-  if (!strcmp("-", inS)) {
-    fin = stdin;
-  } else {
-    fin = fopen(inS, "r");
-    if (!fin) {
-      fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n",
-              me, inS, mock_strerror((*__errno_location ())));
-      dehexUsage(me);
+  void *new_ptr = malloc(size);
+  if (ptr) free(ptr);
+  return new_ptr;
+}
+static int reads_done = 0;
+int mock_getc(FILE *stream) {
+    if (reads_done >= 4) return (-1);
+    reads_done++;
+    int c = __VERIFIER_nondet_int();
+    if (!((c >= 0 && c < 256) || c == (-1))) { abort(); }
+    return c;
+}
+ssize_t getdelim(char **lineptr, size_t *n, int terminator, FILE *stream) {
+  char *line, *p;
+  size_t size, copy;
+  if (stream == ((void *)0) || lineptr == ((void *)0) || n == ((void *)0)) {
+    mock_errno = 22;
+    return -1;
+  }
+  if ((0))
+    return -1;
+  if (*lineptr == ((void *)0) || *n < 2)
+  {
+    line = mock_realloc(*lineptr, 256);
+    if (line == ((void *)0))
+      return -1;
+    *lineptr = line;
+    *n = 256;
+  }
+  line = *lineptr;
+  size = *n;
+  copy = size;
+  p = line;
+  while (1) {
+    size_t len;
+    while (--copy > 0) {
+      register int c = mock_getc(stream);
+      if (c == (-1))
+        goto lose;
+      else if ((*p++ = c) == terminator)
+        goto win;
     }
+    len = p - line;
+    size *= 2;
+    line = mock_realloc(line, size);
+    if (line == ((void *)0))
+      goto lose;
+    *lineptr = line;
+    *n = size;
+    p = line + len;
+    copy = size - len;
   }
-  if (2 == argc) {
-    fout = stdout;
-  } else {
-    outS = argv[2];
-    if (!strcmp("-", outS)) {
-      fout = stdout;
-    } else {
-      fout = fopen(outS, "w");
-      if (!fout) {
-        fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"w\"): %s\n\n",
-                me, outS, mock_strerror((*__errno_location ())));
-        dehexUsage(me);
-      }
-    }
-  }
-  byte = 0;
-  even = 1;
-  for (car=mock_fgetc(fin); (-1) != car; car=mock_fgetc(fin)) {
-    nibble = dehexTable[car & 127];
-    if (-2 == nibble) {
-      break;
-    }
-    if (-1 == nibble) {
-      continue;
-    }
-    if (even) {
-      byte = nibble << 4;
-    } else {
-      byte += nibble;
-      if ((-1) == mock_fputc(byte, fout)) {
-        fprintf(stderr, "%s: error writing!!!\n", me);
-        exit(1);
-      }
-    }
-    even = 1 - even;
-  }
-  if ((-1) != car) {
-    fprintf(stderr, "\n%s: got invalid character '%c'\n\n", me, car);
-    dehexUsage(me);
-  }
-  dehexFclose(fin);
-  dehexFclose(fout);
-  exit(0);
+lose:
+  if (p == *lineptr)
+    return -1;
+win:
+  *p = '\0';
+  return p - *lineptr;
 }
-int main() {
-  for (int i = 0; i < 16; i++) {
-    in_buffer[i] = __VERIFIER_nondet_char();
+int main(void) {
+  char *line = ((void *)0);
+  size_t n = 0;
+  FILE dummy_stream;
+  int terminatorChar = __VERIFIER_nondet_int();
+  if (!(terminatorChar >= 0 && terminatorChar < 256)) { abort(); }
+  ssize_t lenOfDelimStr = getdelim(&line, &n, terminatorChar, &dummy_stream);
+  if (lenOfDelimStr >= 0 && line) {
+    __VERIFIER_assert(lenOfDelimStr < n);
+    __VERIFIER_assert(line[lenOfDelimStr] == '\0');
+    __VERIFIER_assert(n % 256 == 0);
+    __VERIFIER_assert(lenOfDelimStr == 0 || line[lenOfDelimStr - 1] == terminatorChar);
   }
-  int argc = 2;
-  char argv0[] = "dehex";
-  char argv1[] = "-";
-  char *argv[] = {argv0, argv1};
-  original_main(argc, argv);
+  if (line) free(line);
   return 0;
 }

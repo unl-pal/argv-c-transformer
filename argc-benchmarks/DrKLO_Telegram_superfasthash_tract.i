@@ -612,19 +612,11 @@ uint32_t SuperFastHash(const char *data, int len) {
 }
 int main(void) {
   int len = __VERIFIER_nondet_int();
-  if (!(len < 2048)) { abort(); }
-  char data[2048];
-  char data_2[2048];
-  if (len > 0) {
-    for (int i = 0; i < len; i++) {
-      data[i] = __VERIFIER_nondet_char();
-      data_2[i] = __VERIFIER_nondet_char();
-    }
+  if (!(len >= 1 && len < 8)) { abort(); }
+  char data[8];
+  for (int i = 0; i < len; i++) {
+    data[i] = __VERIFIER_nondet_char();
   }
   uint32_t result = SuperFastHash(data, len);
-  uint32_t result_2 = SuperFastHash(data_2, len);
-  if (len > 0){
-    __VERIFIER_assert(result != result_2);
-  }
   return result;
 }

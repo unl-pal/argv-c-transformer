@@ -45,7 +45,6 @@ void reach_error();
 
 extern long __VERIFIER_nondet_long(void);
 extern int __VERIFIER_nondet_int(void);
-extern void __VERIFIER_assume(int expression);
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {
@@ -144,9 +143,9 @@ int main(void) {
   int dst = __VERIFIER_nondet_int();
 
   // last hour before y2038 overflow
-  __VERIFIER_assume(dst == 0 || dst == 1);
-  __VERIFIER_assume(tz >= -12 * 3600 && tz <= 14 * 3600);
-  __VERIFIER_assume(t >= 2147480047 && t <= 2147483647);
+  if (!(dst == 0 || dst == 1)) { abort(); }
+  if (!(tz >= -12 * 3600 && tz <= 14 * 3600)) { abort(); }
+  if (!(t >= 2147480047 && t <= 2147483647)) { abort(); }
 
   nolocks_localtime(&my_tm, t, tz, dst);
 

@@ -16,9 +16,11 @@ antirez_redis_mt19937-64.yml
 antirez_redis_strl_tract.yml
 antirez_redis_strl.yml
 DrKLO_Telegram_superfasthash.yml
+DrKLO_Telegram_superfasthash_tract.yml
 plexinc_plex-home-theater-public_fstrcmp_tract.yml
 plexinc_plex-home-theater-public_fstrcmp.yml
 plexinc_plex-home-theater-public_getdelim.yml
+plexinc_plex-home-theater-public_getdelim_tract.yml
 plexinc_plex-home-theater-public_rand_r.yml
 scottmwinters_projects_sorts_bub.yml
 scottmwinters_projects_sorts_ins_tract.yml

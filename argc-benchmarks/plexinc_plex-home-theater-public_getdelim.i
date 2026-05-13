@@ -1,7 +1,7 @@
-/* SPDX-FileCopyrightText: Copyright (C) 1991, 1992, 1995, 1996, 1997 Free Software Foundation, Inc.
- * SPDX-License-Identifier: LGPL-2.0-or-later
- * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
- */
+// SPDX-FileCopyrightText: Copyright (C) 1991, 1992, 1995, 1996, 1997 Free Software Foundation, Inc.
+// SPDX-License-Identifier: LGPL-2.0-or-later
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+
 
 extern int *__errno_location (void) __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__const__));
 
@@ -225,9 +225,9 @@ extern int fscanf (FILE *__restrict __stream,
 extern int scanf (const char *__restrict __format, ...) ;
 extern int sscanf (const char *__restrict __s,
      const char *__restrict __format, ...) __attribute__ ((__nothrow__ , __leaf__));
-extern int fscanf (FILE *__restrict __stream, const char *__restrict __format, ...) __asm__ ("" "__isoc23_fscanf") __attribute__ ((__nonnull__ (1)));
-extern int scanf (const char *__restrict __format, ...) __asm__ ("" "__isoc23_scanf") ;
-extern int sscanf (const char *__restrict __s, const char *__restrict __format, ...) __asm__ ("" "__isoc23_sscanf") __attribute__ ((__nothrow__ , __leaf__));
+extern int fscanf (FILE *__restrict __stream, const char *__restrict __format, ...) __asm__ ("" "__isoc99_fscanf") __attribute__ ((__nonnull__ (1)));
+extern int scanf (const char *__restrict __format, ...) __asm__ ("" "__isoc99_scanf") ;
+extern int sscanf (const char *__restrict __s, const char *__restrict __format, ...) __asm__ ("" "__isoc99_sscanf") __attribute__ ((__nothrow__ , __leaf__));
 extern int vfscanf (FILE *__restrict __s, const char *__restrict __format,
       __gnuc_va_list __arg)
      __attribute__ ((__format__ (__scanf__, 2, 0))) __attribute__ ((__nonnull__ (1)));
@@ -236,11 +236,11 @@ extern int vscanf (const char *__restrict __format, __gnuc_va_list __arg)
 extern int vsscanf (const char *__restrict __s,
       const char *__restrict __format, __gnuc_va_list __arg)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__format__ (__scanf__, 2, 0)));
-extern int vfscanf (FILE *__restrict __s, const char *__restrict __format, __gnuc_va_list __arg) __asm__ ("" "__isoc23_vfscanf")
+extern int vfscanf (FILE *__restrict __s, const char *__restrict __format, __gnuc_va_list __arg) __asm__ ("" "__isoc99_vfscanf")
      __attribute__ ((__format__ (__scanf__, 2, 0))) __attribute__ ((__nonnull__ (1)));
-extern int vscanf (const char *__restrict __format, __gnuc_va_list __arg) __asm__ ("" "__isoc23_vscanf")
+extern int vscanf (const char *__restrict __format, __gnuc_va_list __arg) __asm__ ("" "__isoc99_vscanf")
      __attribute__ ((__format__ (__scanf__, 1, 0))) ;
-extern int vsscanf (const char *__restrict __s, const char *__restrict __format, __gnuc_va_list __arg) __asm__ ("" "__isoc23_vsscanf") __attribute__ ((__nothrow__ , __leaf__))
+extern int vsscanf (const char *__restrict __s, const char *__restrict __format, __gnuc_va_list __arg) __asm__ ("" "__isoc99_vsscanf") __attribute__ ((__nothrow__ , __leaf__))
      __attribute__ ((__format__ (__scanf__, 2, 0)));
 extern int fgetc (FILE *__stream) __attribute__ ((__nonnull__ (1)));
 extern int getc (FILE *__stream) __attribute__ ((__nonnull__ (1)));
@@ -368,31 +368,6 @@ __extension__
 extern unsigned long long int strtoull (const char *__restrict __nptr,
      char **__restrict __endptr, int __base)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__nonnull__ (1)));
-extern long int strtol (const char *__restrict __nptr, char **__restrict __endptr, int __base) __asm__ ("" "__isoc23_strtol") __attribute__ ((__nothrow__ , __leaf__))
-     __attribute__ ((__nonnull__ (1)));
-extern unsigned long int strtoul (const char *__restrict __nptr, char **__restrict __endptr, int __base) __asm__ ("" "__isoc23_strtoul") __attribute__ ((__nothrow__ , __leaf__))
-     __attribute__ ((__nonnull__ (1)));
-__extension__
-extern long long int strtoq (const char *__restrict __nptr, char **__restrict __endptr, int __base) __asm__ ("" "__isoc23_strtoll") __attribute__ ((__nothrow__ , __leaf__))
-     __attribute__ ((__nonnull__ (1)));
-__extension__
-extern unsigned long long int strtouq (const char *__restrict __nptr, char **__restrict __endptr, int __base) __asm__ ("" "__isoc23_strtoull") __attribute__ ((__nothrow__ , __leaf__))
-     __attribute__ ((__nonnull__ (1)));
-__extension__
-extern long long int strtoll (const char *__restrict __nptr, char **__restrict __endptr, int __base) __asm__ ("" "__isoc23_strtoll") __attribute__ ((__nothrow__ , __leaf__))
-     __attribute__ ((__nonnull__ (1)));
-__extension__
-extern unsigned long long int strtoull (const char *__restrict __nptr, char **__restrict __endptr, int __base) __asm__ ("" "__isoc23_strtoull") __attribute__ ((__nothrow__ , __leaf__))
-     __attribute__ ((__nonnull__ (1)));
-extern int strfromd (char *__dest, size_t __size, const char *__format,
-       double __f)
-     __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__nonnull__ (3)));
-extern int strfromf (char *__dest, size_t __size, const char *__format,
-       float __f)
-     __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__nonnull__ (3)));
-extern int strfroml (char *__dest, size_t __size, const char *__format,
-       long double __f)
-     __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__nonnull__ (3)));
 extern char *l64a (long int __n) __attribute__ ((__nothrow__ , __leaf__)) ;
 extern long int a64l (const char *__s)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__pure__)) __attribute__ ((__nonnull__ (1))) ;
@@ -701,9 +676,6 @@ extern void *calloc (size_t __nmemb, size_t __size)
 extern void *realloc (void *__ptr, size_t __size)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__warn_unused_result__)) __attribute__ ((__alloc_size__ (2)));
 extern void free (void *__ptr) __attribute__ ((__nothrow__ , __leaf__));
-extern void free_sized (void *__ptr, size_t __size) __attribute__ ((__nothrow__ , __leaf__));
-extern void free_aligned_sized (void *__ptr, size_t __alignment, size_t __size)
-     __attribute__ ((__nothrow__ , __leaf__));
 extern void *reallocarray (void *__ptr, size_t __nmemb, size_t __size)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__warn_unused_result__))
      __attribute__ ((__alloc_size__ (2, 3)))
@@ -805,9 +777,6 @@ extern int getsubopt (char **__restrict __optionp,
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__nonnull__ (1, 2, 3))) ;
 extern int getloadavg (double __loadavg[], int __nelem)
      __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__nonnull__ (1)));
-typedef __once_flag once_flag;
-extern void call_once (once_flag *__flag, void (*__func)(void));
-extern size_t memalignment (const void *__p);
 
 
 extern void *memcpy (void *__restrict __dest, const void *__restrict __src,
@@ -958,7 +927,6 @@ extern void abort();
 void reach_error();
 extern int __VERIFIER_nondet_int(void);
 extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
 void __VERIFIER_assert(int cond) {
   if (!cond) {
     reach_error();
@@ -977,7 +945,7 @@ char *mock_realloc(char *ptr, size_t size) {
 }
 int mock_getc(FILE *stream) {
     int c = __VERIFIER_nondet_int();
-    __VERIFIER_assume((c >= 0 && c < 256) || c == (-1));
+    if (!((c >= 0 && c < 256) || c == (-1))) { abort(); }
     return c;
 }
 ssize_t getdelim(char **lineptr, size_t *n, int terminator, FILE *stream) {
@@ -1032,7 +1000,7 @@ int main(void) {
   size_t n = 0;
   FILE dummy_stream;
   int terminatorChar = __VERIFIER_nondet_int();
-  __VERIFIER_assume(terminatorChar >= 0 && terminatorChar < 256);
+  if (!(terminatorChar >= 0 && terminatorChar < 256)) { abort(); }
   ssize_t lenOfDelimStr = getdelim(&line, &n, terminatorChar, &dummy_stream);
   if (lenOfDelimStr >= 0 && line) {
     __VERIFIER_assert(lenOfDelimStr < n);

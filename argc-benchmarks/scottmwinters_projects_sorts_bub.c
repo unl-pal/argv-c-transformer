@@ -14,7 +14,6 @@ extern void abort();
 void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
-extern void __VERIFIER_assume(int expression);
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {

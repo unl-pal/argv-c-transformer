@@ -38,7 +38,6 @@
 
 extern int __VERIFIER_nondet_int(void);
 extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
 
 extern void abort();
 void reach_error();
@@ -143,8 +142,8 @@ int main(void) {
 
   int len1 = __VERIFIER_nondet_int();
   int len2 = __VERIFIER_nondet_int();
-  __VERIFIER_assume(len1 >= 0 && len1 < MAX_BOUND);
-  __VERIFIER_assume(len2 >= 0 && len2 < MAX_BOUND);
+  if (!(len1 >= 0 && len1 < MAX_BOUND)) { abort(); }
+  if (!(len2 >= 0 && len2 < MAX_BOUND)) { abort(); }
   s1[len1] = '\0';
   s2[len2] = '\0';
 

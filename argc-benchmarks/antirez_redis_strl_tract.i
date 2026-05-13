@@ -1,7 +1,7 @@
-/* SPDX-FileCopyrightText: Copyright (c) 1998, 2015 Todd C. Miller <millert@openbsd.org>
- * SPDX-License-Identifier: Custom
- * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
- */
+// SPDX-FileCopyrightText: Copyright (c) 1998, 2015 Todd C. Miller <millert@openbsd.org>
+// SPDX-License-Identifier: Custom
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+
 
 typedef long unsigned int size_t;
 extern void *memcpy (void *__restrict __dest, const void *__restrict __src,
@@ -152,7 +152,6 @@ extern void abort();
 void reach_error();
 extern unsigned int __VERIFIER_nondet_uint(void);
 extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
 void __VERIFIER_assert(int cond) {
   if (!cond) {
     reach_error();
@@ -202,22 +201,22 @@ int main(void) {
   char src[8];
   unsigned int src_len = __VERIFIER_nondet_uint();
   unsigned int dst_len = __VERIFIER_nondet_uint();
-  __VERIFIER_assume(src_len < 8);
-  __VERIFIER_assume(dst_len < 8);
+  if (!(src_len < 8)) { abort(); }
+  if (!(dst_len < 8)) { abort(); }
   for (unsigned int i = 0; i < 8 -1; i++) {
     if (i >= src_len) break;
     src[i] = __VERIFIER_nondet_char();
-    __VERIFIER_assume(src[i] >= 'a' && src[i] <= 'd');
+    if (!(src[i] >= 'a' && src[i] <= 'd')) { abort(); }
   }
   for (unsigned int i = 0; i < 8 -1; i++) {
     if (i >= dst_len) break;
     dst[i] = __VERIFIER_nondet_char();
-    __VERIFIER_assume(dst[i] >= 'a' && dst[i] <= 'd');
+    if (!(dst[i] >= 'a' && dst[i] <= 'd')) { abort(); }
   }
   src[src_len] = '\0';
   dst[dst_len] = '\0';
   unsigned int size = __VERIFIER_nondet_uint();
-  __VERIFIER_assume(size <= 8);
+  if (!(size <= 8)) { abort(); }
   size_t cat_result = redis_strlcat(dst, src, size);
   size_t copy_result = redis_strlcpy(dst, src, size);
   __VERIFIER_assert(copy_result == src_len);

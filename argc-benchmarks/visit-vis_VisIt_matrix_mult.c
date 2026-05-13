@@ -73,7 +73,6 @@ void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
 extern float __VERIFIER_nondet_float(void);
-extern void __VERIFIER_assume(int expression);
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {

@@ -38,7 +38,6 @@
 
 extern int __VERIFIER_nondet_int(void);
 extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
 
 extern void abort();
 void reach_error();

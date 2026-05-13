@@ -32,7 +32,6 @@ void reach_error();
 
 extern unsigned int __VERIFIER_nondet_uint(void);
 extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {
@@ -111,24 +110,24 @@ int main(void) {
 
   unsigned int src_len = __VERIFIER_nondet_uint();
   unsigned int dst_len = __VERIFIER_nondet_uint();
-  __VERIFIER_assume(src_len < MAX_BOUND);
-  __VERIFIER_assume(dst_len < MAX_BOUND);
+  if (!(src_len < MAX_BOUND)) { abort(); }
+  if (!(dst_len < MAX_BOUND)) { abort(); }
 
   for (unsigned int i = 0; i < MAX_BOUND-1; i++) {
     if (i >= src_len) break;
     src[i] = __VERIFIER_nondet_char();
-    __VERIFIER_assume(src[i] >= 'a' && src[i] <= 'd');
+    if (!(src[i] >= 'a' && src[i] <= 'd')) { abort(); }
   }
   for (unsigned int i = 0; i < MAX_BOUND-1; i++) {
     if (i >= dst_len) break;
     dst[i] = __VERIFIER_nondet_char();
-    __VERIFIER_assume(dst[i] >= 'a' && dst[i] <= 'd');
+    if (!(dst[i] >= 'a' && dst[i] <= 'd')) { abort(); }
   }
   src[src_len] = '\0';
   dst[dst_len] = '\0';
 
   unsigned int size = __VERIFIER_nondet_uint();
-  __VERIFIER_assume(size <= MAX_BOUND);
+  if (!(size <= MAX_BOUND)) { abort(); }
 
   size_t cat_result = redis_strlcat(dst, src, size);
 

@@ -1,7 +1,7 @@
-/* SPDX-FileCopyrightText: Copyright (C) 2004, Makoto Matsumoto and Takuji Nishimura
- * SPDX-License-Identifier: Custom
- * SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
- */
+// SPDX-FileCopyrightText: Copyright (C) 2004, Makoto Matsumoto and Takuji Nishimura
+// SPDX-License-Identifier: Custom
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+
 extern unsigned long long __VERIFIER_nondet_ulonglong(void);
 static unsigned long long mt[312];
 static int mti = 312 + 1;

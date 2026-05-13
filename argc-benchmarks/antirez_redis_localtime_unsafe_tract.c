@@ -43,9 +43,6 @@
 extern void abort();
 void reach_error();
 
-extern long __VERIFIER_nondet_long(void);
-extern int __VERIFIER_nondet_int(void);
-extern void __VERIFIER_assume(int expression);
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {
@@ -139,18 +136,7 @@ int main(void) {
 
   struct tm my_tm;
 
-  long t = __VERIFIER_nondet_long();
-  long tz = __VERIFIER_nondet_long();
-  int dst = __VERIFIER_nondet_int();
-
-  __VERIFIER_assume(dst == 0);
-  __VERIFIER_assume(tz == 14 * 3600);
-  // underflow
-  // __VERIFIER_assume(t >= 0 && t < 5 * 365 * 3600 * 24);
-  // overflow
-  __VERIFIER_assume(t == 2147483647);
-
-  nolocks_localtime(&my_tm, t, tz, dst);
+  nolocks_localtime(&my_tm, 2147483647, -1, 0);
 
   return 0;
 }

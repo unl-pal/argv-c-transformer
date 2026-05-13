@@ -45,7 +45,7 @@
  * const char *field, size_t field_len);
  * ------------------------------------------------------------------ */
 
-// #include <ctype.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -54,7 +54,6 @@ void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
 extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {
@@ -141,14 +140,6 @@ static int mock_tuple_idx = 0;
 exprtoken** allocate_tuple_array(size_t size) {
   if (mock_tuple_idx >= MAX_MOCK_TUPLES || size > MAX_TUPLE_ELEMS) return NULL;
   return mock_tuple_pool[mock_tuple_idx++];
-}
-
-static int isspace(unsigned char c) {
-  return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
-}
-
-static int isdigit(unsigned char c) {
-  return c >= '0' && c <= '9';
 }
 
 // Forward declarations.
@@ -641,7 +632,7 @@ exprtoken *jsonExtractField(const char *json, size_t json_len,
 int main(void) {
   int field_len = __VERIFIER_nondet_int();
 
-  __VERIFIER_assume(field_len >= 2 && field_len < MAX_LEN);
+  if (!(field_len >= 2 && field_len < MAX_LEN)) { abort(); }
 
   char json[MAX_BOUND];
 
@@ -653,7 +644,7 @@ int main(void) {
   json[5] = '"';
   for (int i = 6; i < field_len + 6 ; i++) {
     char c = __VERIFIER_nondet_char();
-    __VERIFIER_assume(c == 'a' || c == 'b');
+    if (!(c == 'a' || c == 'b')) { abort(); }
     json[i] = c;
   }
   json[6 + field_len] = '"';

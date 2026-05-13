@@ -45,13 +45,12 @@
  * const char *field, size_t field_len);
  * ------------------------------------------------------------------ */
 
-// #include <ctype.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
 extern int __VERIFIER_nondet_int(void);
 extern char __VERIFIER_nondet_char(void);
-extern void __VERIFIER_assume(int expression);
 
 #define EXPR_TOKEN_EOF 0
 #define EXPR_TOKEN_NUM 1
@@ -131,14 +130,6 @@ static int mock_tuple_idx = 0;
 exprtoken** allocate_tuple_array(size_t size) {
   if (mock_tuple_idx >= MAX_MOCK_TUPLES || size > MAX_TUPLE_ELEMS) return NULL;
   return mock_tuple_pool[mock_tuple_idx++];
-}
-
-static int isspace(unsigned char c) {
-  return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v';
-}
-
-static int isdigit(unsigned char c) {
-  return c >= '0' && c <= '9';
 }
 
 // Forward declarations.
@@ -632,8 +623,8 @@ int main(void) {
   int json_len = __VERIFIER_nondet_int();
   int field_len = __VERIFIER_nondet_int();
 
-  __VERIFIER_assume(json_len > 0 && json_len < MAX_BOUND);
-  __VERIFIER_assume(field_len > 0 && field_len < MAX_LEN);
+  if (!(json_len > 0 && json_len < MAX_BOUND)) { abort(); }
+  if (!(field_len > 0 && field_len < MAX_LEN)) { abort(); }
 
   char json[MAX_BOUND];
   char field[MAX_LEN];
