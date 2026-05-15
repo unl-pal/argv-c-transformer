@@ -3,11 +3,11 @@
 
 format_version: '2.0'
 
-input_files: 'DrKLO_Telegram_superfasthash.i'
+input_files: 'natsteven_sorts_bub_tract.c'
 
 properties:
-  - property_file: ../properties/no-overflow.prp
-    expected_verdict: false
+  - property_file: ../properties/unreach-call.prp
+    expected_verdict: true
 
 options:
   language: C

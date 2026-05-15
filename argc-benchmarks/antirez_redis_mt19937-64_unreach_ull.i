@@ -396,6 +396,6 @@ double genrand64_real3(void) {
 int main(void) {
   init_genrand64(5489ULL);
   unsigned long long r64 = genrand64_int64();
-  __VERIFIER_assert(r64 == 4620546740167642908);
+  __VERIFIER_assert(r64 == 14514284786278117030ULL);
   return 0;
 }

@@ -192,7 +192,7 @@ int main(void) {
 
   double real2 = genrand64_real2();
 
-  __VERIFIER_assert(real2 == 0.946668);
+  __VERIFIER_assert(real2 == 0x1.92da3239eded5p-1);
 
   return 0;
 }

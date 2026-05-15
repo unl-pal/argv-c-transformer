@@ -3,10 +3,10 @@
 
 format_version: "2.0"
 
-input_files: "antirez_redis_localtime_unsafe_tract.c"
+input_files: "antirez_redis_localtime_unsafe_unreach.c"
 
 properties:
-  - property_file: ../properties/no-overflow.prp
+  - property_file: ../properties/unreach-call.prp
     expected_verdict: false
 
 options:

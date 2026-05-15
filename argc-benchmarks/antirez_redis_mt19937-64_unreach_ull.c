@@ -192,7 +192,7 @@ int main(void) {
 
   unsigned long long r64 = genrand64_int64();
 
-  __VERIFIER_assert(r64 == 4620546740167642908);
+  __VERIFIER_assert(r64 == 14514284786278117030ULL);
 
   return 0;
 }

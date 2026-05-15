@@ -3,14 +3,10 @@
 
 format_version: '2.0'
 
-input_files: 'scottmwinters_projects_sorts_sel.c'
+input_files: 'natsteven_sorts_bub_swap_tract.c'
 
 properties:
   - property_file: ../properties/unreach-call.prp
-    expected_verdict: true
-  - property_file: ../properties/valid-memsafety.prp
-    expected_verdict: true
-  - property_file: ../properties/termination.prp
     expected_verdict: true
 
 options:

@@ -36,7 +36,6 @@
 */
 
 #include <errno.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,12 +49,6 @@ void __VERIFIER_assert(int cond) {
     abort();
   }
 }
-
-char* mock_strerror(int errnum) {
-  return "mocked_strerror";
-}
-
-#define strerror mock_strerror
 
 #define IN_SIZE 2
 
@@ -73,24 +66,11 @@ int mock_fgetc(FILE *stream) {
 static char out_buffer[OUT_SIZE];
 static int out_pos;
 
-int mock_fprintf(FILE *stream, const char *fmt, ...) {
-  (void)stream;
-
-  char tmp[128];
-  va_list ap;
-  va_start(ap, fmt);
-  int n = vsnprintf(tmp, sizeof(tmp), fmt, ap);
-  va_end(ap);
-
-  if (n < 0) return n;
-
-  int to_copy = n;
-  if (to_copy > (OUT_SIZE - out_pos)) to_copy = OUT_SIZE - out_pos;
-  if (to_copy > 0) {
-    memcpy(&out_buffer[out_pos], tmp, (size_t)to_copy);
-    out_pos += to_copy;
-  }
-  return n;
+int mock_fprintf(FILE *stream, const char *fmt, int c1, int c2) {
+  (void)stream; (void)fmt;
+  if (out_pos < OUT_SIZE) out_buffer[out_pos++] = (char)c1;
+  if (out_pos < OUT_SIZE) out_buffer[out_pos++] = (char)c2;
+  return 2;
 }
 
 #define fprintf mock_fprintf
@@ -99,11 +79,11 @@ int enhexColumns = 70; /* number of characters per line */
 
 int enhexUsage(char *me) {
   /*                       0   1     2   (2/3) */
-  fprintf(stderr, "usage: %s <in> [<out>]\n", me);
-  fprintf(stderr, " <in>: file to read raw data from\n");
-  fprintf(stderr, "<out>: file to write hex data to; "
-                  "uses stdout by default\n");
-  fprintf(stderr, " \"-\" can be used to refer to stdin/stdout\n");
+  // fprintf(stderr, "usage: %s <in> [<out>]\n", me);
+  // fprintf(stderr, " <in>: file to read raw data from\n");
+  // fprintf(stderr, "<out>: file to write hex data to; "
+  //                 "uses stdout by default\n");
+  // fprintf(stderr, " \"-\" can be used to refer to stdin/stdout\n");
   // exit(1);
   return 1;
 }
@@ -136,8 +116,8 @@ int original_main(int argc, char *argv[]) {
   } else {
     fin = fopen(inS, "rb");
     if (!fin) {
-      fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n", me, inS,
-              strerror(errno));
+      // fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n", me, inS,
+      //         strerror(errno));
       enhexUsage(me);
     }
   }
@@ -150,8 +130,8 @@ int original_main(int argc, char *argv[]) {
     } else {
       fout = fopen(outS, "w");
       if (!fout) {
-        fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"w\"): %s\n\n", me, outS,
-                strerror(errno));
+        // fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"w\"): %s\n\n", me, outS,
+        //         strerror(errno));
         enhexUsage(me);
       }
     }
@@ -163,7 +143,7 @@ int original_main(int argc, char *argv[]) {
     int high_nibble = (car >> 4) & 15;
     int low_nibble = car & 15;
     if (col > enhexColumns) {
-      fprintf(fout, "\n");
+      // fprintf(fout, "\n");
       col = 0;
     }
     fprintf(fout, "%c%c", enhexTable[high_nibble], enhexTable[low_nibble]);
@@ -171,7 +151,7 @@ int original_main(int argc, char *argv[]) {
     car = fgetc(fin);
   }
   if (2 != col) {
-    fprintf(fout, "\n");
+    // fprintf(fout, "\n");
   }
 
   enhexFclose(fin);

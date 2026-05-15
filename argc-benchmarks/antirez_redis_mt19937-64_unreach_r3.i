@@ -396,6 +396,6 @@ double genrand64_real3(void) {
 int main(void) {
   init_genrand64(5489ULL);
   double real3 = genrand64_real3();
-  __VERIFIER_assert(real3 == 0.019271);
+  __VERIFIER_assert(real3 == 0x1.92da3239eded5p-1);
   return 0;
 }

@@ -5,10 +5,9 @@
 
 extern int *__errno_location (void) __attribute__ ((__nothrow__ , __leaf__)) __attribute__ ((__const__));
 
-typedef __builtin_va_list __gnuc_va_list;
-typedef __gnuc_va_list va_list;
 
 typedef long unsigned int size_t;
+typedef __builtin_va_list __gnuc_va_list;
 typedef unsigned char __u_char;
 typedef unsigned short int __u_short;
 typedef unsigned int __u_int;
@@ -148,6 +147,7 @@ typedef struct _IO_cookie_io_functions_t
   cookie_seek_function_t *seek;
   cookie_close_function_t *close;
 } cookie_io_functions_t;
+typedef __gnuc_va_list va_list;
 typedef __off_t off_t;
 typedef __ssize_t ssize_t;
 typedef __fpos_t fpos_t;
@@ -931,9 +931,6 @@ void __VERIFIER_assert(int cond) {
     abort();
   }
 }
-char* mock_strerror(int errnum) {
-  return "mocked_strerror";
-}
 static char in_buffer[2];
 static int in_pos;
 int mock_fgetc(FILE *stream) {
@@ -942,29 +939,14 @@ int mock_fgetc(FILE *stream) {
 }
 static char out_buffer[4];
 static int out_pos;
-int mock_fprintf(FILE *stream, const char *fmt, ...) {
-  (void)stream;
-  char tmp[128];
-  va_list ap;
-  __builtin_va_start(ap,fmt);
-  int n = vsnprintf(tmp, sizeof(tmp), fmt, ap);
-  __builtin_va_end(ap);
-  if (n < 0) return n;
-  int to_copy = n;
-  if (to_copy > (4 - out_pos)) to_copy = 4 - out_pos;
-  if (to_copy > 0) {
-    memcpy(&out_buffer[out_pos], tmp, (size_t)to_copy);
-    out_pos += to_copy;
-  }
-  return n;
+int mock_fprintf(FILE *stream, const char *fmt, int c1, int c2) {
+  (void)stream; (void)fmt;
+  if (out_pos < 4) out_buffer[out_pos++] = (char)c1;
+  if (out_pos < 4) out_buffer[out_pos++] = (char)c2;
+  return 2;
 }
 int enhexColumns = 70;
 int enhexUsage(char *me) {
-  mock_fprintf(stderr, "usage: %s <in> [<out>]\n", me);
-  mock_fprintf(stderr, " <in>: file to read raw data from\n");
-  mock_fprintf(stderr, "<out>: file to write hex data to; "
-                  "uses stdout by default\n");
-  mock_fprintf(stderr, " \"-\" can be used to refer to stdin/stdout\n");
   return 1;
 }
 void enhexFclose(FILE *file) {
@@ -987,8 +969,6 @@ int original_main(int argc, char *argv[]) {
   } else {
     fin = fopen(inS, "rb");
     if (!fin) {
-      mock_fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"rb\"): %s\n\n", me, inS,
-              mock_strerror((*__errno_location ())));
       enhexUsage(me);
     }
   }
@@ -1001,8 +981,6 @@ int original_main(int argc, char *argv[]) {
     } else {
       fout = fopen(outS, "w");
       if (!fout) {
-        mock_fprintf(stderr, "\n%s: couldn't fopen(\"%s\",\"w\"): %s\n\n", me, outS,
-                mock_strerror((*__errno_location ())));
         enhexUsage(me);
       }
     }
@@ -1013,7 +991,6 @@ int original_main(int argc, char *argv[]) {
     int high_nibble = (car >> 4) & 15;
     int low_nibble = car & 15;
     if (col > enhexColumns) {
-      mock_fprintf(fout, "\n");
       col = 0;
     }
     mock_fprintf(fout, "%c%c", enhexTable[high_nibble], enhexTable[low_nibble]);
@@ -1021,7 +998,6 @@ int original_main(int argc, char *argv[]) {
     car = mock_fgetc(fin);
   }
   if (2 != col) {
-    mock_fprintf(fout, "\n");
   }
   enhexFclose(fin);
   enhexFclose(fout);
