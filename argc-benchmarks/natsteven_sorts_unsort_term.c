@@ -10,7 +10,7 @@
 extern void abort();
 void reach_error();
 
-extern unsigned int __VERIFIER_nondet_uint(void);
+extern int __VERIFIER_nondet_int(void);
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {
@@ -19,7 +19,7 @@ void __VERIFIER_assert(int cond) {
   }
 }
 
-static int SIZE = 15;
+static int SIZE = 3;
 
 void swap(int *a, int *b) {
   int temp = *a;
@@ -29,7 +29,8 @@ void swap(int *a, int *b) {
 
 void unsort(int *array) {
   for (int i = 0; i < SIZE; i++) {
-    int j = (int)(__VERIFIER_nondet_uint() % SIZE);
+    int j = __VERIFIER_nondet_int();
+    if (!(j >= 0 && j < SIZE)) abort();
     swap(&array[i], &array[j]);
   }
 }

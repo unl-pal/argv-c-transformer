@@ -38,7 +38,7 @@ for src in *.c; do
     fi
 done
 
-BENCHMARKS="/home/nat/Repos/bench-defs/sv-benchmarks/c/argv-c-benchmarks/"
+BENCHMARKS="/home/nat/Repos/bench-defs/sv-benchmarks/c/argv-c/"
 mkdir -p "$BENCHMARKS"
 
 echo "Copying to $BENCHMARKS..."

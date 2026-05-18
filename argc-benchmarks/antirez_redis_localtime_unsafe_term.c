@@ -43,9 +43,6 @@
 extern void abort();
 void reach_error();
 
-extern long __VERIFIER_nondet_long(void);
-extern int __VERIFIER_nondet_int(void);
-
 void __VERIFIER_assert(int cond) {
   if (!cond) {
     reach_error();
@@ -138,16 +135,7 @@ int main(void) {
 
   struct tm my_tm;
 
-  long t = __VERIFIER_nondet_long();
-  long tz = __VERIFIER_nondet_long();
-  int dst = __VERIFIER_nondet_int();
-
-  // last hour before y2038 overflow
-  if (!(dst == 0 || dst == 1)) { abort(); }
-  if (!(tz >= -12 * 3600 && tz <= 14 * 3600)) { abort(); }
-  if (!(t >= 2147480047 && t <= 2147483647)) { abort(); }
-
-  nolocks_localtime(&my_tm, t, tz, dst);
+  nolocks_localtime(&my_tm, 2147483647, -1, 0);
 
   return 0;
 }

@@ -3,7 +3,7 @@
 
 format_version: '2.0'
 
-input_files: 'natsteven_sorts_bub_swap_tract.c'
+input_files: 'natsteven_sorts_bub_tract_xor.c'
 
 properties:
   - property_file: ../properties/unreach-call.prp

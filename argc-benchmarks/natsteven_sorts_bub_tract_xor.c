@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /*
- * May 15, 2026
+ * May 14, 2026
  * Written by Nathanael Steven and the ARG-V development team for use as
  * a benchmark for Static Verification tools
  */
@@ -23,10 +23,10 @@ void __VERIFIER_assert(int cond) {
 
 int SIZE = 4;
 
-void swap(int *a, int *b) {
-  int temp = *a;
-  *a = *b;
-  *b = temp;
+void xor_swap(int *a, int *b) {
+  *a ^= *b;
+  *b ^= *a;
+  *a ^= *b;
 }
 
 void bubble(int *array) {
@@ -35,7 +35,7 @@ void bubble(int *array) {
     swapped = 0;
     for (int j = 0; j < SIZE - i - 1; j++) {
       if (array[j] > array[j + 1]) {
-        swap(&array[j], &array[j + 1]);
+        xor_swap(&array[j], &array[j + 1]);
         swapped = 1;
       }
     }
