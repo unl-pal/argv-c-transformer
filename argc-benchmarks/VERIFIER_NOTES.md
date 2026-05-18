@@ -59,7 +59,7 @@ Observations from CPAchecker 4.2.2 and ULTIMATE Automizer 0.3.1-35a84365 logs. C
 
 ## dehex (visit-vis/VisIt)
 
-- `valid-memsafety` — **CPA false alarm** (expected true): appears related to `strcmp("-", inS)` with a string literal; CPA seems to explore the unexercised `fopen` branch and reports a spurious `valid-deref`. UAuto errors (ERROR 7).
+- `valid-memsafety` — **CPA false alarm** (expected true): CPA approximates `strcmp("-", inS)` as symbolic, then bails on a symbolic-offset read derived from it (`Stop analysis because of an error in symbolic offset in read operation`). Memsafe by construction: `argv[1]` is pinned to `"-"`, so only the `fin = stdin` path runs; all buffers are fixed-size static arrays and mock I/O is bound-checked.
 
 ---
 
