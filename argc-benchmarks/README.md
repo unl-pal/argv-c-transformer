@@ -5,13 +5,13 @@ SPDX-License-Identifier: Apache-2.0
 
 # SV-COMP ARG-V-C Benchmarks
 
+These benchmarks are part of the ARG-V project: [Website](https://arg-v.dev/).
+
 Benchmarks generated from real-world C OSS code found on github. Code is modified as little as possible to preserve original logic and structure. Additions include a verifier harness with main function, assertions for the unreach-call property, as well as certain mocked constructs when necessary. Where verification is intractable, separate `_tract` source and task files apply restricted bounds or concrete input values.
 
 Preprocessing is performed with `gcc -E -P -std=gnu11 -m64 (src).c -o (src).i`.
-Note that the 'antirez_redis_localtime_unsafe' benchmarks use architecture flag -m32 for preprocessing and declare an ILP32 data model, which causes a warning in the SV-Benchmarks check script.
 
 [Github](https://github.com/unl-pal/argv-c-transformer)
-[Project Website](https://arg-v.dev/)
 Contact: [Nathanael Steven](nathanaelsteven@u.boisestate.edu) (main developer)
 [Dr. Elena Sherman](elenasherman@boisestate.edu)
 [Dr. Robert Dyer](rdyer@unl.edu)
