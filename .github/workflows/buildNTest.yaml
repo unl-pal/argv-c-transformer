@@ -16,8 +16,10 @@ jobs:
       - name: Get Dependencies Ubuntu
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
+          wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo add-apt-repository "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main"
           sudo apt-get update
-          sudo apt-get install -y clang-18 llvm-18 clang-tools-18 libclang-common-18-dev libclang-18-dev libclang1-18 llvm-18-dev
+          sudo apt-get install -y clang-19 llvm-19 clang-tools-19 libclang-common-19-dev libclang-19-dev libclang1-19 llvm-19-dev
       - name: Get Dependencies Mac
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
@@ -37,11 +39,12 @@ jobs:
             $LLVMCMakedir = & $LLVMConfig.Path --cmakedir
             $LLVMPrefix = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $LLVMCMakedir))
             Write-Host "LLVM Prefix: $LLVMPrefix"
-            "llvm_prefix=$LLVMPrefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            Write-Host "LLVM CMake dir: $LLVMCMakedir"
+            "llvm_cmakedir=$LLVMCMakedir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
             "$LLVMPrefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           } else {
             Write-Warning "llvm-config command not found on Windows."
-            "llvm_prefix=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            "llvm_cmakedir=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           }
       - name: Find LLVM Prefix Path Unix
         id: find-llvm-unix
@@ -55,32 +58,32 @@ jobs:
             echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
             export PATH="$LLVM_PREFIX/bin:$PATH"
           fi
-          LLVM_CONFIG_BIN="$(command -v llvm-config-18 || command -v llvm-config || true)"
+          LLVM_CONFIG_BIN="$(command -v llvm-config-19 || command -v llvm-config || true)"
           if [[ -z "$LLVM_CONFIG_BIN" ]]; then
             echo "Warning: llvm-config command not found on Unix."
-            echo "llvm_prefix=" >> "$GITHUB_OUTPUT"
+            echo "llvm_cmakedir=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           LLVM_CMAKE_DIR="$("$LLVM_CONFIG_BIN" --cmakedir)"
-          LLVM_PREFIX="$(cd "$LLVM_CMAKE_DIR/../../.." && pwd)"
-          echo "llvm_prefix=$LLVM_PREFIX" >> "$GITHUB_OUTPUT"
+          echo "llvm_cmakedir=$LLVM_CMAKE_DIR" >> "$GITHUB_OUTPUT"
       - name: Configure CMake
         # if: ${{ success() }}
         # if: (steps.find-clang-unix.outcome == 'success' && steps.find-clang-windows.outcome == 'skipped') || (steps.find-clang-windows.outcome == 'success' && steps.find-clang-unix.outcome == 'skipped')
         # if: (steps.find-clang-unix.status == 'success' || steps.find-clang-windows.status == 'success')
         shell: bash
         run: |
-          echo "${{ steps.find-llvm-windows.outputs.llvm_prefix }}"
-          if [[ ! -z "${{ steps.find-llvm-windows.outputs.llvm_prefix }}" ]]; then
-            MY_CLANG_PATH="${{ steps.find-llvm-windows.outputs.llvm_prefix }}"
+          if [[ ! -z "${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}" ]]; then
+            LLVM_CMAKE_DIR="${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}"
           else
-            MY_CLANG_PATH="${{ steps.find-llvm-unix.outputs.llvm_prefix }}"
+            LLVM_CMAKE_DIR="${{ steps.find-llvm-unix.outputs.llvm_cmakedir }}"
           fi
+          echo "Using LLVM_DIR: $LLVM_CMAKE_DIR"
           CMAKE_EXTRA_ARGS=""
           if [[ ! -z "$CC" ]]; then
-            CMAKE_EXTRA_ARGS="-DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX"
+            LLVM_PREFIX="$(dirname "$(dirname "$CC")")"
+            CMAKE_EXTRA_ARGS="-DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX -DCMAKE_CXX_FLAGS=-isystem${LLVM_PREFIX}/include/c++/v1"
           fi
-          cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH="$MY_CLANG_PATH" $CMAKE_EXTRA_ARGS
+          cmake -B build -S . -G Ninja -DLLVM_DIR="$LLVM_CMAKE_DIR" $CMAKE_EXTRA_ARGS
       - name: Build
         run: |
           ninja -C build
