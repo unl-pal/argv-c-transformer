@@ -15,6 +15,7 @@
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <regex>
+#include <sstream>
 #include <string>
 
 const int defaultDebugLevel = 0;

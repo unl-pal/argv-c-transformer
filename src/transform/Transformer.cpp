@@ -26,6 +26,8 @@
 #include <llvm/Support/VirtualFileSystem.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <regex>
 #include <string>
 #include <system_error>
