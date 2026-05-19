@@ -29,13 +29,6 @@ Observations from CPAchecker 4.2.2 and ULTIMATE Automizer 0.3.1-35a84365 logs. C
 
 ---
 
-## localtime (antirez/redis)
-
-- **Note**: `_unsafe*` files declare `data_model: ILP32`; the directory Makefile declares `CC.Arch := 64`. The SV-COMP check tool flags this as a mismatch.
-- `_unsafe`/`_unsafe_tract` `unreach-call` — **UAuto false negative** (expected false): UAuto appears not to model ILP32 `long` correctly. CPA returns the correct verdict.
-
----
-
 ## strl (antirez/redis)
 
 - `unreach-call`/`termination` (base and tract) — **CPA error**: "Can't subtract pointers of different types" on `dst - odst`.

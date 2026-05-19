@@ -142,10 +142,8 @@ int main(void) {
   long tz = __VERIFIER_nondet_long();
   int dst = __VERIFIER_nondet_int();
 
-  // last hour before y2038 overflow
   if (!(dst == 0 || dst == 1)) { abort(); }
   if (!(tz >= -12 * 3600 && tz <= 14 * 3600)) { abort(); }
-  if (!(t >= 2147480047 && t <= 2147483647)) { abort(); }
 
   nolocks_localtime(&my_tm, t, tz, dst);
 

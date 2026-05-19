@@ -40,7 +40,7 @@ Lightweight JSON field extractor using **mutually recursive** token parsers (`js
 
 [Source](https://github.com/antirez/redis/blob/e8726d18e5bab24cbfcb0a0c36f21ce5a1140471/src/localtime.c)
 
-Lock-free `localtime()` implementation. Assertions verify computed `tm_hour`, `tm_min`, `tm_sec`, `tm_wday` are within valid calendar ranges. The `_unsafe` variant widens input to expose the Y2038 signed overflow bug.
+Lock-free `localtime()` implementation. Assertions verify computed `tm_hour`, `tm_min`, `tm_sec`, `tm_wday` are within valid calendar ranges. The safe harness constrains `t >= tz` to keep the timezone-adjusted time post-epoch. The `_unsafe_unreach` variant drops that guard, allowing inputs where `tz > t` pushes the adjusted time before 1970 and the assertions fire — the documented limitation of the original function.
 
 ## mt19937-64 (antirez/redis)
 
