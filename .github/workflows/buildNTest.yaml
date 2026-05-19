@@ -27,41 +27,51 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         run: >
           choco install llvm
-      - name: Find Clang Prefix Path Windows
-        id: find-clang-windows
+      - name: Find LLVM Prefix Path Windows
+        id: find-llvm-windows
         if: ${{ matrix.os == 'windows-latest' }}
         shell: powershell
         run: |
-          $ClangCommand = Get-Command clang
-          if ($ClangCommand) {
-            $ClangPath = Split-Path -Parent $ClangCommand.Path
-            Write-Host "Clang Path: $ClangPath"
-            "clang_path=$ClangPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $LLVMConfig = Get-Command llvm-config -ErrorAction SilentlyContinue
+          if ($LLVMConfig) {
+            $LLVMCMakedir = & $LLVMConfig.Path --cmakedir
+            $LLVMPrefix = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $LLVMCMakedir))
+            Write-Host "LLVM Prefix: $LLVMPrefix"
+            "llvm_prefix=$LLVMPrefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           } else {
-            Write-Warning "CLang Command Not Found"
-            "clang_path=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            Write-Warning "llvm-config command not found on Windows."
+            "llvm_prefix=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           }
-      - name: Find Clang Prefix Path Unix
-        id: find-clang-unix
+      - name: Find LLVM Prefix Path Unix
+        id: find-llvm-unix
         if: ${{ matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest' }}
         shell: bash
         run: |
-          CLANG_PATH=$(dirname $(which clang) || true)
-          echo "clang_path=$CLANG_PATH" >> "$GITHUB_OUTPUT"
-          if [[ -z "$CLANG_PATH" ]]; then
-            echo "Warning: Clang command not found on Linux or MacOS."
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            LLVM_PREFIX="$(brew --prefix llvm)"
+            echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+            export PATH="$LLVM_PREFIX/bin:$PATH"
           fi
+          LLVM_CONFIG_BIN="$(command -v llvm-config-16 || command -v llvm-config || true)"
+          if [[ -z "$LLVM_CONFIG_BIN" ]]; then
+            echo "Warning: llvm-config command not found on Unix."
+            echo "llvm_prefix=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          LLVM_CMAKE_DIR="$("$LLVM_CONFIG_BIN" --cmakedir)"
+          LLVM_PREFIX="$(cd "$LLVM_CMAKE_DIR/../../.." && pwd)"
+          echo "llvm_prefix=$LLVM_PREFIX" >> "$GITHUB_OUTPUT"
       - name: Configure CMake
         # if: ${{ success() }}
         # if: (steps.find-clang-unix.outcome == 'success' && steps.find-clang-windows.outcome == 'skipped') || (steps.find-clang-windows.outcome == 'success' && steps.find-clang-unix.outcome == 'skipped')
         # if: (steps.find-clang-unix.status == 'success' || steps.find-clang-windows.status == 'success')
         shell: bash
         run: |
-          echo "${{ steps.find-clang-windows.outputs.clang_path }}"
-          if [[ ! -z "${{ steps.find-clang-windows.outputs.clang_path }}" ]]; then
-            MY_CLANG_PATH="\'${{ steps.find-clang-windows.outputs.clang_path }}\'"
+          echo "${{ steps.find-llvm-windows.outputs.llvm_prefix }}"
+          if [[ ! -z "${{ steps.find-llvm-windows.outputs.llvm_prefix }}" ]]; then
+            MY_CLANG_PATH="${{ steps.find-llvm-windows.outputs.llvm_prefix }}"
           else
-            MY_CLANG_PATH="${{ steps.find-clang-unix.outputs.clang_path }}"
+            MY_CLANG_PATH="${{ steps.find-llvm-unix.outputs.llvm_prefix }}"
           fi
           cmake -B build -S . -G Ninja -DCMAKE_PREFIX_PATH="$MY_CLANG_PATH"
       - name: Build
