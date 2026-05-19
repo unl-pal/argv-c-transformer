@@ -36,12 +36,10 @@ jobs:
           if ($ClangCommand) {
             $ClangPath = Split-Path -Parent $ClangCommand.Path
             Write-Host "Clang Path: $ClangPath"
-            # Write-Output "clang_path=$ClangPath" >> "$GITHUB_OUTPUT"
-            Write-Output "::set-output name=clang_path::$ClangPath"
+            "clang_path=$ClangPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           } else {
             Write-Warning "CLang Command Not Found"
-            # Write-Output "clang_path=" >> "$GITHUB_OUTPUT"
-            Write-Output "::set-output name=clang_path::"
+            "clang_path=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           }
       - name: Find Clang Prefix Path Unix
         id: find-clang-unix
