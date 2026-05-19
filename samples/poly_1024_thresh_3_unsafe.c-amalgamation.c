@@ -21,7 +21,7 @@ int main()
 	
 	/* restrict the input around the location of maximum error (x=3) */
 	float x = __VERIFIER_nondet_float();
-	__VERIFIER_assume(isgreaterequal(x, 2.9f) && islessequal(x, 3.0f));
+	if (!(isgreaterequal(x, 2.9f) && islessequal(x, 3.0f))) { abort(); }
 	
 	/* call the neural network with non-deterministic input */
 	input_array[0] = x;

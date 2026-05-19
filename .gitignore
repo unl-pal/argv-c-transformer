@@ -4,14 +4,13 @@ temp/
 build/
 bin/
 
-samples/TheAlgorithmsC/
-samples/EggListener.c
-samples/OG/
-database/
-preprocessed/*
-filteredFiles/*
-benchmark/*
-database/*
+/samples/TheAlgorithmsC/
+/samples/EggListener.c
+/samples/OG/
+/preprocessed/*
+/filteredFiles/*
+/benchmark/*
+/database/*
 
 compile_commands.json
 
@@ -21,3 +20,11 @@ compile_commands.json
 *.ast
 
 *.zig*
+
+/notes/
+
+/benchmarks/
+
+CLAUDE.md
+
+argc-benchmarks/results*

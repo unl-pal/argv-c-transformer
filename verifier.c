@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 char __VERIFIER_nondet_char(void) {
    return 'a';
 }
@@ -21,4 +23,16 @@ short __VERIFIER_nondet_short(void) {
 }
 unsigned int __VERIFIER_nondet_uint(void) {
    return 5;
+}
+
+bool __VERIFIER_nondet_bool(void) {
+   return false;
+}
+
+void* __VERIFIER_nondet_pointer(void) {
+   return (void*)(5);
+}
+
+void reach_error() {
+
 }
