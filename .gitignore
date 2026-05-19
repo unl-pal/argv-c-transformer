@@ -22,3 +22,9 @@ compile_commands.json
 *.zig*
 
 /notes/
+
+/benchmarks/
+
+CLAUDE.md
+
+argc-benchmarks/results*

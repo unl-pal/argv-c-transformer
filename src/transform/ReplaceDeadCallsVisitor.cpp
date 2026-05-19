@@ -50,7 +50,7 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
                 newReturnType = _C->VoidPtrTy;
                 myType = "void*";
                 newReturnTypeName = "pointer";
-              }else {
+              } else {
                 for (unsigned i=0; i<returnTypeName.size(); i++) {
                   char letter = returnTypeName[i];
                   if (letter == ' ') {
@@ -64,10 +64,7 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
                   } 
                 }
               }
-              // If the return value is a pointer it needs to be cast to the original return type
-              isPointer ? newName += "(" + returnTypeName + ")(" : newName;
               newName += "__VERIFIER_nondet_" + newReturnTypeName + "()";
-              isPointer ? newName += ")" : newName;
               clang::SourceRange range;
               range.setBegin(E->getBeginLoc());
               range.setEnd(E->getEndLoc());
@@ -87,7 +84,6 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
                 E->getExprLoc().getLocWithOffset(1),
                 funcName,
                 refDecl->getReturnType(),
-                // returnType,
                 _C->CreateTypeSourceInfo(_C->VoidTy),
                 clang::SC_Extern
               );
@@ -97,10 +93,8 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
                 // Use a stringstream and string to take advantage of the built in print to string functionality
                 std::string verifierString = "";
                 llvm::raw_string_ostream tempStream(verifierString);
-                // Add any needed components for casting pointers
-                isPointer ? verifierString += "(" + newReturnTypeName + ")(" : verifierString;
                 newFunction->printName(tempStream);
-                isPointer ? verifierString += "())" : verifierString += "()";
+                verifierString += "()";
                 llvm::outs() << verifierString << " - The String for Replace Dead Calls Visitor\n";
                 _Rewriter.ReplaceText(E->getSourceRange(), verifierString);
                 llvm::outs() << "Inserted the text\n";

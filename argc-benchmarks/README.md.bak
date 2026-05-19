@@ -1,0 +1,253 @@
+<!--
+SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# SV-COMP ARG-V-C Benchmarks
+
+Benchmarks generated from real-world C OSS code found on github.
+
+Contact: [Nathanael Steven](nathanaelsteven@u.boisestate.edu) (main developer)
+[Dr. Elena Sherman](elenasherman@boisestate.edu)
+
+Where full verification is intractable, separate `_tract` source and task files apply restricted bounds or concrete input values.
+
+---
+
+## superfasthash (DrKLO/Telegram)
+
+[Source](https://github.com/DrKLO/Telegram/blob/009e97356f966bb81eceba113d210230bf383122/TMessagesProj/jni/voip/webrtc/base/third_party/superfasthash/superfasthash.c)
+
+Hash algorithm operating on byte arrays with bitwise operations. A bound controls the number of input bytes. The tractable variant (`_tract`) reduces the bound to 8 (at most 1 main-loop iteration), making valid-memsafety and termination provable.
+
+| Task file | Properties |
+|---|---|
+| `DrKLO_Telegram_superfasthash.yml` | no-overflow=**false** |
+| `DrKLO_Telegram_superfasthash_unreach.yml` | unreach-call=**false** |
+| `DrKLO_Telegram_superfasthash_tract.yml` | valid-memsafety=true, termination=true |
+
+---
+
+## endianconv (antirez/redis)
+
+[Source](https://github.com/antirez/redis/blob/e8726d18e5bab24cbfcb0a0c36f21ce5a1140471/src/endianconv.c)
+
+Byte-order reversal for 16/32/64-bit integers using bitwise ops and byte swaps. Assertions verify the double-reversal identity.
+
+| Task file | Properties |
+|---|---|
+| `antirez_redis_endianconv.yml` | unreach-call=true, valid-memsafety=true, termination=true |
+
+---
+
+## fastjson (antirez/redis)
+
+[Source](https://github.com/antirez/redis/blob/e8726d18e5bab24cbfcb0a0c36f21ce5a1140471/modules/vector-sets/fastjson.c)
+
+Lightweight JSON field extractor using mutually recursive token parsers. The tractable variant pins input to a single field with a symbolic string value.
+
+| Task file | Properties |
+|---|---|
+| `antirez_redis_fastjson.yml` | no-overflow=true, valid-memsafety=true, termination=true |
+| `antirez_redis_fastjson_tract.yml` | unreach-call=true, no-overflow=true, termination=true |
+
+Note: unreach-call is only in the `_tract` variant because the base file's mutual recursion makes it intractable for both tools.
+
+---
+
+## localtime (antirez/redis)
+
+[Source](https://github.com/antirez/redis/blob/e8726d18e5bab24cbfcb0a0c36f21ce5a1140471/src/localtime.c)
+
+Lock-free `localtime()` implementation. Assertions verify computed `tm_hour`, `tm_min`, `tm_sec`, `tm_wday` are within valid calendar ranges. The `_unsafe` variant widens input to expose the Y2038 signed overflow bug. Each expected-false property is isolated to its own task file.
+
+| Task file | Properties |
+|---|---|
+| `antirez_redis_localtime.yml` | unreach-call=true, no-overflow=true, termination=true |
+| `antirez_redis_localtime_tract.yml` | unreach-call=true, no-overflow=true, termination=true |
+| `antirez_redis_localtime_unsafe.yml` | no-overflow=**false** |
+| `antirez_redis_localtime_unsafe_unreach.yml` | unreach-call=**false** |
+| `antirez_redis_localtime_unsafe_term.yml` | termination=true |
+| `antirez_redis_localtime_unsafe_tract.yml` | no-overflow=**false** |
+| `antirez_redis_localtime_unsafe_tract_unreach.yml` | unreach-call=**false** |
+
+Note: `localtime_unsafe*` files declare `data_model: ILP32`. The Y2038 overflow is a 32-bit `long` width issue; the ILP32 model is intentional.
+
+---
+
+## mt19937-64 (antirez/redis)
+
+[Source](https://github.com/antirez/redis/blob/e8726d18e5bab24cbfcb0a0c36f21ce5a1140471/src/mt19937-64.c)
+
+Mersenne Twister 64-bit PRNG. The scalar-seeded variant (`mt19937-64`) and array-seeded variant (`mt19937-64_array`) cover no-overflow, valid-memsafety, and termination. The unreach-call property requires concrete seeds, handled via separate `_unreach_*` task files for each output type (`ll`, `ull`, `r1`–`r3`). The array variant has a tractable valid-memsafety variant.
+
+| Task file | Properties |
+|---|---|
+| `antirez_redis_mt19937-64.yml` | valid-memsafety=true, no-overflow=true, termination=true |
+| `antirez_redis_mt19937-64_array.yml` | valid-memsafety=true, no-overflow=true, termination=true |
+| `antirez_redis_mt19937-64_array_valid-memsafety_tract.yml` | valid-memsafety=true |
+| `antirez_redis_mt19937-64_unreach_ll.yml` | unreach-call=true |
+| `antirez_redis_mt19937-64_unreach_ull.yml` | unreach-call=true |
+| `antirez_redis_mt19937-64_unreach_r1.yml` | unreach-call=true |
+| `antirez_redis_mt19937-64_unreach_r2.yml` | unreach-call=true |
+| `antirez_redis_mt19937-64_unreach_r3.yml` | unreach-call=true |
+
+---
+
+## strl (antirez/redis)
+
+[Source](https://github.com/antirez/redis/blob/e8726d18e5bab24cbfcb0a0c36f21ce5a1140471/src/strl.c)
+
+`strlcpy` and `strlcat`: bounded string copy and concatenation. Assertions verify return-value semantics and null-termination. The tractable variant uses smaller fixed-size buffers.
+
+| Task file | Properties |
+|---|---|
+| `antirez_redis_strl.yml` | unreach-call=true, valid-memsafety=true, termination=true |
+| `antirez_redis_strl_tract.yml` | unreach-call=true, termination=true |
+
+---
+
+## fstrcmp (plexinc/plex-home-theater-public)
+
+[Source](https://github.com/plexinc/plex-home-theater-public/blob/f2f1d63f2d48ad0d2935f7002ee1168ebcd5bb3d/xbmc/utils/fstrcmp.c)
+
+Fuzzy string similarity via recursive longest-common-substring. Assertions check symmetry and identity. The tractable variant uses concrete strings.
+
+| Task file | Properties |
+|---|---|
+| `plexinc_plex-home-theater-public_fstrcmp.yml` | unreach-call=true, no-overflow=true, valid-memsafety=true, termination=true |
+| `plexinc_plex-home-theater-public_fstrcmp_tract.yml` | unreach-call=true, no-overflow=true, termination=true |
+
+---
+
+## getdelim (plexinc/plex-home-theater-public)
+
+[Source](https://github.com/plexinc/plex-home-theater-public/blob/f2f1d63f2d48ad0d2935f7002ee1168ebcd5bb3d/xbmc/android/bionic_supplement/getdelim.c)
+
+Dynamic line-reading function using `realloc`-based buffer growth. The tractable variant caps `mock_getc` calls to keep all writes within the initial buffer, eliminating the realloc path.
+
+| Task file | Properties |
+|---|---|
+| `plexinc_plex-home-theater-public_getdelim.yml` | unreach-call=**false**, valid-memsafety=true, termination=true |
+| `plexinc_plex-home-theater-public_getdelim_tract.yml` | valid-memsafety=true, termination=true |
+
+---
+
+## rand_r (plexinc/plex-home-theater-public)
+
+[Source](https://github.com/plexinc/plex-home-theater-public/blob/f2f1d63f2d48ad0d2935f7002ee1168ebcd5bb3d/xbmc/android/bionic_supplement/rand_r.c)
+
+Reentrant PRNG using xorshift-style bit arithmetic on a single `unsigned int` seed. Assertions check output range and seed-replay determinism.
+
+| Task file | Properties |
+|---|---|
+| `plexinc_plex-home-theater-public_rand_r.yml` | unreach-call=true, no-overflow=true, valid-memsafety=true, termination=true |
+
+---
+
+## sorts (natsteven)
+
+
+
+Classic sorting algorithms split into individual benchmark files: bubble (`_bub`), insertion (`_ins`), selection (`_sel`), merge (`_mer`), and an unsorted baseline (`_unsort`). Bubble sort uses `xor_swap`; selection and unsort use the standard `swap` helper. The merge sort uses stack-allocated VLAs. Tractable variants reduce array size or pin inputs for unreach-call and termination coverage.
+
+| Task file | Properties |
+|---|---|
+| `natsteven_sorts_bub.yml` | unreach-call=true, valid-memsafety=true, termination=true |
+| `natsteven_sorts_bub_tract.yml` | unreach-call=true |
+| `natsteven_sorts_bub_swap_tract.yml` | unreach-call=true |
+| `natsteven_sorts_ins.yml` | unreach-call=true, valid-memsafety=true, termination=true |
+| `natsteven_sorts_ins_tract.yml` | unreach-call=true |
+| `natsteven_sorts_mer.yml` | unreach-call=true, valid-memsafety=true, termination=true |
+| `natsteven_sorts_mer_tract.yml` | unreach-call=true |
+| `natsteven_sorts_mer_tract_term.yml` | termination=true |
+| `natsteven_sorts_sel.yml` | unreach-call=true, valid-memsafety=true, termination=true |
+| `natsteven_sorts_sel_tract.yml` | unreach-call=true, termination=true |
+| `natsteven_sorts_unsort.yml` | unreach-call=**false**, valid-memsafety=true |
+| `natsteven_sorts_unsort_term.yml` | termination=true |
+
+Note: `_bub`, `_ins`, `_sel` base files time out for unreach-call; their `_tract` variants provide coverage. `_bub_tract` uses `xor_swap`; `_bub_swap_tract` is an identical SIZE=4 variant using the standard `swap` helper to compare tractability across swap implementations. `_mer` base times out for unreach-call and termination; `_mer_tract` (both inputs pinned, unreach-call only) and `_mer_tract_term` (full nondet, termination only) cover both properties. `_unsort` unreach-call is expected false (shuffle may produce a sorted permutation); termination is split into `_unsort_term`.
+
+---
+
+## dehex (visit-vis/VisIt)
+
+[Source](https://github.com/visit-vis/VisIt/blob/141aa46a88ed33742e3ae951c1e2825f9465cce4/third_party_builtin/slivr/teem-1.9.0-src/src/hex/dehex.c)
+
+Hex decoder. Assertions guard nibble range and conversion correctness. The base file has symbolic input (IN_SIZE=16); the tractable variant uses concrete input (IN_SIZE=4), making unreach-call and termination provable.
+
+| Task file | Properties |
+|---|---|
+| `visit-vis_VisIt_dehex.yml` | valid-memsafety=true, termination=true |
+| `visit-vis_VisIt_dehex_tract.yml` | unreach-call=true, termination=true |
+
+Note: unreach-call is only in the `_tract` variant; the base times out on both termination and unreach-call at IN_SIZE=16.
+
+---
+
+## enhex (visit-vis/VisIt)
+
+[Source](https://github.com/visit-vis/VisIt/blob/141aa46a88ed33742e3ae951c1e2825f9465cce4/third_party_builtin/slivr/teem-1.9.0-src/src/hex/enhex.c)
+
+Hex encoder. The tractable variant uses concrete input (IN_SIZE=2), making unreach-call and termination provable.
+
+| Task file | Properties |
+|---|---|
+| `visit-vis_VisIt_enhex.yml` | valid-memsafety=true, termination=true |
+| `visit-vis_VisIt_enhex_tract.yml` | unreach-call=true, termination=true |
+
+---
+
+## matrix (visit-vis/VisIt)
+
+[Source](https://github.com/visit-vis/VisIt/blob/141aa46a88ed33742e3ae951c1e2825f9465cce4/plots/Molecule/matrix.c)
+
+4×4 LU decomposition, matrix inversion (`_inv`), and affine point transform (`_mult`). Uses single-precision floats. unreach-call is in a separate `_mult_unreach` task file using a dedicated harness.
+
+| Task file | Properties |
+|---|---|
+| `visit-vis_VisIt_matrix_inv.yml` | valid-memsafety=true, no-overflow=true, termination=true |
+| `visit-vis_VisIt_matrix_mult.yml` | valid-memsafety=true, no-overflow=true, termination=true |
+| `visit-vis_VisIt_matrix_mult_unreach.yml` | unreach-call=true |
+
+---
+
+## SV-COMP Category Mapping
+
+Suggested category membership when adding to the sv-benchmarks repository. Each task file is listed under the category matching its actual properties.
+
+### ReachSafety (unreach-call)
+
+| Category | Task files |
+|---|---|
+| `ReachSafety-Arrays` | `antirez_redis_strl`, `antirez_redis_strl_tract`, `natsteven_sorts_bub`, `natsteven_sorts_bub_tract`, `natsteven_sorts_ins`, `natsteven_sorts_ins_tract`, `natsteven_sorts_mer`, `natsteven_sorts_mer_tract`, `natsteven_sorts_sel`, `natsteven_sorts_sel_tract`, `natsteven_sorts_unsort`, `visit-vis_VisIt_dehex_tract`, `visit-vis_VisIt_enhex_tract` |
+| `ReachSafety-Arrays` (expected false) | `DrKLO_Telegram_superfasthash_unreach`, `antirez_redis_localtime_unsafe_unreach`, `antirez_redis_localtime_unsafe_tract_unreach` |
+| `ReachSafety-BitVectors` | `antirez_redis_endianconv`, `antirez_redis_mt19937-64_unreach_ll`, `antirez_redis_mt19937-64_unreach_ull`, `antirez_redis_mt19937-64_unreach_r1`, `antirez_redis_mt19937-64_unreach_r2`, `antirez_redis_mt19937-64_unreach_r3`, `plexinc_plex-home-theater-public_rand_r` |
+| `ReachSafety-Floats` | `visit-vis_VisIt_matrix_mult_unreach` |
+| `ReachSafety-Heap` | `plexinc_plex-home-theater-public_getdelim` |
+| `ReachSafety-Recursive` | `antirez_redis_fastjson_tract`, `plexinc_plex-home-theater-public_fstrcmp`, `plexinc_plex-home-theater-public_fstrcmp_tract`, `natsteven_sorts_mer`, `natsteven_sorts_mer_tract` |
+| `ReachSafety-Integers` | `antirez_redis_localtime`, `antirez_redis_localtime_tract` |
+
+### NoOverflows (no-overflow)
+
+| Category | Task files |
+|---|---|
+| `NoOverflows-BitVectors` | `antirez_redis_mt19937-64`, `antirez_redis_mt19937-64_array`, `plexinc_plex-home-theater-public_rand_r` |
+| `NoOverflows-BitVectors` (expected false) | `DrKLO_Telegram_superfasthash` |
+| `NoOverflows-Other` | `antirez_redis_fastjson`, `antirez_redis_fastjson_tract`, `antirez_redis_localtime`, `antirez_redis_localtime_tract`, `plexinc_plex-home-theater-public_fstrcmp`, `plexinc_plex-home-theater-public_fstrcmp_tract`, `visit-vis_VisIt_matrix_inv`, `visit-vis_VisIt_matrix_mult` |
+| `NoOverflows-Other` (expected false) | `antirez_redis_localtime_unsafe`, `antirez_redis_localtime_unsafe_tract` |
+
+### MemSafety (valid-memsafety)
+
+| Category | Task files |
+|---|---|
+| `MemSafety-Arrays` | `DrKLO_Telegram_superfasthash_tract`, `antirez_redis_mt19937-64`, `antirez_redis_mt19937-64_array`, `antirez_redis_mt19937-64_array_valid-memsafety_tract`, `antirez_redis_strl`, `natsteven_sorts_bub`, `natsteven_sorts_ins`, `natsteven_sorts_mer`, `natsteven_sorts_sel`, `natsteven_sorts_unsort`, `visit-vis_VisIt_dehex`, `visit-vis_VisIt_enhex`, `visit-vis_VisIt_matrix_inv`, `visit-vis_VisIt_matrix_mult` |
+| `MemSafety-Heap` | `plexinc_plex-home-theater-public_getdelim`, `plexinc_plex-home-theater-public_getdelim_tract`, `plexinc_plex-home-theater-public_fstrcmp` |
+| `MemSafety-Other` | `antirez_redis_endianconv`, `antirez_redis_fastjson`, `plexinc_plex-home-theater-public_rand_r` |
+
+### Termination
+
+| Category | Task files |
+|---|---|
+| `Termination-MainHeap` | `plexinc_plex-home-theater-public_getdelim`, `plexinc_plex-home-theater-public_getdelim_tract` |
+| `Termination-MainLoop` | `DrKLO_Telegram_superfasthash_tract`, `antirez_redis_endianconv`, `antirez_redis_fastjson`, `antirez_redis_fastjson_tract`, `antirez_redis_localtime`, `antirez_redis_localtime_tract`, `antirez_redis_localtime_unsafe_term`, `antirez_redis_mt19937-64`, `antirez_redis_mt19937-64_array`, `antirez_redis_strl`, `antirez_redis_strl_tract`, `plexinc_plex-home-theater-public_fstrcmp`, `plexinc_plex-home-theater-public_fstrcmp_tract`, `plexinc_plex-home-theater-public_rand_r`, `natsteven_sorts_bub`, `natsteven_sorts_ins`, `natsteven_sorts_mer`, `natsteven_sorts_mer_tract`, `natsteven_sorts_sel`, `natsteven_sorts_sel_tract`, `natsteven_sorts_unsort_term`, `visit-vis_VisIt_dehex`, `visit-vis_VisIt_dehex_tract`, `visit-vis_VisIt_enhex`, `visit-vis_VisIt_enhex_tract`, `visit-vis_VisIt_matrix_inv`, `visit-vis_VisIt_matrix_mult` |
