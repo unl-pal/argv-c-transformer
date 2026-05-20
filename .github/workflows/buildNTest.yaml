@@ -35,15 +35,21 @@ jobs:
           $Clang = Get-Command clang -ErrorAction SilentlyContinue
           if ($Clang) {
             $LLVMPrefix = Split-Path -Parent (Split-Path -Parent $Clang.Path)
-            $LLVMCMakedir = "$LLVMPrefix\lib\cmake\llvm"
-            $fso = New-Object -ComObject Scripting.FileSystemObject
-            $LLVMLibdirShort = $fso.GetFolder("$LLVMPrefix\lib").ShortPath
             Write-Host "LLVM Prefix: $LLVMPrefix"
-            Write-Host "LLVM CMake dir: $LLVMCMakedir"
-            Write-Host "LLVM lib dir (short): $LLVMLibdirShort"
-            "llvm_cmakedir=$LLVMCMakedir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-            "llvm_libdir=$LLVMLibdirShort" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
             "$LLVMPrefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            $LLVMConfigFile = Get-ChildItem -Path $LLVMPrefix -Recurse -Filter "LLVMConfig.cmake" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($LLVMConfigFile) {
+              $LLVMCMakedir = $LLVMConfigFile.DirectoryName
+              $fso = New-Object -ComObject Scripting.FileSystemObject
+              $LLVMLibdirShort = $fso.GetFolder("$LLVMPrefix\lib").ShortPath
+              Write-Host "LLVM CMake dir: $LLVMCMakedir"
+              Write-Host "LLVM lib dir (short): $LLVMLibdirShort"
+              "llvm_cmakedir=$LLVMCMakedir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+              "llvm_libdir=$LLVMLibdirShort" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            } else {
+              Write-Error "LLVMConfig.cmake not found under $LLVMPrefix - pre-installed LLVM may not include cmake integration files"
+              exit 1
+            }
           } else {
             Write-Error "clang not found on Windows - is LLVM installed?"
             exit 1
