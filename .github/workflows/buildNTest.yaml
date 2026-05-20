@@ -19,71 +19,79 @@ jobs:
           wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
           sudo add-apt-repository "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main"
           sudo apt-get update
-          sudo apt-get install -y clang-19 llvm-19 clang-tools-19 libclang-common-19-dev libclang-19-dev libclang1-19 llvm-19-dev
+          sudo apt-get install -y clang-19 llvm-19 clang-tools-19 libclang-common-19-dev libclang-19-dev libclang1-19 llvm-19-dev libclang-cpp19 libclang-cpp19-dev
       - name: Get Dependencies Mac
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
           brew update
           brew install llvm
-      - name: Get Dependencies Windows
-        if: ${{ matrix.os == 'windows-latest' }}
-        run: >
-          choco install llvm
       - name: Find LLVM Prefix Path Windows
         id: find-llvm-windows
         if: ${{ matrix.os == 'windows-latest' }}
         shell: powershell
         run: |
-          $LLVMConfig = Get-Command llvm-config -ErrorAction SilentlyContinue
-          if ($LLVMConfig) {
-            $LLVMCMakedir = & $LLVMConfig.Path --cmakedir
-            $LLVMPrefix = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $LLVMCMakedir))
+          $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+          $Clang = Get-Command clang -ErrorAction SilentlyContinue
+          if ($Clang) {
+            $LLVMPrefix = Split-Path -Parent (Split-Path -Parent $Clang.Path)
+            $LLVMCMakedir = "$LLVMPrefix\lib\cmake\llvm"
             Write-Host "LLVM Prefix: $LLVMPrefix"
             Write-Host "LLVM CMake dir: $LLVMCMakedir"
             "llvm_cmakedir=$LLVMCMakedir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
             "$LLVMPrefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           } else {
-            Write-Warning "llvm-config command not found on Windows."
-            "llvm_cmakedir=" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            Write-Error "clang not found on Windows — is LLVM installed?"
+            exit 1
           }
-      - name: Find LLVM Prefix Path Unix
-        id: find-llvm-unix
-        if: ${{ matrix.os == 'macos-latest' || matrix.os == 'ubuntu-latest' }}
+      - name: Find LLVM Prefix Path Mac
+        if: ${{ matrix.os == 'macos-latest' }}
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            LLVM_PREFIX="$(brew --prefix llvm)"
-            echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
-            echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
-            echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
-            export PATH="$LLVM_PREFIX/bin:$PATH"
-          fi
+          LLVM_PREFIX="$(brew --prefix llvm)"
+          echo "$LLVM_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "CC=${LLVM_PREFIX}/bin/clang" >> "$GITHUB_ENV"
+          echo "CXX=${LLVM_PREFIX}/bin/clang++" >> "$GITHUB_ENV"
+      - name: Find LLVM CMake Dir Ubuntu
+        id: find-llvm-unix
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        shell: bash
+        run: |
           LLVM_CONFIG_BIN="$(command -v llvm-config-19 || command -v llvm-config || true)"
           if [[ -z "$LLVM_CONFIG_BIN" ]]; then
-            echo "Warning: llvm-config command not found on Unix."
-            echo "llvm_cmakedir=" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "Error: llvm-config not found — LLVM 19 install may have failed."
+            exit 1
           fi
           LLVM_CMAKE_DIR="$("$LLVM_CONFIG_BIN" --cmakedir)"
           echo "llvm_cmakedir=$LLVM_CMAKE_DIR" >> "$GITHUB_OUTPUT"
       - name: Configure CMake
-        # if: ${{ success() }}
-        # if: (steps.find-clang-unix.outcome == 'success' && steps.find-clang-windows.outcome == 'skipped') || (steps.find-clang-windows.outcome == 'success' && steps.find-clang-unix.outcome == 'skipped')
-        # if: (steps.find-clang-unix.status == 'success' || steps.find-clang-windows.status == 'success')
         shell: bash
         run: |
-          if [[ ! -z "${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}" ]]; then
-            LLVM_CMAKE_DIR="${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}"
-          else
-            LLVM_CMAKE_DIR="${{ steps.find-llvm-unix.outputs.llvm_cmakedir }}"
-          fi
-          echo "Using LLVM_DIR: $LLVM_CMAKE_DIR"
-          CMAKE_EXTRA_ARGS=""
           if [[ ! -z "$CC" ]]; then
+            # macOS: use CMAKE_PREFIX_PATH as Homebrew recommends
             LLVM_PREFIX="$(dirname "$(dirname "$CC")")"
-            CMAKE_EXTRA_ARGS="-DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX -DCMAKE_CXX_FLAGS=-isystem${LLVM_PREFIX}/include/c++/v1"
+            echo "macOS: using CMAKE_PREFIX_PATH=$LLVM_PREFIX"
+            cmake -B build -S . -G Ninja \
+              -DCMAKE_PREFIX_PATH="$LLVM_PREFIX" \
+              -DCMAKE_C_COMPILER="$CC" \
+              -DCMAKE_CXX_COMPILER="$CXX" \
+              -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_PREFIX}/lib"
+          elif [[ ! -z "${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}" ]]; then
+            # Windows: use LLVM_DIR
+            LLVM_CMAKE_DIR="${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}"
+            LLVM_LIBDIR="$(dirname "$(dirname "$LLVM_CMAKE_DIR")")"
+            echo "Windows: using LLVM_DIR=$LLVM_CMAKE_DIR"
+            cmake -B build -S . -G Ninja \
+              -DLLVM_DIR="$LLVM_CMAKE_DIR" \
+              -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_LIBDIR}"
+          else
+            # Ubuntu: use LLVM_DIR
+            LLVM_CMAKE_DIR="${{ steps.find-llvm-unix.outputs.llvm_cmakedir }}"
+            LLVM_LIBDIR="$(dirname "$(dirname "$LLVM_CMAKE_DIR")")"
+            echo "Ubuntu: using LLVM_DIR=$LLVM_CMAKE_DIR"
+            cmake -B build -S . -G Ninja \
+              -DLLVM_DIR="$LLVM_CMAKE_DIR" \
+              -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_LIBDIR}"
           fi
-          cmake -B build -S . -G Ninja -DLLVM_DIR="$LLVM_CMAKE_DIR" $CMAKE_EXTRA_ARGS
       - name: Build
         run: |
           ninja -C build
