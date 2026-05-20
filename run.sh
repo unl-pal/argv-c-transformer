@@ -31,6 +31,9 @@ echo "=================================== Using Resources ======================
 clangResourceDir="$(clang -print-resource-dir)"
 echo "Using Resource Directory: $clangResourceDir"
 
+# echo "=================================== Run Download ==================================="
+# python3 ./src/download/Downloader.py "$configFile"
+
 echo "=================================== Run Filter ==================================="
 ./build/filter "$configFile"
 
