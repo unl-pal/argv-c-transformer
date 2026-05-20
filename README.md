@@ -1,48 +1,82 @@
-<!--toc:start-->
-- [ArgV C Transformer](#argv-c-transformer)
-- [Running the Code](#running-the-code)
-  - [Dependencies](#dependencies)
-    - [Clang Resources](#clang-resources)
-  - [Available Targets](#available-targets)
-  - [Temporary Scripts](#temporary-scripts)
-<!--toc:end-->
-
 # ArgV C Transformer
-ArgC transformer takes directories with c files or individual c files and
-attempts to convert the potential files into Benchmarks. This is done using
-user defined parameters to decide what makes for an interesting file as well as
-individual functions.
 
-# Running the Code
+ArgV C Transformer takes C source files or directories and converts them into
+[SV-Comp](https://sv-comp.sosy-lab.org/) style verification benchmarks. It uses
+Clang/LLVM's C++ APIs to parse and rewrite C ASTs according to user-defined
+parameters that determine what makes a file and its functions interesting
+candidates for verification.
 
-Project can be run on folders or individual files as specified by the user.
+See `argc-benchmarks/` for examples of produced benchmarks.
 
-## Dependencies
-- llvm-devel
-- clang-devel
-- cmake
+# Dependencies
 
-### Clang Resources
-To compile the asts without errors on includes from the c file standard library
-headers te clang resource dir must be provided. This can be found by running
-`clang -print-resource-dir`
+**Build:**
+- LLVM/Clang developer toolkit (`llvm-devel`, `clang-devel`)
+- CMake (>= 3.30)
+- Ninja
 
-## Available Targets
-Filter requres that the user provides the location of the *clang-resource-dir*,
-the *dir-to-filter*, and the *propertiesFile* 
+**Downloader (optional):**
+- Python 3
+- GitPython (`pip install GitPython`)
 
-Transform requres that the user provides the the location of the
-*clang-resource-dir* and the *dir-to-transform*
+# Build
 
-Full requires that the user provide the *clang-resource-dir*,
-*file/dir-to-filter* and the *propertiesFile* location
+```sh
+cmake -B build -S . -G Ninja
+ninja -C build filter transform full
+```
 
-## Temporary Scripts
-2 Scripts are provided with similar functionality and can be modified to suit
-user needs as development continues.
+Before running any binary, set the Clang resource directory:
 
-- The `run.sh` file runs does the cmake and build steps using ninja as the
-generator then clears the old results folders and runs the filter and transform
-sequentially with different arguments
-- The `fullRun.sh` script runs the full target comprised of all current parts
-using the same arguments and default locations
+```sh
+export CLANG_RESOURCES=$(clang -print-resource-dir)
+```
+
+This is required for the AST pipeline to correctly resolve standard library
+headers in the files being processed.
+
+# Downloader
+
+The downloader fetches C source repositories from GitHub for use as pipeline
+input. To set it up:
+
+```sh
+python3 -m venv .venv
+source .venv/bin/activate
+pip install GitPython
+```
+
+Then configure the `[File Locations]` section of your config file with a
+`databaseDir` pointing to where repositories should be cloned, and run:
+
+```sh
+python3 src/download/Downloader.py <config>
+```
+
+# Running
+
+All three binaries take a config file as their sole argument:
+
+```sh
+./build/filter    <config>   # filter stage only
+./build/transform <config>   # transform stage only
+./build/full      <config>   # filter then transform
+```
+
+A convenience script is provided that builds and runs both stages sequentially:
+
+```sh
+./run.sh <config>
+```
+
+To include the download step, uncomment the relevant lines in `run.sh`.
+
+## Configuration
+
+Config files use INI syntax. See `properties.config` for all available options.
+Key sections:
+
+- `[File Locations]` — `databaseDir`, `filterDir`, `benchmarkDir`
+- `[Function Requirements]` — per-function thresholds (`minForLoops`, `minTypeIfStmt`, etc.)
+- `[File Requirements and Settings]` — `type`, `minFileLoC`, `useNonStdHeaders`, `keepCompilesOnly`
+- `[Debugging Flags]` — `debug`, `debugLevel` (0–3)

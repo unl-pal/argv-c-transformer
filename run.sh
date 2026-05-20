@@ -1,4 +1,5 @@
 #!/bin/sh
+# Builds and Runs each stage, expecting the configuration file as an argument
 
 if [ -f "$1" ]; then
   configFile="$1"
@@ -12,9 +13,6 @@ set -e
 
 echo "=================================== CMake ==================================="
 cmake -B build -S . -G Ninja
-
-echo "================================ Copy compile_commands ================================"
-cp ./build/compile_commands.json ./compile_commands.json
 
 echo "=================================== Compiling ==================================="
 ninja -C build filter transform
