@@ -36,9 +36,13 @@ jobs:
           if ($Clang) {
             $LLVMPrefix = Split-Path -Parent (Split-Path -Parent $Clang.Path)
             $LLVMCMakedir = "$LLVMPrefix\lib\cmake\llvm"
+            $fso = New-Object -ComObject Scripting.FileSystemObject
+            $LLVMLibdirShort = $fso.GetFolder("$LLVMPrefix\lib").ShortPath
             Write-Host "LLVM Prefix: $LLVMPrefix"
             Write-Host "LLVM CMake dir: $LLVMCMakedir"
+            Write-Host "LLVM lib dir (short): $LLVMLibdirShort"
             "llvm_cmakedir=$LLVMCMakedir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            "llvm_libdir=$LLVMLibdirShort" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
             "$LLVMPrefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           } else {
             Write-Error "clang not found on Windows - is LLVM installed?"
@@ -75,13 +79,14 @@ jobs:
               -DCMAKE_PREFIX_PATH="$LLVM_PREFIX" \
               -DCMAKE_C_COMPILER="$CC" \
               -DCMAKE_CXX_COMPILER="$CXX" \
-              -DCMAKE_CXX_FLAGS="-isystem ${LLVM_PREFIX}/include/c++/v1 -D_LIBCPP_DISABLE_AVAILABILITY" \
+              -DCMAKE_CXX_FLAGS="-I${LLVM_PREFIX}/include/c++/v1 -D_LIBCPP_DISABLE_AVAILABILITY" \
               -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_PREFIX}/lib/c++ -L${LLVM_PREFIX}/lib/unwind -lunwind -L${LLVM_PREFIX}/lib"
           elif [[ ! -z "${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}" ]]; then
             # Windows: use LLVM_DIR
             LLVM_CMAKE_DIR="${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}"
-            LLVM_LIBDIR="$(dirname "$(dirname "$LLVM_CMAKE_DIR")")"
+            LLVM_LIBDIR="${{ steps.find-llvm-windows.outputs.llvm_libdir }}"
             echo "Windows: using LLVM_DIR=$LLVM_CMAKE_DIR"
+            echo "Windows: using lib dir=$LLVM_LIBDIR"
             cmake -B build -S . -G Ninja \
               -DLLVM_DIR="$LLVM_CMAKE_DIR" \
               -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_LIBDIR}"
