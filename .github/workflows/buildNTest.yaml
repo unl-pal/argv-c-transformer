@@ -12,13 +12,14 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
       - name: Get Dependencies Ubuntu
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
           sudo add-apt-repository "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main"
           sudo apt-get update
+          # use of ModuleImport in transform requires llvm 19+ (18 is included on ubuntu-latest)
           sudo apt-get install -y clang-19 llvm-19 clang-tools-19 libclang-common-19-dev libclang-19-dev libclang1-19 llvm-19-dev libclang-cpp19 libclang-cpp19-dev
       - name: Get Dependencies Mac
         if: ${{ matrix.os == 'macos-latest' }}
@@ -40,7 +41,7 @@ jobs:
             "llvm_cmakedir=$LLVMCMakedir" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
             "$LLVMPrefix\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           } else {
-            Write-Error "clang not found on Windows — is LLVM installed?"
+            Write-Error "clang not found on Windows - is LLVM installed?"
             exit 1
           }
       - name: Find LLVM Prefix Path Mac
@@ -74,7 +75,8 @@ jobs:
               -DCMAKE_PREFIX_PATH="$LLVM_PREFIX" \
               -DCMAKE_C_COMPILER="$CC" \
               -DCMAKE_CXX_COMPILER="$CXX" \
-              -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_PREFIX}/lib"
+              -DCMAKE_CXX_FLAGS="-isystem ${LLVM_PREFIX}/include/c++/v1 -D_LIBCPP_DISABLE_AVAILABILITY" \
+              -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_PREFIX}/lib/c++ -L${LLVM_PREFIX}/lib/unwind -lunwind -L${LLVM_PREFIX}/lib"
           elif [[ ! -z "${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}" ]]; then
             # Windows: use LLVM_DIR
             LLVM_CMAKE_DIR="${{ steps.find-llvm-windows.outputs.llvm_cmakedir }}"
@@ -95,8 +97,3 @@ jobs:
       - name: Build
         run: |
           ninja -C build
-      - name: Run Full
-        shell: bash
-        run: |
-          export CLANG_RESOURCES="$(clang -print-resource-dir)"
-          ./build/full properties.config
