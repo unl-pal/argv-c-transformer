@@ -21,7 +21,7 @@ set +e
 
 echo "=================================== Reset Directories ==================================="
 rm -r filteredFiles/*
-rm -r benchmark/*
+rm -r benchmarks/*
 
 set -e
 

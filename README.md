@@ -47,7 +47,7 @@ pip install GitPython
 ```
 
 Then configure the `[File Locations]` section of your config file with a
-`databaseDir` pointing to where repositories should be cloned, and run:
+`downloadDir` pointing to where repositories should be cloned, and run:
 
 ```sh
 python3 src/download/Downloader.py <config>
