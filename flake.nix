@@ -38,7 +38,7 @@
       packages.default = pkgs.clangStdenv.mkDerivation {
         name = "argv-c-transformer";
 
-        src = ./.;
+          src = ./.;
 
         cmakeFlags = getFetchContentFlags (builtins.readFile ./CMakeLists.txt);
 
@@ -61,7 +61,7 @@
       };
       devShells.default = pkgs.mkShell {
         stdenv = pkgs.clangStdenv;
-        inputsFrom = [ packages.default ];
+        inputsFrom = [ packages.argv-argc-transformer ];
       };
     });
 }

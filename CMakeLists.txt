@@ -19,7 +19,6 @@ project(
   LANGUAGES CXX C
 )
 
-find_package(Clang REQUIRED)
 find_package(LLVM REQUIRED)
 
 # NOTE: If adding the downloader to the build system is desirable
