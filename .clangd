@@ -1,6 +1,0 @@
-If:
-  PathMatch: .*benchmarks/.*\.c
-
-CompileFlags:
-  Add: [-xc, -std=c11]
-  Remove: [-xc++, -std=c++17]
