@@ -137,9 +137,6 @@ void Filterer::parseConfigFile(std::string configFile) {
   }
 }
 
-/// Checks a file for compliance with set config properties
-/// @param fileName : name of the file to check
-/// @return : boolean true if the file passes the filter
 bool Filterer::checkPotentialFile(std::string fileName) {
   std::ifstream file(fileName);
   std::stringstream buffer;
