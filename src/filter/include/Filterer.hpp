@@ -5,46 +5,92 @@
 #include <string>
 #include <vector>
 
+/**
+ * @brief Runtime configuration loaded from the INI-style config file.
+ *
+ * Holds the path settings and flags that live outside the numeric threshold
+ * map — i.e. things that are not per-function min/max counts.
+ */
 struct filterConfigs {
-  std::string databaseDir;
-  std::string filterDir;
-  int debugLevel;
-  bool wipeOldBenchmarks;
+  std::string databaseDir;     ///< Directory containing the source repos to filter
+  std::string filterDir;       ///< Output directory for files that pass the filter
+  int         debugLevel;      ///< Verbosity level (0 = off)
+  bool        wipeOldBenchmarks; ///< Not yet implemented; reserved for future use
 };
 
+/**
+ * @brief Top-level orchestrator for the filter step.
+ *
+ * Reads a config file, walks a directory tree of C source files, applies a
+ * quick pre-filter (header check + line-count bounds), then runs the full
+ * Clang AST pipeline on each file that passes. Filtered output is written to
+ * filterDir, mirroring the original directory structure.
+ */
 class Filterer {
 public:
+  /**
+   * @brief Constructs a Filterer and immediately parses the config file.
+   *
+   * @param configFile Path to the INI-style properties file.
+   */
   Filterer(std::string configFile);
 
   /**
-   * @brief Parses the config file and creates the config map
+   * @brief Parses the config file, populating the threshold map and type lists.
    *
-   * @param configFile 
+   * Numeric thresholds go into {@code config}. The special {@code type} key
+   * populates {@code typesRequested} and {@code typeNames}. Path settings go
+   * into {@code configuration}. Unknown keys are reported to stdout.
+   *
+   * @param configFile Path to the INI-style properties file.
    */
   void parseConfigFile(std::string configFile);
 
   /**
-   * @brief Checks a file for compatibilty and populates pointers to file's contents
+   * @brief Quick pre-filter check run before the full Clang AST pass.
    *
-   * @param fileName
-   * @return true or false depending on compatibility
+   * Rejects files that include non-standard headers (when useNonStdHeaders is
+   * 0) or whose non-empty line count falls outside [minFileLoC, maxFileLoC].
+   *
+   * @param fileName Path to the C source file to check.
+   * @return {@code true} if the file should proceed to the AST pass.
    */
   bool checkPotentialFile(std::string fileName);
 
-  /// Finds all C files in a path
-  /// single file path or dir are both acceptable
+  /**
+   * @brief Recursively collects all .c files under a path into a vector.
+   *
+   * Accepts either a single file or a directory. Directories are walked
+   * recursively. Non-.c files and files without extensions are skipped.
+   *
+   * @param pathObject    Root path to search.
+   * @param filesToFilter Output vector; matching file paths are appended.
+   * @param numFiles      Running count of files found (default 0).
+   * @return Total number of .c files found.
+   */
   int getAllCFiles(std::filesystem::path pathObject,
-                   std::vector<std::string> &filesToFilter, int numFiles = 0);
+                  std::vector<std::string> &filesToFilter, int numFiles = 0);
 
-  /// Debugger that is only partially implemented and not ready for use
+  /**
+   * @brief Prints a debug message if debug mode is enabled.
+   *
+   * @param info Message to print.
+   */
   void debugInfo(std::string info);
 
-  /// Main driver for the rest of the code creating the filter tool and running
-  /// it on each file found in the path that has potential
+  /**
+   * @brief Main entry point — collects files, pre-filters, and runs the AST pipeline.
+   *
+   * For each .c file that passes {@code checkPotentialFile}, builds a Clang
+   * tool invocation and runs the full filter consumer chain (count → filter →
+   * remove → inject verifiers), writing the result to filterDir.
+   *
+   * @return 0 on success.
+   */
   int run();
 
 private:
-  /// vector of all standard library names to compare includes to
+  /// C standard library header names used to distinguish std from non-std includes.
   const std::vector<std::string> stdLibNames = {
       "assert.h",    "complex.h",  "ctype.h",   "errno.h",     "fenv.h",
       "float.h",     "inttypes.h", "iso646.h",  "limits.h",    "locale.h",
@@ -54,13 +100,21 @@ private:
       "string.h",    "tgmath.h",   "threads.h", "time.h",      "uchar.h",
       "wchar.h",     "wctype.h",   "string"};
 
+  /// Clang BuiltinType enum values for each type requested via the config's {@code type} key.
   std::vector<unsigned int> typesRequested;
+
+  /// Human-readable names parallel to typesRequested (same index = same type).
   std::vector<std::string> typeNames;
 
-  /// Map of Valid Config Settings with Default Values
+  /**
+   * @brief Per-function and per-file numeric thresholds loaded from the config.
+   *
+   * Keys follow the pattern min/max + metric name (e.g. minForLoops,
+   * maxFileLoC). Defaults are 0 for minimums and 99999 for maximums, meaning
+   * no filtering unless explicitly configured.
+   */
   std::map<std::string, int> config = {
     {"debug", 1},
-    // {"debugLevel", 0},
     {"maxCallFunc", 99999},
     {"maxFileLoC", 99999},
     {"maxForLoops", 99999},
@@ -97,5 +151,7 @@ private:
     {"minWhileLoops", 0},
     {"useNonStdHeaders", 0}
   };
+
+  /// Path settings and flags that don't fit the numeric threshold map.
   struct filterConfigs configuration;
 };
