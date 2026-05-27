@@ -14,22 +14,26 @@ struct filterConfigs {
 
 class Filterer {
 public:
-  /// Constructor for the Filterer Object
   Filterer(std::string configFile);
 
-  /// Parse the config file creating the config map used by the rest of the
-  /// filter steps
+  /**
+   * @brief Parses the config file and creates the config map
+   *
+   * @param configFile 
+   */
   void parseConfigFile(std::string configFile);
 
-  /// Using the filename and contents this function iterates through the file
-  /// and adds to the contents pointer as needed returning true on a file that
-  /// has potential for our tool or false on a undesirable file. The contents
-  /// are only populated in the case of the file being desireable
-  bool checkPotentialFile(std::string                  fileName);
+  /**
+   * @brief Checks a file for compatibilty and populates pointers to file's contents
+   *
+   * @param fileName
+   * @return true or false depending on compatibility
+   */
+  bool checkPotentialFile(std::string fileName);
 
-  /// Finds all C files in a path 
+  /// Finds all C files in a path
   /// single file path or dir are both acceptable
-  int getAllCFiles(std::filesystem::path     pathObject,
+  int getAllCFiles(std::filesystem::path pathObject,
                    std::vector<std::string> &filesToFilter, int numFiles = 0);
 
   /// Debugger that is only partially implemented and not ready for use
@@ -42,19 +46,19 @@ public:
 private:
   /// vector of all standard library names to compare includes to
   const std::vector<std::string> stdLibNames = {
-    "assert.h",    "complex.h",  "ctype.h",   "errno.h",     "fenv.h",
-    "float.h",     "inttypes.h", "iso646.h",  "limits.h",    "locale.h",
-    "math.h",      "setjmp.h",   "signal.h",  "stdalign.h",  "stdarg.h",
-    "stdatomic.h", "stdbit.h",   "stdbool.h", "stdckdint.h", "stddef.h",
-    "stdint.h",    "stdio.h",    "stdlib.h",  "stdmchar.h",  "stdnoreturn.h",
-    "string.h",    "tgmath.h",   "threads.h", "time.h",      "uchar.h",
-    "wchar.h",     "wctype.h", "string"};
+      "assert.h",    "complex.h",  "ctype.h",   "errno.h",     "fenv.h",
+      "float.h",     "inttypes.h", "iso646.h",  "limits.h",    "locale.h",
+      "math.h",      "setjmp.h",   "signal.h",  "stdalign.h",  "stdarg.h",
+      "stdatomic.h", "stdbit.h",   "stdbool.h", "stdckdint.h", "stddef.h",
+      "stdint.h",    "stdio.h",    "stdlib.h",  "stdmchar.h",  "stdnoreturn.h",
+      "string.h",    "tgmath.h",   "threads.h", "time.h",      "uchar.h",
+      "wchar.h",     "wctype.h",   "string"};
 
   std::vector<unsigned int> typesRequested;
   std::vector<std::string> typeNames;
 
   /// Map of Valid Config Settings with Default Values
-  std::map<std::string, int> *config = new std::map<std::string, int>({
+  std::map<std::string, int> config = {
     {"debug", 1},
     // {"debugLevel", 0},
     {"maxCallFunc", 99999},
@@ -92,6 +96,6 @@ private:
     {"minTypeVariables", 0},
     {"minWhileLoops", 0},
     {"useNonStdHeaders", 0}
-  });
+  };
   struct filterConfigs configuration;
 };

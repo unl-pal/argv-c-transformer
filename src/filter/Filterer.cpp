@@ -25,26 +25,24 @@ const std::string defaultDatabaseDir = "database";
 /// Not yet implemented in code - currently handled by scripts
 const bool defaultWipeOldBenchmarks = true;
 
-Filterer::Filterer(std::string configFile){
-  typesRequested = std::vector<unsigned int>();
-  typeNames = std::vector<std::string>();
+Filterer::Filterer(std::string configFile) {
   configuration.debugLevel = defaultDebugLevel;
   configuration.filterDir = defaultFilterDir;
   configuration.databaseDir = defaultDatabaseDir;
   configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
   parseConfigFile(configFile);
-
 };
 
 // Parse the config file for all settings as well as a list of desired types
 /// TODO MAKE THE PARSERS MORE SECURE!!
 void Filterer::parseConfigFile(std::string configFile) {
-  std::ifstream file(configFile);
+  // Check existence before attempting to open
   if (!std::filesystem::exists(configFile)) {
     std::cout << "File: " << configFile << " Does Not Exist" << std::endl;
     std::cout << "Using Default Settings" << std::endl;
     return;
   }
+  std::ifstream file(configFile);
   if (file.is_open()) {
     std::cout << "Using: " << configFile << " Specified Settings" << std::endl;
     std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|[\\w\\s,]+|[\\w/-_.]+)$");
@@ -55,42 +53,44 @@ void Filterer::parseConfigFile(std::string configFile) {
         std::string key = match[1];
         std::string value = match[2];
         // Add the value to the config if the key is a member of the map
-        if (config->count(key)) {
+        if (config.count(key)) {
           try {
             int i = std::stoi(value);
-            config->at(key) = i;
+            config.at(key) = i;
           } catch (...) {
-          } 
-          // For true false values convert to 1s and 0s
+          }
+          // For true/false values convert to 1s and 0s
           if (value == "false" || value == "False") {
-            config->at(key) = 0;
+            config.at(key) = 0;
           } else if (value == "true" || value == "True") {
-            config->at(key) = 1;
+            config.at(key) = 1;
           }
         }
-        // For types go through all given types and add only supported types to the list
+        // "type" is not in the config map so it falls through to here
         else if (key == "type" || key == "Type") {
-          std::vector<std::string> allTypes = std::vector<std::string>();
           std::regex typePattern("([\\w]+)");
           std::smatch typeMatches;
-          std::regex_search(value, typeMatches, typePattern);
           while (std::regex_search(value, typeMatches, typePattern)) {
-          if (typeMatches[0] == "int" || typeMatches[0] == "Int") {
-            typesRequested.push_back(clang::BuiltinType::Int);
-            typeNames.push_back(typeMatches[0]);
-          } else if (typeMatches[0] == "float" || typeMatches[0] == "Float") {
-            typesRequested.push_back(clang::BuiltinType::Float);
-            typeNames.push_back(typeMatches[0]);
-          } else if (typeMatches[0] == "long" || typeMatches[0] == "Long") {
-            typesRequested.push_back(clang::BuiltinType::Long);
-            typeNames.push_back(typeMatches[0]);
-          } else if (typeMatches[0] == "bool" || typeMatches[0] == "Bool") {
-            typesRequested.push_back(clang::BuiltinType::Bool);
-            typeNames.push_back(typeMatches[0]);
-          } else if (typeMatches[0] == "char" || typeMatches[0] == "Char") {
-            typesRequested.push_back(clang::BuiltinType::UChar);
-            typeNames.push_back(typeMatches[0]);
+            if (typeMatches[0] == "int" || typeMatches[0] == "Int") {
+              typesRequested.push_back(clang::BuiltinType::Int);
+              typeNames.push_back(typeMatches[0]);
+            } else if (typeMatches[0] == "float" || typeMatches[0] == "Float") {
+              typesRequested.push_back(clang::BuiltinType::Float);
+              typeNames.push_back(typeMatches[0]);
+            } else if (typeMatches[0] == "long" || typeMatches[0] == "Long") {
+              typesRequested.push_back(clang::BuiltinType::Long);
+              typeNames.push_back(typeMatches[0]);
+            } else if (typeMatches[0] == "bool" || typeMatches[0] == "Bool") {
+              typesRequested.push_back(clang::BuiltinType::Bool);
+              typeNames.push_back(typeMatches[0]);
+            } else if (typeMatches[0] == "char" || typeMatches[0] == "Char") {
+              typesRequested.push_back(clang::BuiltinType::UChar);
+              typeNames.push_back(typeMatches[0]);
+            } else {
+              std::cout << "Warning: unrecognised type '" << typeMatches[0]
+                        << "' ignored" << std::endl;
             }
+            // Advance past the current match to find the next type token
             value = typeMatches.suffix().str();
           }
         } else if (key == "databaseDir") {
@@ -103,6 +103,7 @@ void Filterer::parseConfigFile(std::string configFile) {
         } else if (key == "filterDir") {
           configuration.filterDir = value;
           if (!std::filesystem::exists(value)) {
+            std::cout << "Creating filter output directory: " << value << std::endl;
             std::filesystem::create_directory(value);
           }
         } else if (key == "debugLevel") {
@@ -112,17 +113,19 @@ void Filterer::parseConfigFile(std::string configFile) {
             configuration.debugLevel = 0;
           }
         } else if (key == "wipeOldBenchmarks") {
-          configuration.wipeOldBenchmarks = (value == "true" || value == "True");
+          configuration.wipeOldBenchmarks =
+              (value == "true" || value == "True");
         } else {
           std::cout << "Key: " << key
-            << " Is Not A Valid Key For Filtering Files" << std::endl;
+                    << " Is Not A Valid Key For Filtering Files" << std::endl;
         }
       }
     }
     file.close();
     std::cout << "Using Config Settings:" << std::endl;
-    for (std::pair item : *config) {
-      std::cout << "Property: " << item.first << "=" << item.second << std::endl;
+    for (std::pair item : config) {
+      std::cout << "Property: " << item.first << "=" << item.second
+                << std::endl;
     }
     std::cout << "For Types: " << std::endl;
     for (std::string T : typeNames) {
@@ -136,7 +139,6 @@ void Filterer::parseConfigFile(std::string configFile) {
 
 /// Checks a file for compliance with set config properties
 /// @param fileName : name of the file to check
-/// @param contents : string pointer containing the contents of the file
 /// @return : boolean true if the file passes the filter
 bool Filterer::checkPotentialFile(std::string fileName) {
   std::ifstream file(fileName);
@@ -145,16 +147,16 @@ bool Filterer::checkPotentialFile(std::string fileName) {
 
   if (file.is_open()) {
     // Old logic for Macro filtering, could be handled by AST Action
-    std::regex allowedHeadersPattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
+    std::regex allowedHeadersPattern(
+        "#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
     std::regex macroPattern("macro"); // Place holder for if we allow macros
     std::string line;
     std::smatch match;
     int count = 0;
     while (std::getline(file, line)) {
       if (std::regex_search(line, match, allowedHeadersPattern)) {
-        if (std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) !=
-            stdLibNames.end()) {
-        } else if (!config->at("useNonStdHeaders")) {
+        bool isStdLib = std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) != stdLibNames.end();
+        if (!isStdLib && !config.at("useNonStdHeaders")) {
           file.close();
           return false;
         }
@@ -165,9 +167,9 @@ bool Filterer::checkPotentialFile(std::string fileName) {
       buffer << line << std::endl;
     }
     file.close();
-    if (count < config->at("minFileLoC")) {
+    if (count < config.at("minFileLoC")) {
       return false;
-    } else if (count > config->at("maxFileLoC")) {
+    } else if (count > config.at("maxFileLoC")) {
       return false;
     } else {
       return true;
@@ -183,7 +185,7 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
                            std::vector<std::string> &filesToFilter,
                            int numFiles) {
   if (!std::filesystem::exists(pathObject)) {
-    if (config->at("debug")) {
+    if (config.at("debug")) {
       std::cout << "Path: " << " Does Not Exist" << std::endl;
     }
     return 0;
@@ -191,21 +193,21 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   if (std::filesystem::is_regular_file(pathObject)) {
     if (pathObject.has_extension()) {
       if (pathObject.extension() == ".c") {
-        if (config->at("debug")) {
+        if (config.at("debug")) {
           std::cout << "File: " << pathObject.filename()
                     << " Added To Filter List" << std::endl;
         }
         filesToFilter.push_back(pathObject.string());
         return 1;
       } else {
-        if (config->at("debug")) {
+        if (config.at("debug")) {
           std::cout << "File: " << pathObject.filename() << " is Not a C File"
                     << std::endl;
         }
         return 0;
       }
     } else {
-      if (config->at("debug")) {
+      if (config.at("debug")) {
         std::cout << "File: " << pathObject.filename() << " Has No Extension"
                   << std::endl;
       }
@@ -218,7 +220,7 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
     }
     return numFiles;
   } else {
-    if (config->at("debug")) {
+    if (config.at("debug")) {
       std::cout << "Path: " << pathObject.filename() << " Ignored" << std::endl;
     }
     return 0;
@@ -226,10 +228,9 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   return 0;
 }
 
-// Debug statement creator for filterer, not fully implemented in the file nor
-// with the severity  flag value
+// Debug statement creator for filterer, not fully implemented
 void Filterer::debugInfo(std::string info) {
-  if (config->at("debug")) {
+  if (config.at("debug")) {
     std::cout << info << std::endl;
   }
 }
@@ -255,11 +256,11 @@ int Filterer::run() {
       std::filesystem::path oldPath(fileName);
       std::filesystem::path newPath(std::filesystem::current_path() /
                                     configuration.filterDir);
-      /// set up the new path in filteredFiles to keep directory structure
-      // prevent writing outside the project directory for now
+      // Reconstruct the path under filterDir, skipping ".." and the databaseDir
+      // root so we don't write outside the project or double-include the source root
       for (const std::filesystem::path &component : oldPath) {
-        if (component.string() != ".."
-          || component.string() == configuration.databaseDir) {
+        if (component.string() != ".." &&
+            component.string() != configuration.databaseDir) {
           newPath /= component;
         }
       }
@@ -274,37 +275,29 @@ int Filterer::run() {
       try {
         resourceDir = std::getenv("CLANG_RESOURCES");
       } catch (...) {
-        std::cout << "Please set the CLANG_RESOURCES environment vairable "
+        std::cout << "Please set the CLANG_RESOURCES environment variable "
                      "before proceeding"
                   << std::endl;
         return 1;
       }
 
-      /// Set args for AST creation order does matter
-      /// all args are passed to "clang" which is used for AST creation
-      std::vector<std::string> args = std::vector<std::string>({
-        "clang",
-        "-extra-arg=-xc",
-        "-extra-arg=-resource-dir=" + resourceDir,
-        "-extra-arg=-fparse-all-comments",
-        oldPath.string(),
-        // "-extra-arg=-Wdocumentation",
-      });
+      // Arguments passed to the Clang invocation (order matters):
+      std::vector<std::string> args = {
+          "clang",
+          "-extra-arg=-xc",
+          "-extra-arg=-resource-dir=" + resourceDir,
+          "-extra-arg=-fparse-all-comments",
+          oldPath.string(),
+      };
 
-      int argc = args.size();
-
-      char** argv = new char*[argc + 1];
-
-      for (int i=0; i<argc; i++) {
-        argv[i] = new char[args[i].length() + 1];
-        std::strcpy(argv[i], args[i].c_str());
+      // CommonOptionsParser requires a C-style argc/argv; build it from the
+      // vector using .c_str() pointers (valid as long as args is alive)
+      std::vector<const char *> argv;
+      for (const std::string &arg : args) {
+        argv.push_back(arg.c_str());
       }
-
-      argv[argc] = nullptr;
-
-      if (argv == nullptr) {
-        return 1;
-      }
+      argv.push_back(nullptr);
+      int argc = static_cast<int>(args.size());
 
       std::filesystem::create_directories(newPath.parent_path());
 
@@ -312,8 +305,8 @@ int Filterer::run() {
       llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
 
       llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
-        clang::tooling::CommonOptionsParser::create(argc, (const char **)argv,
-                                                    myToolCategory);
+          clang::tooling::CommonOptionsParser::create(argc, argv.data(),
+                                                      myToolCategory);
       if (!expectedParser) {
         llvm::errs() << expectedParser.takeError();
         return 1;
@@ -332,7 +325,7 @@ int Filterer::run() {
 
       llvm::outs() << "Creating Factory\n";
 
-      FrontendFactoryWithArgs factory(config, typesRequested, output);
+      FrontendFactoryWithArgs factory(&config, typesRequested, output);
 
       llvm::outs() << "Run the Tool\n";
 
@@ -340,7 +333,7 @@ int Filterer::run() {
 
       output.close();
 
-      if (config->at("debug") && std::filesystem::exists(newPath)) {
+      if (config.at("debug") && std::filesystem::exists(newPath)) {
         std::ifstream file(newPath.string());
         std::stringstream buffer;
 
@@ -354,7 +347,7 @@ int Filterer::run() {
       }
     } else {
       std::cerr << "File: " << fileName << " Does Not Meet Criteria"
-        << std::endl;
+                << std::endl;
     }
   }
   return 0;
