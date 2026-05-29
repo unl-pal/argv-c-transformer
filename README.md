@@ -10,14 +10,38 @@ See `argc-benchmarks/` for examples of produced benchmarks.
 
 # Dependencies
 
-**Build:**
-- LLVM/Clang developer toolkit (`llvm-devel`, `clang-devel`)
-- CMake (>= 3.30)
-- Ninja
+This project requires **LLVM/Clang 20**, CMake (>= 3.20), and Ninja.
 
-**Downloader (optional):**
-- Python 3
-- GitPython (`pip install GitPython`)
+## macOS (Homebrew)
+
+macOS ships a stripped-down Apple Clang that does not include the linkable
+`clang-cpp`/`clang` libraries or `llvm-config` required to build this project.
+Install the full LLVM toolchain via Homebrew:
+
+```sh
+brew install cmake ninja llvm@20 lld
+```
+
+`llvm@20` is keg-only (not symlinked into `/opt/homebrew`) so CMake cannot find
+it automatically — `CMakeLists.txt` handles this on Apple platforms. No extra
+flags are needed when invoking CMake.
+
+## Linux (Debian/Ubuntu)
+
+LLVM 20 is available directly from Ubuntu 24.04's default apt repos:
+
+```sh
+sudo apt install cmake ninja-build \
+  clang-20 libclang-20-dev libclang-cpp20-dev llvm-20-dev lld-20 \
+  zlib1g-dev libzstd-dev libedit-dev
+```
+
+When invoking CMake, point it at the versioned compiler:
+
+```sh
+CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja
+```
+
 
 # Build
 
@@ -26,19 +50,17 @@ cmake -B build -S . -G Ninja
 ninja -C build filter transform full
 ```
 
-Before running any binary, set the Clang resource directory:
+Before running any binary, set the Clang resource directory — required for the
+AST pipeline to resolve standard library headers in processed files:
 
 ```sh
 export CLANG_RESOURCES=$(clang -print-resource-dir)
 ```
 
-This is required for the AST pipeline to correctly resolve standard library
-headers in the files being processed.
-
-# Downloader
+# Downloader (optional)
 
 The downloader fetches C source repositories from GitHub for use as pipeline
-input. To set it up:
+input:
 
 ```sh
 python3 -m venv .venv
@@ -46,8 +68,8 @@ source .venv/bin/activate
 pip install GitPython
 ```
 
-Then configure the `[File Locations]` section of your config file with a
-`downloadDir` pointing to where repositories should be cloned, and run:
+Configure the `[File Locations]` section of your config file with a `downloadDir`
+pointing to where repositories should be cloned, then run:
 
 ```sh
 python3 src/download/Downloader.py <config>
@@ -63,7 +85,7 @@ All three binaries take a config file as their sole argument:
 ./build/full      <config>   # filter then transform
 ```
 
-A convenience script is provided that builds and runs both stages sequentially:
+A convenience script builds and runs both stages sequentially:
 
 ```sh
 ./run.sh <config>
