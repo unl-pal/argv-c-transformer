@@ -24,15 +24,15 @@ jobs:
 
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install cmake ninja llvm@20 lld
+        run: brew install cmake ninja llvm@20 lld@20
 
       - name: Configure (Ubuntu)
         if: runner.os == 'Linux'
-        run: CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja
+        run: CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja -DLLVM_DIR=/usr/lib/llvm-20/lib/cmake/llvm
 
       - name: Configure (macOS)
         if: runner.os == 'macOS'
-        run: cmake -B build -S . -G Ninja
+        run: cmake -B build -S . -G Ninja -DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)
 
       - name: Build
         run: ninja -C build filter transform full
