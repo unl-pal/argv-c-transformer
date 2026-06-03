@@ -19,7 +19,7 @@ macOS ships a stripped-down Apple Clang that does not include the linkable
 Install the full LLVM toolchain via Homebrew:
 
 ```sh
-brew install cmake ninja llvm@20 lld
+brew install cmake ninja llvm@20 lld@20
 ```
 
 `llvm@20` is keg-only (not symlinked into `/opt/homebrew`) so CMake cannot find
