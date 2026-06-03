@@ -1,16 +1,34 @@
-cmake_minimum_required(VERSION 3.30)
+cmake_minimum_required(VERSION 3.20)
 
-set(CMAKE_CXX_COMPILER clang++)
+if(APPLE)
+  if(EXISTS /opt/homebrew/opt/llvm@20)
+    set(LLVM_HOMEBREW_PREFIX /opt/homebrew/opt/llvm@20)
+  elseif(EXISTS /usr/local/opt/llvm@20)
+    set(LLVM_HOMEBREW_PREFIX /usr/local/opt/llvm@20)
+  else()
+    message(FATAL_ERROR "llvm@20 not found (expected Homebrew llvm@20). Install with: brew install llvm@20")
+  endif()
+
+  set(CMAKE_CXX_COMPILER "${LLVM_HOMEBREW_PREFIX}/bin/clang++")
+  set(CMAKE_C_COMPILER "${LLVM_HOMEBREW_PREFIX}/bin/clang")
+  list(APPEND CMAKE_PREFIX_PATH "${LLVM_HOMEBREW_PREFIX}")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(
   argv-argc-transformer
   VERSION 0.0.0
-  LANGUAGES CXX
+  LANGUAGES C CXX
 )
 
 find_package(LLVM REQUIRED)
+if(LLVM_PACKAGE_VERSION VERSION_LESS "20")
+  message(FATAL_ERROR "LLVM 20 required, found ${LLVM_PACKAGE_VERSION}")
+endif()
+
+link_directories(${LLVM_LIBRARY_DIRS})
 
 set(LLVM_LIBS LLVM LLVMSupport clang-cpp clang)
 

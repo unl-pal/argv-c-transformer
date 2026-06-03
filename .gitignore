@@ -1,5 +1,7 @@
 # Build
 build/
+build-*/
+cmake-build-*/
 
 # Pipeline I/O defaults
 /database
@@ -14,3 +16,6 @@ build/
 argc-benchmarks/update-benches.sh
 /notes/
 CLAUDE.md
+
+## IDEs
+.idea/
