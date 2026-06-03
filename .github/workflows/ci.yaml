@@ -4,40 +4,38 @@ on:
   workflow_dispatch:
   pull_request:
 
+# TODO: CI is currently a work in progress.
+# Get local builds working on each platform first, then rewrite this workflow
+# to mirror the working local setup. Requires LLVM >= 19 on all platforms.
+
 jobs:
-  build-and-test-on-all-OS:
+  build:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-24.04, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4.2.2
 
-      - name: Get Dependencies Ubuntu
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
         run: |
-          wget -qO - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo add-apt-repository "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main"
           sudo apt-get update
-          # ModuleImported parameter in PPCallbacks::InclusionDirective requires LLVM >= 19
-          # ubuntu-latest (24.04) only ships LLVM 18 by default
-          sudo apt-get install -y clang-19 llvm-19 clang-tools-19 \
-            libclang-common-19-dev libclang-19-dev libclang1-19 llvm-19-dev \
-            libclang-cpp19 libclang-cpp19-dev
+          sudo apt-get install -y cmake ninja-build \
+            clang-20 libclang-20-dev libclang-cpp20-dev llvm-20-dev lld-20 \
+            zlib1g-dev libzstd-dev libedit-dev
 
-      - name: Find LLVM CMake Dir
-        id: find-llvm
-        run: |
-          LLVM_CONFIG_BIN="$(command -v llvm-config-19 || command -v llvm-config)"
-          echo "llvm_cmakedir=$("$LLVM_CONFIG_BIN" --cmakedir)" >> "$GITHUB_OUTPUT"
-          echo "llvm_libdir=$("$LLVM_CONFIG_BIN" --libdir)" >> "$GITHUB_OUTPUT"
-          echo "clang_resources=$(clang-19 -print-resource-dir)" >> "$GITHUB_OUTPUT"
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja llvm@20 lld@20
 
-      - name: Configure CMake
-        run: |
-          cmake -B build -S . -G Ninja \
-            -DLLVM_DIR="${{ steps.find-llvm.outputs.llvm_cmakedir }}" \
-            -DCMAKE_EXE_LINKER_FLAGS="-L${{ steps.find-llvm.outputs.llvm_libdir }}"
+      - name: Configure (Ubuntu)
+        if: runner.os == 'Linux'
+        run: CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja -DLLVM_DIR="$(llvm-config-20 --cmakedir)"
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: cmake -B build -S . -G Ninja -DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)
 
       - name: Build
         run: ninja -C build filter transform full filter_tests
