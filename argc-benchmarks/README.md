@@ -12,9 +12,9 @@ Benchmarks generated from real-world C OSS code found on github. Code is modifie
 Preprocessing is performed with `gcc -E -P -std=gnu11 -m64 (src).c -o (src).i`.
 
 [Github](https://github.com/unl-pal/argv-c-transformer)
-Contact: [Nathanael Steven](nathanaelsteven@u.boisestate.edu) (main developer)
-[Dr. Elena Sherman](elenasherman@boisestate.edu)
-[Dr. Robert Dyer](rdyer@unl.edu)
+Contact: [Nathanael Steven](mailto:nathanaelsteven@u.boisestate.edu) (main developer)
+[Dr. Elena Sherman](mailto:elenasherman@boisestate.edu)
+[Dr. Robert Dyer](mailto:rdyer@unl.edu)
 
 ---
 
