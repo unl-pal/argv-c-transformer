@@ -10,6 +10,7 @@ if(APPLE)
   endif()
 
   set(CMAKE_CXX_COMPILER "${LLVM_HOMEBREW_PREFIX}/bin/clang++")
+  set(CMAKE_C_COMPILER "${LLVM_HOMEBREW_PREFIX}/bin/clang")
   list(APPEND CMAKE_PREFIX_PATH "${LLVM_HOMEBREW_PREFIX}")
 endif()
 
@@ -19,7 +20,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 project(
   argv-argc-transformer
   VERSION 0.0.0
-  LANGUAGES CXX
+  LANGUAGES C CXX
 )
 
 find_package(LLVM REQUIRED)
