@@ -55,7 +55,7 @@ target_link_libraries(filter_lib PRIVATE ${LLVM_LIBS})
 
 add_executable(filter src/filter/main.cpp)
 add_executable(transform src/transform/main.cpp ${SOURCE_TRANSFORM})
-add_executable(full src/full/main.cpp ${SOURCE_FILTER} ${SOURCE_TRANSFORM})
+add_executable(full src/full/main.cpp ${SOURCE_TRANSFORM})
 
 target_include_directories(filter SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_FILTER})
 target_include_directories(transform SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM})
@@ -63,7 +63,7 @@ target_include_directories(full SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TR
 
 target_link_libraries(filter PRIVATE filter_lib ${LLVM_LIBS})
 target_link_libraries(transform PRIVATE ${LLVM_LIBS})
-target_link_libraries(full PRIVATE ${LLVM_LIBS})
+target_link_libraries(full PRIVATE filter_lib ${LLVM_LIBS})
 
 if(UNIX)
   set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
