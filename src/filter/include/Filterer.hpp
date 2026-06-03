@@ -12,10 +12,9 @@
  * map — i.e. things that are not per-function min/max counts.
  */
 struct filterConfigs {
-  std::string databaseDir;     ///< Directory containing the source repos to filter
-  std::string filterDir;       ///< Output directory for files that pass the filter
-  int         debugLevel;      ///< Verbosity level (0 = off)
-  bool        wipeOldBenchmarks; ///< Not yet implemented; reserved for future use
+  std::string databaseDir; ///< Directory containing the source repos to filter
+  std::string filterDir;   ///< Output directory for files that pass the filter
+  bool wipeOldBenchmarks;  ///< Not yet implemented; reserved for future use
 };
 
 /**
@@ -68,8 +67,8 @@ public:
    * @param numFiles      Running count of files found (default 0).
    * @return Total number of .c files found.
    */
-  int getAllCFiles(std::filesystem::path pathObject,
-                  std::vector<std::string> &filesToFilter, int numFiles = 0);
+  int getAllCFiles(std::filesystem::path pathObject, std::vector<std::string> &filesToFilter,
+                   int numFiles = 0);
 
   /**
    * @brief Prints a debug message if debug mode is enabled.
@@ -92,13 +91,12 @@ public:
 private:
   /// C standard library header names used to distinguish std from non-std includes.
   const std::vector<std::string> stdLibNames = {
-      "assert.h",    "complex.h",  "ctype.h",   "errno.h",     "fenv.h",
-      "float.h",     "inttypes.h", "iso646.h",  "limits.h",    "locale.h",
-      "math.h",      "setjmp.h",   "signal.h",  "stdalign.h",  "stdarg.h",
-      "stdatomic.h", "stdbit.h",   "stdbool.h", "stdckdint.h", "stddef.h",
-      "stdint.h",    "stdio.h",    "stdlib.h",  "stdmchar.h",  "stdnoreturn.h",
-      "string.h",    "tgmath.h",   "threads.h", "time.h",      "uchar.h",
-      "wchar.h",     "wctype.h",   "string"};
+      "assert.h",      "complex.h",  "ctype.h",  "errno.h",     "fenv.h",   "float.h",
+      "inttypes.h",    "iso646.h",   "limits.h", "locale.h",    "math.h",   "setjmp.h",
+      "signal.h",      "stdalign.h", "stdarg.h", "stdatomic.h", "stdbit.h", "stdbool.h",
+      "stdckdint.h",   "stddef.h",   "stdint.h", "stdio.h",     "stdlib.h", "stdmchar.h",
+      "stdnoreturn.h", "string.h",   "tgmath.h", "threads.h",   "time.h",   "uchar.h",
+      "wchar.h",       "wctype.h",   "string"};
 
   /// Clang BuiltinType enum values for each type requested via the config's {@code type} key.
   std::vector<unsigned int> typesRequested;
@@ -113,44 +111,42 @@ private:
    * maxFileLoC). Defaults are 0 for minimums and 99999 for maximums, meaning
    * no filtering unless explicitly configured.
    */
-  std::map<std::string, int> config = {
-    {"debug", 1},
-    {"maxCallFunc", 99999},
-    {"maxFileLoC", 99999},
-    {"maxForLoops", 99999},
-    {"maxFunctions", 99999},
-    {"maxIfStmt", 99999},
-    {"maxParam", 99999},
-    {"maxTypeArithmeticOperation", 99999},
-    {"maxTypeCompareOperation", 99999},
-    {"maxTypeComparisons", 99999},
-    {"maxTypeIfStmt", 99999},
-    {"maxTypeParameters", 99999},
-    {"maxTypePostfix", 99999},
-    {"maxTypePrefix", 99999},
-    {"maxTypeUnaryOperation", 99999},
-    {"maxTypeVariableReference", 99999},
-    {"maxTypeVariables", 99999},
-    {"maxWhileLoops", 99999},
-    {"minCallFunc", 0},
-    {"minFileLoC", 0},
-    {"minForLoops", 0},
-    {"minFunctions", 0},
-    {"minIfStmt", 0},
-    {"minParam", 0},
-    {"minTypeArithmeticOperation", 0},
-    {"minTypeCompareOperation", 0},
-    {"minTypeComparisons", 0},
-    {"minTypeIfStmt", 0},
-    {"minTypeParameters", 0},
-    {"minTypePostfix", 0},
-    {"minTypePrefix", 0},
-    {"minTypeUnaryOperation", 0},
-    {"minTypeVariableReference", 0},
-    {"minTypeVariables", 0},
-    {"minWhileLoops", 0},
-    {"useNonStdHeaders", 0}
-  };
+  std::map<std::string, int> config = {{"debugLevel", 0},
+                                       {"maxCallFunc", 99999},
+                                       {"maxFileLoC", 99999},
+                                       {"maxForLoops", 99999},
+                                       {"maxFunctions", 99999},
+                                       {"maxIfStmt", 99999},
+                                       {"maxParam", 99999},
+                                       {"maxTypeArithmeticOperation", 99999},
+                                       {"maxTypeCompareOperation", 99999},
+                                       {"maxTypeComparisons", 99999},
+                                       {"maxTypeIfStmt", 99999},
+                                       {"maxTypeParameters", 99999},
+                                       {"maxTypePostfix", 99999},
+                                       {"maxTypePrefix", 99999},
+                                       {"maxTypeUnaryOperation", 99999},
+                                       {"maxTypeVariableReference", 99999},
+                                       {"maxTypeVariables", 99999},
+                                       {"maxWhileLoops", 99999},
+                                       {"minCallFunc", 0},
+                                       {"minFileLoC", 0},
+                                       {"minForLoops", 0},
+                                       {"minFunctions", 0},
+                                       {"minIfStmt", 0},
+                                       {"minParam", 0},
+                                       {"minTypeArithmeticOperation", 0},
+                                       {"minTypeCompareOperation", 0},
+                                       {"minTypeComparisons", 0},
+                                       {"minTypeIfStmt", 0},
+                                       {"minTypeParameters", 0},
+                                       {"minTypePostfix", 0},
+                                       {"minTypePrefix", 0},
+                                       {"minTypeUnaryOperation", 0},
+                                       {"minTypeVariableReference", 0},
+                                       {"minTypeVariables", 0},
+                                       {"minWhileLoops", 0},
+                                       {"useNonStdHeaders", 0}};
 
   /// Path settings and flags that don't fit the numeric threshold map.
   struct filterConfigs configuration;
