@@ -43,7 +43,6 @@ public:
     int Param = 0;
     int TypeArithmeticOperation = 0;
     int TypeCompareOperation = 0;
-    int TypeComparisons = 0;
     int TypeIfStmt = 0;
     int TypeParameters = 0;
     int TypePostfix = 0;

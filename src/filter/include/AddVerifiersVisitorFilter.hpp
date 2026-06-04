@@ -7,11 +7,11 @@
 #include <string>
 
 /**
- * @brief Injects {@code extern __VERIFIER_nondet_*} declarations into the AST and source.
+ * @brief Injects {@code extern __VERIFIER_nondet_*} declarations into the source.
  *
- * For each type name in {@code neededTypes}, constructs a proper {@code FunctionDecl}
- * in the AST, prints it to a string via Clang's AST printer, and inserts it before
- * the first writable node in the file using the {@code Rewriter}.
+ * For each type name in {@code neededTypes}, looks up the corresponding C type
+ * string in {@code kCTypeNames} and inserts a declaration as text before the first
+ * writable node in the file using the {@code Rewriter}.
  *
  * Does not use {@code RecursiveASTVisitor} — it directly iterates the translation
  * unit's top-level declarations to find the insertion point.
