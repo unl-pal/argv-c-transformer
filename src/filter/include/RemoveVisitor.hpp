@@ -46,10 +46,11 @@ public:
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 
   /**
-   * @brief Replaces calls to removed functions with {@code __VERIFIER_nondet_<type>()}.
+   * @brief Records the return type of calls to removed functions in {@code _NeededTypes}.
    *
-   * Normalises the return type name (strips spaces, underscores, stars) to
-   * build the verifier name. Records the return type in {@code _NeededTypes}.
+   * Looks up the return type's {@code BuiltinType::Kind} in {@code kVerifierNames} to
+   * resolve the verifier suffix. Unsupported types are skipped. Call sites are replaced
+   * by {@code TransformAction} in a later pipeline stage, not here.
    */
   bool VisitCallExpr(clang::CallExpr *E);
 

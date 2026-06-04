@@ -17,6 +17,8 @@ static const std::unordered_map<std::string, std::string> kCTypeNames = {
     {"uint", "unsigned int"},
     {"long", "long"},
     {"ulong", "unsigned long"},
+    {"longlong", "long long"},
+    {"ulonglong", "unsigned long long"},
     {"float", "float"},
     {"double", "double"},
 };

@@ -19,7 +19,8 @@ static const std::unordered_map<clang::BuiltinType::Kind, std::string> kVerifier
     {clang::BuiltinType::UChar, "uchar"},   {clang::BuiltinType::Short, "short"},
     {clang::BuiltinType::UShort, "ushort"}, {clang::BuiltinType::Int, "int"},
     {clang::BuiltinType::UInt, "uint"},     {clang::BuiltinType::Long, "long"},
-    {clang::BuiltinType::ULong, "ulong"},   {clang::BuiltinType::Float, "float"},
+    {clang::BuiltinType::ULong, "ulong"},   {clang::BuiltinType::LongLong, "longlong"},
+    {clang::BuiltinType::ULongLong, "ulonglong"}, {clang::BuiltinType::Float, "float"},
     {clang::BuiltinType::Double, "double"},
 };
 

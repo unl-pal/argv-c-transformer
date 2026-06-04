@@ -34,8 +34,6 @@ void FilterFunctionsConsumer::FilterFunctions() {
       _ToRemove->push_back(key);
     } else if (attr.TypeCompareOperation > _Config->at("maxTypeCompareOperation")) {
       _ToRemove->push_back(key);
-    } else if (attr.TypeComparisons > _Config->at("maxTypeComparisons")) {
-      _ToRemove->push_back(key);
     } else if (attr.TypeIfStmt > _Config->at("maxTypeIfStmt")) {
       _ToRemove->push_back(key);
     } else if (attr.TypeParameters > _Config->at("maxTypeParameters")) {
@@ -63,8 +61,6 @@ void FilterFunctionsConsumer::FilterFunctions() {
     } else if (attr.TypeArithmeticOperation < _Config->at("minTypeArithmeticOperation")) {
       _ToRemove->push_back(key);
     } else if (attr.TypeCompareOperation < _Config->at("minTypeCompareOperation")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeComparisons < _Config->at("minTypeComparisons")) {
       _ToRemove->push_back(key);
     } else if (attr.TypeIfStmt < _Config->at("minTypeIfStmt")) {
       _ToRemove->push_back(key);

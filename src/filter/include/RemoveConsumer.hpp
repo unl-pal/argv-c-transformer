@@ -12,9 +12,8 @@
  * @brief ASTConsumer that drives the removal pass over the AST.
  *
  * Skips the visitor entirely if {@code toRemove} is empty. Otherwise
- * constructs a {@code RemoveFuncVisitor} and traverses the translation unit,
- * which deletes function bodies and replaces their call sites with
- * {@code __VERIFIER_nondet_*()} calls, populating {@code neededTypes} for
+ * constructs a {@code RemoveVisitor} and traverses the translation unit,
+ * which deletes function bodies and populates {@code neededTypes} for
  * the next consumer ({@code AddVerifiersConsumerFilter}).
  */
 class RemoveConsumer : public clang::ASTConsumer {
@@ -32,7 +31,7 @@ public:
   /**
    * @brief Entry point called by Clang once the AST is fully parsed.
    *
-   * No-ops if {@code toRemove} is empty. Otherwise runs {@code RemoveFuncVisitor}
+   * No-ops if {@code toRemove} is empty. Otherwise runs {@code RemoveVisitor}
    * over the full translation unit.
    *
    * @param context  The AST context for this translation unit.
