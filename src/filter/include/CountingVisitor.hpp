@@ -6,107 +6,164 @@
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
-#include <clang/Basic/LLVM.h>
 #include <clang/Basic/SourceManager.h>
-#include <clang/Lex/PreprocessingRecord.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-// Visitor for counting propeties and functions in a file
-class CountNodesVisitor : public clang::RecursiveASTVisitor<CountNodesVisitor> {
+/**
+ * @brief Recursively walks the AST and counts per-function properties.
+ *
+ * Uses CRTP ({@code RecursiveASTVisitor<CountingVisitor>}) so the base class
+ * can dispatch to our {@code Visit*} overrides at compile time without virtual
+ * calls. Each {@code Visit*} method increments counts in {@code _allFunctions},
+ * then calls the parent implementation to continue the traversal. Returning
+ * {@code false} from any {@code Visit*} stops the entire walk.
+ *
+ * Results are written into the {@code _allFunctions} map passed at construction
+ * — the same map that {@code FilterFunctionsConsumer} reads next in the
+ * pipeline. The special key {@code "Program"} accumulates counts for anything
+ * declared at file scope rather than inside a function.
+ */
+class CountingVisitor : public clang::RecursiveASTVisitor<CountingVisitor> {
 public:
-  // Attributes tracked by the visitor for the vector of types
-	struct attributes {
-		int CallFunc = 0;
-		int ForLoops = 0;
-		int Functions = 0;
-		int IfStmt = 0;
-		int Param = 0;
-		int TypeArithmeticOperation = 0;
-		int TypeCompareOperation = 0;
-		int TypeComparisons = 0;
-		int TypeIfStmt = 0;
-		int TypeParameters = 0;
-		int TypePostfix = 0;
-		int TypePrefix = 0;
-		int TypeUnaryOperation = 0;
-		int TypeVariableReference = 0;
-		int TypeVariables = 0;
-		int WhileLoops = 0;
-	};
+  /**
+   * @brief Per-function AST property counts.
+   *
+   * Fields prefixed {@code Type*} are gated on the requested builtin types
+   * (e.g. only count {@code TypeVariables} if the variable's type matches one
+   * of the configured types). Un-prefixed fields (e.g. {@code ForLoops}) count
+   * all occurrences regardless of type.
+   */
+  struct attributes {
+    int CallFunc = 0;
+    int ForLoops = 0;
+    int Functions = 0;
+    int IfStmt = 0;
+    int Param = 0;
+    int TypeArithmeticOperation = 0;
+    int TypeCompareOperation = 0;
+    int TypeIfStmt = 0;
+    int TypeParameters = 0;
+    int TypePostfix = 0;
+    int TypePrefix = 0;
+    int TypeUnaryOperation = 0;
+    int TypeVariableReference = 0;
+    int TypeVariables = 0;
+    int WhileLoops = 0;
+  };
 
-	CountNodesVisitor(
-		clang::ASTContext *C, const std::vector<unsigned int> &T,
-		std::unordered_map<std::string, CountNodesVisitor::attributes *> *allFunctions);
+  /**
+   * @brief Constructs the visitor and seeds the map with the "Program" entry.
+   *
+   * @param C             AST context, used for parent-map lookups.
+   * @param T             Clang BuiltinType values to count; empty means count
+   * all.
+   * @param allFunctions  Output map shared with downstream consumers.
+   */
+  CountingVisitor(clang::ASTContext *C, const std::vector<unsigned int> &T,
+                  std::unordered_map<std::string, CountingVisitor::attributes *> *allFunctions);
 
-  // Stmt does not have get parent function so recurse to decl and use built in
-  // from there
-	std::string getStmtParentFuncName(const clang::Stmt &S);
+  /**
+   * @brief Walks up the parent chain of a {@code Stmt} to find its enclosing
+   * function name.
+   *
+   * {@code Stmt} has no direct {@code getParentFunctionOrMethod()} so this
+   * recursively climbs via {@code ASTContext::getParents()} until it reaches a
+   * {@code FunctionDecl} or falls back to {@code getDeclParentFuncName}.
+   *
+   * @param S  Statement whose enclosing function to find.
+   * @return   Function name, or {@code "Program"} if at file scope.
+   */
+  std::string getStmtParentFuncName(const clang::Stmt &S);
 
-	// Take Advantage of built in Decl get Parent function
-	std::string getDeclParentFuncName(const clang::Decl &D);
+  /**
+   * @brief Returns the name of the function enclosing a {@code Decl}.
+   *
+   * Uses the built-in {@code getParentFunctionOrMethod()} available on all
+   * {@code Decl} nodes.
+   *
+   * @param D  Declaration whose enclosing function to find.
+   * @return   Function name, or {@code "Program"} if at file scope.
+   */
+  std::string getDeclParentFuncName(const clang::Decl &D);
 
-  // Base Visit Decl, currently used as catch all for unhandled decl types
-	bool VisitDecl(clang::Decl *D);
+  /** @brief Catch-all for declaration nodes not handled by a more specific
+   * visitor. */
+  bool VisitDecl(clang::Decl *D);
 
-  // Visits variable declarations and checks if in main file before adding to the
-  // count of variables for the function or program as a whole if defined outside
-  // of a function
-  // can use the defined outside function to check if part of overall
-	bool VisitVarDecl(clang::VarDecl *VD);
+  /** @brief Counts type-matched variable declarations per function. */
+  bool VisitVarDecl(clang::VarDecl *VD);
 
-  // Visit function declarations and add to the map of functions and attributes
-	bool VisitFunctionDecl(clang::FunctionDecl *FD);
+  /** @brief Registers each function in {@code _allFunctions} and increments the
+   * file-level function count. */
+  bool VisitFunctionDecl(clang::FunctionDecl *FD);
 
-  // Visit a declaration reference expression checking for type of variable
-  // referenced rather than what specfic variable was referenced
-  // DeclRefExpr is an Expression not Declaration
-	bool VisitDeclRefExpr(clang::DeclRefExpr *D);
+  /**
+   * @brief Counts type-matched variable references per function.
+   *
+   * {@code DeclRefExpr} is the AST node for any use of a named variable —
+   * it is an expression, not a declaration, so it appears under {@code Stmt}
+   * in the hierarchy.
+   */
+  bool VisitDeclRefExpr(clang::DeclRefExpr *D);
 
-  // Base visit statement call, need to separate out the specific calls if possible
-	bool VisitStmt(clang::Stmt *S);
+  /** @brief Catch-all for statement nodes; counts function calls ({@code
+   * CallFunc}). */
+  bool VisitStmt(clang::Stmt *S);
 
-  // check if 'if' statement is in main file, is a part of a function and add to
-  // current function count
-	bool VisitIfStmt(clang::IfStmt *If);
+  /** @brief Counts all if-statements and type-matched if-statement conditions.
+   */
+  bool VisitIfStmt(clang::IfStmt *If);
 
-  // Visit for loops and add to the function count of for loops
-	bool VisitForStmt(clang::ForStmt *F);
+  /** @brief Counts for-loop occurrences per function. */
+  bool VisitForStmt(clang::ForStmt *F);
 
-  // Visit while loops and add to the function count of while loops
-	bool VisitWhileStmt(clang::WhileStmt *W);
+  /** @brief Counts while-loop occurrences per function. */
+  bool VisitWhileStmt(clang::WhileStmt *W);
 
-  // check for operations that involve only one variable or literal
-  // TODO match the argv on this
-	bool VisitUnaryOperator(clang::UnaryOperator *O);
+  /**
+   * @brief Counts type-matched unary operations, distinguishing arithmetic,
+   * prefix, and postfix.
+   *
+   * Note: {@code VisitStmt} does not double-count these — the {@code
+   * UnaryOperatorClass} branch was removed from {@code VisitStmt} to avoid
+   * that.
+   */
+  bool VisitUnaryOperator(clang::UnaryOperator *O);
 
-  // Visit binary operations, operations with a left and right side, and add to
-  // the count of total binary operations then check if is a comparison binary
-  // operation
-	bool VisitBinaryOperator(clang::BinaryOperator *O);
+  /** @brief Counts type-matched additive and comparison binary operations per
+   * function. */
+  bool VisitBinaryOperator(clang::BinaryOperator *O);
 
-  // Visit conditional operator adding to the parent function count of
-  // conditional operations
-	bool VisitConditionalOperator(clang::ConditionalOperator *O);
+  /** @brief Counts type-matched ternary ({@code x ? y : z}) operations per
+   * function. */
+  bool VisitConditionalOperator(clang::ConditionalOperator *O);
 
-  // Visit conditional operators that have a left and right side then add to the count
-	bool VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O);
+  /**
+   * @brief Stub for GNU ({@code x ?: y}) — not currently counted.
+   *
+   * The standard ternary is handled by {@code VisitConditionalOperator};
+   * this form rarely appears in the filtered source files.
+   */
+  bool VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O);
 
-  // count the parameters in the function signiture and check if is an int
-	bool VisitImplicitParamDecl(clang::ImplicitParamDecl *D);
+  /** @brief Counts type-matched implicit parameters (e.g. {@code self} in ObjC
+   * methods). */
+  bool VisitImplicitParamDecl(clang::ImplicitParamDecl *D);
 
-  // Getter for all functions and their attributes
-	std::unordered_map<std::string, attributes*> ReportAttributes();
-
-  // Outdated debugging print statement for the report
-	void PrintReport(std::string fileName);
+  /**
+   * @brief Returns true if {@code QT} should be counted given the type filter.
+   *
+   * When {@code _T} is empty (count-all mode), always returns true without
+   * iterating. Otherwise checks each requested builtin type.
+   */
+  bool matchesType(clang::QualType QT) const;
 
 private:
-	clang::ASTContext *_C;
-	clang::SourceManager *_mgr;
-	std::map<std::string, int> _values;
-	std::unordered_map<std::string, attributes*> *_allFunctions;
-	const std::vector<unsigned int> &_T;
-	bool _allTypes;
+  clang::ASTContext *_C;
+  clang::SourceManager *_mgr;
+  std::unordered_map<std::string, attributes *> *_allFunctions;
+  const std::vector<unsigned int> &_T;
+  bool _allTypes; ///< True when _T is empty — count all types
 };

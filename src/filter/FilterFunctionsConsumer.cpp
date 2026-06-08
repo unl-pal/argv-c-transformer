@@ -1,25 +1,21 @@
 #include "CountingVisitor.hpp"
 #include "FilterFunctionsConsumer.hpp"
 
-#include <llvm/Support/raw_ostream.h>
-
 FilterFunctionsConsumer::FilterFunctionsConsumer(
-  std::unordered_map<std::string, CountNodesVisitor::attributes *> *toFilter,
-  std::vector<std::string> *toRemove, std::map<std::string, int> *config)
-    : _ToFilter(toFilter), _ToRemove(toRemove), _Config(config) {
-  llvm::outs() << "Remove Size: " << _ToRemove->size() << "\n";
-}
+    std::unordered_map<std::string, CountingVisitor::attributes *> *toFilter,
+    std::vector<std::string> *toRemove, std::map<std::string, int> *config)
+    : _ToFilter(toFilter), _ToRemove(toRemove), _Config(config) {}
 
-void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &context) {
+void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext & /*context*/) {
   FilterFunctions();
 }
 
 void FilterFunctionsConsumer::FilterFunctions() {
-  if (!_ToFilter->size()) return;
-  for (const std::pair<std::string, CountNodesVisitor::attributes*> func : *_ToFilter) {
+  if (_ToFilter->empty())
+    return;
+  for (const std::pair<std::string, CountingVisitor::attributes *> func : *_ToFilter) {
     std::string key = func.first;
-    llvm::outs() << "Key: " << key << "\n";
-    CountNodesVisitor::attributes attr = *func.second;
+    CountingVisitor::attributes attr = *func.second;
     if (key == "Program" || key == "main") {
       continue;
     } else if (attr.ForLoops > _Config->at("maxForLoops")) {
@@ -37,8 +33,6 @@ void FilterFunctionsConsumer::FilterFunctions() {
     } else if (attr.TypeArithmeticOperation > _Config->at("maxTypeArithmeticOperation")) {
       _ToRemove->push_back(key);
     } else if (attr.TypeCompareOperation > _Config->at("maxTypeCompareOperation")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeComparisons > _Config->at("maxTypeComparisons")) {
       _ToRemove->push_back(key);
     } else if (attr.TypeIfStmt > _Config->at("maxTypeIfStmt")) {
       _ToRemove->push_back(key);
@@ -67,8 +61,6 @@ void FilterFunctionsConsumer::FilterFunctions() {
     } else if (attr.TypeArithmeticOperation < _Config->at("minTypeArithmeticOperation")) {
       _ToRemove->push_back(key);
     } else if (attr.TypeCompareOperation < _Config->at("minTypeCompareOperation")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeComparisons < _Config->at("minTypeComparisons")) {
       _ToRemove->push_back(key);
     } else if (attr.TypeIfStmt < _Config->at("minTypeIfStmt")) {
       _ToRemove->push_back(key);

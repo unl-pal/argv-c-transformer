@@ -5,237 +5,174 @@
 #include <clang/AST/ParentMapContext.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Basic/TypeTraits.h>
-#include <iostream>
-#include <llvm/Support/raw_ostream.h>
 
-CountNodesVisitor::CountNodesVisitor(clang::ASTContext *C,
-  const std::vector<unsigned int> &T,
-  std::unordered_map<std::string, CountNodesVisitor::attributes*> *allFunctions)
-  :
-  _C(C),
-  _mgr(&(C->getSourceManager())),
-  _allFunctions(allFunctions),
-  _T(T),
-  _allTypes(!T.size())
-{
+CountingVisitor::CountingVisitor(
+    clang::ASTContext *C, const std::vector<unsigned int> &T,
+    std::unordered_map<std::string, CountingVisitor::attributes *> *allFunctions)
+    : _C(C), _mgr(&(C->getSourceManager())), _allFunctions(allFunctions), _T(T),
+      _allTypes(T.empty()) {
   _allFunctions->try_emplace("Program", new attributes);
 }
 
-std::string CountNodesVisitor::getDeclParentFuncName(const clang::Decl &D) {
-  std::string currentFunc = "Program";
+bool CountingVisitor::matchesType(clang::QualType QT) const {
+  if (_allTypes)
+    return true;
+  for (unsigned int t : _T) {
+    if (QT->isSpecificBuiltinType(t))
+      return true;
+  }
+  return false;
+}
+
+std::string CountingVisitor::getDeclParentFuncName(const clang::Decl &D) {
   if (const clang::DeclContext *parentFuncContext = D.getParentFunctionOrMethod()) {
     if (parentFuncContext->isFunctionOrMethod()) {
       const clang::FunctionDecl *FD = clang::dyn_cast<clang::FunctionDecl>(parentFuncContext);
-      currentFunc = FD->getNameAsString();
-    }
-  } else {
-    currentFunc = "Program";
-  }
-  return currentFunc;
-}
-
-std::string CountNodesVisitor::getStmtParentFuncName(const clang::Stmt &S) {
-  clang::DynTypedNodeList parents = _C->getParents(S);
-  if (parents.size()) {
-    for (const clang::DynTypedNode& parent : parents) {
-      if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>()) {
-	return fd->getNameAsString();
-      } else if (const clang::Stmt *s = parent.get<clang::Stmt>()) {
-	return getStmtParentFuncName(*s);
-      } else if (const clang::Decl *d = parent.get<clang::Decl>()) {
-	return getDeclParentFuncName(*d);
-      }
+      return FD->getNameAsString();
     }
   }
   return "Program";
 }
 
-bool CountNodesVisitor::VisitDecl(clang::Decl *D) {
-  if (!D) return false;
-    return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitDecl(D);
-}
-
-bool CountNodesVisitor::VisitVarDecl(clang::VarDecl *VD) {
-  if (!VD) return false;
-  if (_mgr->isInMainFile(VD->getLocation())) {
-    for (unsigned int specificType : _T) {
-      if (_allTypes || VD->getType()->isSpecificBuiltinType(specificType)) {
-	_allFunctions->at(getDeclParentFuncName(*VD))->TypeVariables++;
-	break;
-      }
+std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
+  // getParents() returns a list because template instantiations can have
+  // multiple parents; in practice we take the first match.
+  clang::DynTypedNodeList parents = _C->getParents(S);
+  if (parents.size()) {
+    for (const clang::DynTypedNode &parent : parents) {
+      // DynTypedNode is type-erased — try each possible parent kind
+      if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>())
+        return fd->getNameAsString();
+      if (const clang::Stmt *s = parent.get<clang::Stmt>())
+        return getStmtParentFuncName(*s);
+      if (const clang::Decl *d = parent.get<clang::Decl>())
+        return getDeclParentFuncName(*d);
     }
   }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitVarDecl(VD);
+  return "Program";
 }
 
-bool CountNodesVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
-  if (!FD) return false;
+bool CountingVisitor::VisitDecl(clang::Decl *D) {
+  if (!D)
+    return false;
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitDecl(D);
+}
+
+bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
+  if (!VD)
+    return false;
+  if (_mgr->isInMainFile(VD->getLocation())) {
+    if (matchesType(VD->getType()))
+      _allFunctions->at(getDeclParentFuncName(*VD))->TypeVariables++;
+  }
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitVarDecl(VD);
+}
+
+bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
+  if (!FD)
+    return false;
   if (_mgr->isInMainFile(FD->getLocation())) {
-    if (_allFunctions->count(FD->getNameAsString())) {
-      if (_mgr->getMacroArgExpandedLocation(FD->getLocation()).isMacroID()) {
-	FD->dumpColor();
-      }
-    } else {
+    if (!_allFunctions->count(FD->getNameAsString())) {
       _allFunctions->try_emplace(FD->getNameAsString(), new attributes);
       _allFunctions->at("Program")->Functions++;
     }
   }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitFunctionDecl(FD);
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitFunctionDecl(FD);
 }
 
-bool CountNodesVisitor::VisitDeclRefExpr(clang::DeclRefExpr *S) {
+bool CountingVisitor::VisitDeclRefExpr(clang::DeclRefExpr *S) {
   if (_mgr->isInMainFile(S->getLocation())) {
-    for (unsigned int specificType : _T) {
-      if (_allTypes || S->getType()->isSpecificBuiltinType(specificType)) {
-	_allFunctions->at(getStmtParentFuncName(*S))->TypeVariableReference++;
-      }
-    }
+    if (matchesType(S->getType()))
+      _allFunctions->at(getStmtParentFuncName(*S))->TypeVariableReference++;
   }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitDeclRefExpr(S);
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitDeclRefExpr(S);
 }
 
-bool CountNodesVisitor::VisitStmt(clang::Stmt *S) {
-  if (!S) return false;
+bool CountingVisitor::VisitStmt(clang::Stmt *S) {
+  if (!S)
+    return false;
   if (_mgr->isInMainFile(S->getBeginLoc())) {
-    clang::Stmt::StmtClass className = S->getStmtClass();
-    if (className == clang::Stmt::CallExprClass) {
+    if (S->getStmtClass() == clang::Stmt::CallExprClass)
       _allFunctions->at(getStmtParentFuncName(*S))->CallFunc++;
-    } else if (className == clang::Stmt::UnaryOperatorClass) {
-      _allFunctions->at(getStmtParentFuncName(*S))->TypeUnaryOperation++;
-    }
   }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitStmt(S);
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitStmt(S);
 }
 
-bool CountNodesVisitor::VisitIfStmt(clang::IfStmt *If) {
-  if (!If) return false;
+bool CountingVisitor::VisitIfStmt(clang::IfStmt *If) {
+  if (!If)
+    return false;
   if (_mgr->isInMainFile(If->getIfLoc())) {
-    std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*If);
+    std::string currentFunc = getStmtParentFuncName(*If);
     _allFunctions->at(currentFunc)->IfStmt++;
-    for (unsigned int specificType : _T) {
-      if (_allTypes || If->getCond()->getType()->isSpecificBuiltinType(specificType)) {
-	_allFunctions->at(currentFunc)->TypeIfStmt++;
-      }
-    }
+    if (matchesType(If->getCond()->getType()))
+      _allFunctions->at(currentFunc)->TypeIfStmt++;
   }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitIfStmt(If);
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitIfStmt(If);
 }
 
-bool CountNodesVisitor::VisitForStmt(clang::ForStmt *F) {
-  if (!F) return false;
-  if (_mgr->isInMainFile(F->getForLoc())) {
+bool CountingVisitor::VisitForStmt(clang::ForStmt *F) {
+  if (!F)
+    return false;
+  if (_mgr->isInMainFile(F->getForLoc()))
     _allFunctions->at(getStmtParentFuncName(*F))->ForLoops++;
-  }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitForStmt(F);
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitForStmt(F);
 }
 
-bool CountNodesVisitor::VisitWhileStmt(clang::WhileStmt *W) {
-  if (!W) return false;
-  if (_mgr->isInMainFile(W->getWhileLoc())) {
+bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
+  if (!W)
+    return false;
+  if (_mgr->isInMainFile(W->getWhileLoc()))
     _allFunctions->at(getStmtParentFuncName(*W))->WhileLoops++;
-  }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitWhileStmt(W);
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitWhileStmt(W);
 }
 
-bool CountNodesVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
-  if (!O) return false;
-  if (_mgr->isInMainFile(O->getOperatorLoc())) {
-    std::string currentFunc = CountNodesVisitor::getStmtParentFuncName(*O);
-    for (unsigned int specificType : _T) {
-      if (_allTypes || O->getType()->isSpecificBuiltinType(specificType)) {
-	if (O->isArithmeticOp()) {
-	  _allFunctions->at(currentFunc)->TypeArithmeticOperation++;
-	}
-	_allFunctions->at(currentFunc)->TypeUnaryOperation++;
-	if (O->isPrefix()) {
-	  _allFunctions->at(currentFunc)->TypePrefix++;
-	}
-	if (O->isPostfix()) {
-	  _allFunctions->at(currentFunc)->TypePostfix++;
-	}
-      }
+bool CountingVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
+  if (!O)
+    return false;
+  if (_mgr->isInMainFile(O->getOperatorLoc()) && matchesType(O->getType())) {
+    std::string currentFunc = getStmtParentFuncName(*O);
+    if (O->isArithmeticOp())
+      _allFunctions->at(currentFunc)->TypeArithmeticOperation++;
+    _allFunctions->at(currentFunc)->TypeUnaryOperation++;
+    if (O->isPrefix())
+      _allFunctions->at(currentFunc)->TypePrefix++;
+    if (O->isPostfix())
+      _allFunctions->at(currentFunc)->TypePostfix++;
+  }
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitUnaryOperator(O);
+}
+
+bool CountingVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
+  if (!O)
+    return false;
+  if (_mgr->isInMainFile(O->getOperatorLoc()) && matchesType(O->getType())) {
+    std::string currentFunc = getStmtParentFuncName(*O);
+    if (O->isAdditiveOp())
+      _allFunctions->at(currentFunc)->TypeArithmeticOperation++;
+    if (O->isComparisonOp()) {
+      _allFunctions->at(currentFunc)->TypeCompareOperation++;
+      return clang::RecursiveASTVisitor<CountingVisitor>::VisitBinaryOperator(O);
     }
   }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitUnaryOperator(O);
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitBinaryOperator(O);
 }
 
-bool CountNodesVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
-  if (!O) return false;
-  if (_mgr->isInMainFile(O->getOperatorLoc())) {
-    for (unsigned int specificType : _T) {
-      if (_allTypes || O->getType()->isSpecificBuiltinType(specificType)) {
-	std::string currentFunc = getStmtParentFuncName(*O);
-	if (O->isAdditiveOp()) {
-	  _allFunctions->at(currentFunc)->TypeArithmeticOperation++;
-	}
-	if (O->isComparisonOp()) {
-	  _allFunctions->at(currentFunc)->TypeCompareOperation++;
-	  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryOperator(O);
-	}
-      }
-    }
-  }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryOperator(O);
+bool CountingVisitor::VisitConditionalOperator(clang::ConditionalOperator *O) {
+  if (!O)
+    return false;
+  if (_mgr->isInMainFile(O->getExprLoc()) && matchesType(O->getType()))
+    _allFunctions->at(getStmtParentFuncName(*O))->TypeCompareOperation++;
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitConditionalOperator(O);
 }
 
-bool CountNodesVisitor::VisitConditionalOperator(clang::ConditionalOperator *O) {
-  if (!O) return false;
-  if (_mgr->isInMainFile(O->getExprLoc())) {
-    for (unsigned int specificType : _T) {
-      if (_allTypes || O->getType()->isSpecificBuiltinType(specificType)) {
-	_allFunctions->at(getStmtParentFuncName(*O))->TypeCompareOperation++;
-      }
-    }
-  }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitConditionalOperator(O);
+bool CountingVisitor::VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O) {
+  if (!O)
+    return false;
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitBinaryConditionalOperator(O);
 }
 
-bool CountNodesVisitor::VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O) {
-  if (!O) return false;
-  if (_mgr->isInMainFile(O->getExprLoc())) {
-    // _allFunctions->at(getStmtParentFuncName(*O))->OpCondition++;
-  }
-    return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitBinaryConditionalOperator(O);
-}
-
-bool CountNodesVisitor::VisitImplicitParamDecl(clang::ImplicitParamDecl *D) {
-  std::string funcName = getDeclParentFuncName(*D);
-  for (unsigned int specificType : _T) {
-    if (_allTypes || D->getType()->isSpecificBuiltinType(specificType)) {
-      _allFunctions->at(funcName)->TypeParameters++;
-    }
-  }
-  return clang::RecursiveASTVisitor<CountNodesVisitor>::VisitImplicitParamDecl(D);
-}
-
-std::unordered_map<std::string, CountNodesVisitor::attributes *>
-CountNodesVisitor::ReportAttributes() {
-  return *_allFunctions;
-}
-
-// USED ONLY FOR DEBUGGING PURPOSES
-void CountNodesVisitor::PrintReport(std::string fileName) {
-  std::cout << fileName << std::endl;
-  for (const std::pair<std::string, attributes*> func : *_allFunctions) {
-    std::cout << " " << func.first << std::endl;
-    std::cout << "CallFunctions: " << func.second->CallFunc << std::endl;
-    std::cout << "ForLoops: " << func.second->ForLoops << std::endl;
-    std::cout << "Functions: " << func.second->Functions << std::endl;
-    std::cout << "IfStmt: " << func.second->IfStmt << std::endl;
-    std::cout << "Param: " << func.second->Param << std::endl;
-    std::cout << "TypeArithmeticOperation: "
-              << func.second->TypeArithmeticOperation << std::endl;
-    std::cout << "TypeCompareOperation: " << func.second->TypeCompareOperation
-              << std::endl;
-    std::cout << "TypeComparisons: " << func.second->TypeComparisons << std::endl;
-    std::cout << "TypeIfStmt: " << func.second->TypeIfStmt << std::endl;
-    std::cout << "TypeParameters: " << func.second->TypeParameters << std::endl;
-    std::cout << "TypePostfix: " << func.second->TypePostfix << std::endl;
-    std::cout << "TypePrefix: " << func.second->TypePrefix << std::endl;
-    std::cout << "TypeUnaryOperation: " << func.second->TypeUnaryOperation << std::endl;
-    std::cout << "TypeVariableReference: " << func.second->TypeVariableReference
-              << std::endl;
-    std::cout << "TypeVariables: " << func.second->TypeVariables << std::endl;
-    std::cout << "WhileLoops: " << func.second->WhileLoops << std::endl;
-  }
+bool CountingVisitor::VisitImplicitParamDecl(clang::ImplicitParamDecl *D) {
+  if (matchesType(D->getType()))
+    _allFunctions->at(getDeclParentFuncName(*D))->TypeParameters++;
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitImplicitParamDecl(D);
 }

@@ -1,144 +1,98 @@
 #include "include/RemoveVisitor.hpp"
 
 #include <clang/AST/Decl.h>
-#include <clang/AST/DeclBase.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RawCommentList.h>
-#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Type.h>
-#include <clang/Basic/LLVM.h>
-#include <clang/Basic/LangStandard.h>
 #include <clang/Basic/SourceLocation.h>
-#include <clang/Basic/Specifiers.h>
-#include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/raw_ostream.h>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
-RemoveFuncVisitor::RemoveFuncVisitor(clang::ASTContext       *C,
-                                     clang::Rewriter         &rewriter,
-                                     std::vector<std::string> *toRemove,
-                                     std::set<clang::QualType> *neededTypes)
-    : _C(C),
-      _mgr(rewriter.getSourceMgr()),
-      _Rewriter(rewriter),
-      _toRemove(toRemove),
-      _NeededTypes(neededTypes) {
-  llvm::outs() << "To Remove Size: " << _toRemove->size() << "\n";
-}
+// Canonical mapping from Clang builtin type kind to SV-Comp verifier name suffix.
+// Types not in this map are unsupported and will be skipped.
+static const std::unordered_map<clang::BuiltinType::Kind, std::string> kVerifierNames = {
+    {clang::BuiltinType::Bool, "bool"},     {clang::BuiltinType::Char_S, "char"},
+    {clang::BuiltinType::Char_U, "char"},   {clang::BuiltinType::SChar, "char"},
+    {clang::BuiltinType::UChar, "uchar"},   {clang::BuiltinType::Short, "short"},
+    {clang::BuiltinType::UShort, "ushort"}, {clang::BuiltinType::Int, "int"},
+    {clang::BuiltinType::UInt, "uint"},     {clang::BuiltinType::Long, "long"},
+    {clang::BuiltinType::ULong, "ulong"},   {clang::BuiltinType::LongLong, "longlong"},
+    {clang::BuiltinType::ULongLong, "ulonglong"}, {clang::BuiltinType::Float, "float"},
+    {clang::BuiltinType::Double, "double"},
+};
 
-bool RemoveFuncVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
-  if(!D) return false;
-  if (_mgr.isInMainFile(D->getLocation())) {
-    llvm::outs() << D->getNameAsString() << " is being checked" << "\n";
-    // Do not remove or attempt to edit functions within macros as the loc
-    // is an un-writable location
-    if (D->getLocation().isMacroID()) {
-      return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
-    }
-    for (std::string& name : *_toRemove) {
-      // If the function is the main function move on else wise
+RemoveVisitor::RemoveVisitor(clang::ASTContext *C, clang::Rewriter &rewriter,
+                             std::vector<std::string> *toRemove,
+                             std::set<std::string> *neededTypes)
+    : _C(C), _Mgr(rewriter.getSourceMgr()), _Rewriter(rewriter), _ToRemove(toRemove),
+      _NeededTypes(neededTypes) {}
+
+bool RemoveVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
+  if (!D)
+    return false;
+  if (_Mgr.isInMainFile(D->getLocation())) {
+    // Macro-expanded locations are not writable by the Rewriter
+    if (D->getLocation().isMacroID())
+      return clang::RecursiveASTVisitor<RemoveVisitor>::VisitFunctionDecl(D);
+
+    for (std::string &name : *_ToRemove) {
       if (name == D->getNameAsString() && !D->isMain()) {
-        clang::SourceLocation zero = _mgr.translateLineCol(_mgr.getMainFileID(), _mgr.getSpellingLineNumber(D->getLocation()), 1);
-        clang::SourceRange range = clang::SourceRange(zero, D->getEndLoc());
-        // Delete whole body if present
-        if (!D->hasBody()) {
+        // Start at column 1 to capture any leading whitespace on that line
+        clang::SourceLocation lineStart = _Mgr.translateLineCol(
+            _Mgr.getMainFileID(), _Mgr.getSpellingLineNumber(D->getLocation()), 1);
+        clang::SourceRange range(lineStart, D->getEndLoc());
+
+        // For forward declarations getEndLoc() is the ')'; extend by 1 to include ';'
+        if (!D->hasBody())
           range.setEnd(D->getEndLoc().getLocWithOffset(1));
-        }
-        // Check for valid range of function being removed
-        if (range.isValid()) {
-          llvm::outs() << name << " Is Valid Range" << "\n";
+
+        if (range.isValid())
           _Rewriter.RemoveText(range);
-          llvm::outs() << name << " Has Been Removed" << "\n";
-        }
-        // Clear out related comments if present
+
+        // Remove attached doc comment if present
         clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D);
-        if (rawComment != nullptr) {
-          if (rawComment->getSourceRange().isValid()) {
-            _Rewriter.RemoveText(rawComment->getSourceRange());
-          }
-        }
+        if (rawComment && rawComment->getSourceRange().isValid())
+          _Rewriter.RemoveText(rawComment->getSourceRange());
       }
     }
   }
-  return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitFunctionDecl(D);
+  return clang::RecursiveASTVisitor<RemoveVisitor>::VisitFunctionDecl(D);
 }
 
-bool RemoveFuncVisitor::VisitCallExpr(clang::CallExpr *E) {
-  if (_mgr.isInMainFile(E->getExprLoc())) {
-    // After all filtered functions are removed we can remove all calls and
-    // references to the functions We do it in this step as well as later clean
-    // up in transform action due to a loss in context for the function calls
-    // that if the AST later evaluates always returns an int as the return value
-    // due to how the c language is structured. Everything is an int in the end
-    // if (clang::FunctionDecl *func = E->getDirectCallee()) {
-    if (clang::Decl *calleeDecl = E->getCalleeDecl()) {
+bool RemoveVisitor::VisitCallExpr(clang::CallExpr *E) {
+  if (!_Mgr.isInMainFile(E->getExprLoc()))
+    return clang::RecursiveASTVisitor<RemoveVisitor>::VisitCallExpr(E);
+
+  if (clang::Decl *calleeDecl = E->getCalleeDecl()) {
     if (clang::FunctionDecl *func = calleeDecl->getAsFunction()) {
       std::string name = func->getNameAsString();
-      llvm::outs() << name << " call is being checked" << "\n";
       clang::QualType returnType = E->getCallReturnType(*_C);
-      for (std::string removedFuncName : *_toRemove) {
-        if (name == removedFuncName) {
-          // Clean up ClangAST and ArgC name and src code discrepencies
-          clang::QualType callReturnType = E->getCallReturnType(*_C);
-          std::string newName = "";
-          bool isPointer = callReturnType->isPointerType();
-          bool isBool = returnType->isBooleanType();
-          std::string returnTypeName = callReturnType.getAsString();
-          std::string newReturnTypeName = "";
-          if (isBool) {
-            newReturnTypeName = "bool";
-            callReturnType = _C->BoolTy;
-          } else if (isPointer) {
-            callReturnType = _C->VoidPtrTy;
-            newReturnTypeName = "pointer";
-          } else {
-            newReturnTypeName = "";
-            for (unsigned i=0; i<returnTypeName.size(); i++) {
-              char letter = returnTypeName[i];
-              if (letter == ' ') {
-                newReturnTypeName += "";
-              } else if (letter == '_') {
-                newReturnTypeName += "";
-              } else if (letter == '*') {
-                newReturnTypeName += "";
-              } else {
-                newReturnTypeName += letter;
-              }
-            }
-          }
-          if (newReturnTypeName.size()) {
-            // Use the pointer logic to set up the casts for verifier pointer to
-            // the correct return type for the function called
-            // isPointer ? newName += "(" + returnTypeName + ")(" : newName;
-            newName += "__VERIFIER_nondet_" + newReturnTypeName + "()";
-            // isPointer ? newName += ")" : newName;
-            clang::SourceRange range;
-            range.setBegin(E->getBeginLoc());
-            range.setEnd(E->getEndLoc());
-            if (range.isValid()) {
-              std::string verifierString = "";
-              llvm::raw_string_ostream tempStream(verifierString);
-              verifierString += newName;
-              llvm::outs() << verifierString << " - The String for RemoveVisitor\n";
-              _Rewriter.ReplaceText(E->getSourceRange(), verifierString);
-              llvm::outs() << "Inserted the text\n\n";
-              // If the return type is not already in the _NeededTypes we add it here
-              if (!_NeededTypes->count(E->getCallReturnType(*_C))) {
-                _NeededTypes->emplace(E->getCallReturnType(*_C));
-              }
-            }
-          }
+
+      for (std::string &removedName : *_ToRemove) {
+        if (name != removedName)
+          continue;
+
+        const clang::BuiltinType *BT = returnType->getAs<clang::BuiltinType>();
+        if (!BT)
+          continue;
+
+        auto it = kVerifierNames.find(BT->getKind());
+        if (it == kVerifierNames.end())
+          continue;
+
+        const std::string &verifierTypeName = it->second;
+        std::string replacement = "__VERIFIER_nondet_" + verifierTypeName + "()";
+        if (E->getSourceRange().isValid()) {
+          _Rewriter.ReplaceText(E->getSourceRange(), replacement);
+          _NeededTypes->insert(verifierTypeName);
         }
-      }
       }
     }
   }
-  return clang::RecursiveASTVisitor<RemoveFuncVisitor>::VisitCallExpr(E);
+  return clang::RecursiveASTVisitor<RemoveVisitor>::VisitCallExpr(E);
 }
 
-bool RemoveFuncVisitor::shouldTraversePostOrder() {
-  // return true;
-  return false;
-}
+bool RemoveVisitor::shouldTraversePostOrder() { return false; }

@@ -1,42 +1,66 @@
-# pragma once
+#pragma once
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/AST/Stmt.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
-#include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <set>
 #include <string>
 #include <vector>
 
-class RemoveFuncVisitor : public clang::RecursiveASTVisitor<RemoveFuncVisitor> {
+/**
+ * @brief Visitor that removes filtered functions and replaces their call sites.
+ *
+ * Two passes in one traversal:
+ * - {@code VisitFunctionDecl}: deletes the source text of each function in
+ *   {@code _ToRemove}, including any attached doc comment.
+ * - {@code VisitCallExpr}: replaces calls to removed functions with
+ *   {@code __VERIFIER_nondet_<type>()} and records the return type in
+ *   {@code _NeededTypes} for {@code AddVerifiersConsumerFilter} to inject
+ *   the corresponding extern declaration.
+ */
+class RemoveVisitor : public clang::RecursiveASTVisitor<RemoveVisitor> {
 public:
-  /// Constructs a Visitor that removes functions specified in toRemove using
-  /// the rewriter
-  RemoveFuncVisitor(clang::ASTContext *C,
-                    clang::Rewriter &rewriter,
-                    std::vector<std::string>      *toRemove,
-                    std::set<clang::QualType> *neededTypes);
+  /**
+   * @brief Constructs the visitor with the shared pipeline state.
+   *
+   * @param C            AST context, used for comment lookup and type queries.
+   * @param rewriter     Shared rewriter; deletions and replacements accumulate here.
+   * @param toRemove     Names of functions to remove, from {@code FilterFunctionsConsumer}.
+   * @param neededTypes  Output set; populated with return types of replaced calls.
+   */
+  RemoveVisitor(clang::ASTContext *C, clang::Rewriter &rewriter, std::vector<std::string> *toRemove,
+                std::set<std::string> *neededTypes);
 
-  /// Visits all function declarations checking the name agains the functions to
-  /// remove and handles the function declaration and any associated comments
+  /**
+   * @brief Deletes function definitions (and their doc comments) for functions in {@code
+   * _ToRemove}.
+   *
+   * Skips macro-expanded locations (not writable by the Rewriter) and
+   * {@code main}. For forward declarations the range is extended by one
+   * character to include the trailing semicolon.
+   */
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 
-  /// Currently not in use but could be implemented to handle Calls to the
-  /// deleted functions
+  /**
+   * @brief Records the return type of calls to removed functions in {@code _NeededTypes}.
+   *
+   * Looks up the return type's {@code BuiltinType::Kind} in {@code kVerifierNames} to
+   * resolve the verifier suffix. Unsupported types are skipped. Call sites are replaced
+   * by {@code TransformAction} in a later pipeline stage, not here.
+   */
   bool VisitCallExpr(clang::CallExpr *E);
 
-  /// Tells the RecursiveASTVisitor wether to recurse depth or breadth first
+  /** @brief Uses pre-order traversal (default); post-order left as future option. */
   bool shouldTraversePostOrder();
 
 private:
   clang::ASTContext *_C;
-  clang::SourceManager &_mgr;
+  clang::SourceManager &_Mgr;
   clang::Rewriter &_Rewriter;
-  std::vector<std::string> *_toRemove;
-  std::set<clang::QualType> *_NeededTypes;
+  std::vector<std::string> *_ToRemove;
+  std::set<std::string> *_NeededTypes;
 };

@@ -1,42 +1,76 @@
 #pragma once
 
 #include <clang/AST/ASTConsumer.h>
-#include <clang/Basic/SourceLocation.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
-#include <clang/Lex/PPCallbacks.h>
-#include <clang/Lex/Token.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
+#include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
+/**
+ * @brief ASTFrontendAction that runs the full filter consumer chain.
+ *
+ * Wires together the four consumers (count → filter → remove → inject
+ * verifiers) over a single parsed AST. A shared {@code Rewriter} accumulates
+ * all edits; the final buffer is flushed to the output file in
+ * {@code EndSourceFileAction}.
+ */
 class FilterAction : public clang::ASTFrontendAction {
 public:
-// Constructor for GenerateIncludeAction that sets up the output stream for
-// regenerating source code
-  FilterAction(std::map<std::string, int>      *config,
-               const std::vector<unsigned int> &types,
-               llvm::raw_fd_ostream            &output);
+  /**
+   * @brief Constructs the action with the shared pipeline state.
+   *
+   * @param config  Threshold map owned by {@code Filterer}.
+   * @param types   Clang BuiltinType values for the requested verifier types.
+   * @param output  Destination file stream for the filtered output.
+   */
+  FilterAction(std::map<std::string, int> *config, const std::vector<unsigned int> &types,
+               llvm::raw_fd_ostream &output);
 
-// Overridden function that uses a ConsumerMultiplexer instead of a single
-// ASTConsumer to run many consumers, handlers and visitors over the same AST
-  virtual std::unique_ptr<clang::ASTConsumer>
-  CreateASTConsumer(clang::CompilerInstance &Compiler,
-                    llvm::StringRef          Filename) override;
+  /**
+   * @brief Builds a {@code MultiplexConsumer} containing all four filter passes.
+   *
+   * Creates the shared state ({@code toFilter}, {@code toRemove},
+   * {@code neededTypes}) and hands them to the consumers in pipeline order.
+   * NOTE: the three shared objects are currently heap-allocated with raw
+   * pointers — known memory leak, to be fixed when consumer signatures are
+   * updated to accept {@code shared_ptr}.
+   *
+   * @param compiler  The active compiler instance.
+   * @param filename  Path of the file being processed.
+   * @return Owning pointer to the multiplexed consumer.
+   */
+  std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance &compiler,
+                                                        llvm::StringRef filename) override;
 
-// Function that runs before any of the consumers but after preprocessor steps
+  /**
+   * @brief Attaches the {@code Rewriter} to the compiler before AST actions run.
+   *
+   * Must be called before any consumer can make edits, because the Rewriter
+   * needs the {@code SourceManager} and {@code LangOptions} that only exist
+   * once the compiler instance is fully set up.
+   *
+   * @param compiler  The active compiler instance.
+   * @return Result of the parent implementation.
+   */
   bool BeginSourceFileAction(clang::CompilerInstance &compiler) override;
 
-// Function that runs after all of the consumers but before the AST is cleaned up
+  /**
+   * @brief Flushes the Rewriter's edited buffer to the output file.
+   *
+   * Called after all consumers have finished. Writes the modified source
+   * text (with function bodies removed and verifier declarations injected)
+   * to the destination stream.
+   */
   void EndSourceFileAction() override;
-
-  // bool usesPreprocessorOnly() const override;
 
 private:
   std::map<std::string, int> *_Config;
-  const std::vector<unsigned int> &_Types; 
+  const std::vector<unsigned int> &_Types;
   clang::Rewriter _Rewriter;
   llvm::raw_fd_ostream &_Output;
 };
-
