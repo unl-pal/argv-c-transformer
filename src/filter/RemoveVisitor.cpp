@@ -1,28 +1,18 @@
 #include "include/RemoveVisitor.hpp"
 
+#include "VerifierNames.hpp"
+
 #include <clang/AST/Decl.h>
 #include <clang/AST/Expr.h>
 #include <clang/AST/RawCommentList.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <iostream>
 #include <llvm/Support/raw_ostream.h>
+#include <optional>
 #include <string>
-#include <unordered_map>
 #include <vector>
-
-// Canonical mapping from Clang builtin type kind to SV-Comp verifier name suffix.
-// Types not in this map are unsupported and will be skipped.
-static const std::unordered_map<clang::BuiltinType::Kind, std::string> kVerifierNames = {
-    {clang::BuiltinType::Bool, "bool"},     {clang::BuiltinType::Char_S, "char"},
-    {clang::BuiltinType::Char_U, "char"},   {clang::BuiltinType::SChar, "char"},
-    {clang::BuiltinType::UChar, "uchar"},   {clang::BuiltinType::Short, "short"},
-    {clang::BuiltinType::UShort, "ushort"}, {clang::BuiltinType::Int, "int"},
-    {clang::BuiltinType::UInt, "uint"},     {clang::BuiltinType::Long, "long"},
-    {clang::BuiltinType::ULong, "ulong"},   {clang::BuiltinType::LongLong, "longlong"},
-    {clang::BuiltinType::ULongLong, "ulonglong"}, {clang::BuiltinType::Float, "float"},
-    {clang::BuiltinType::Double, "double"},
-};
 
 RemoveVisitor::RemoveVisitor(clang::ASTContext *C, clang::Rewriter &rewriter,
                              std::vector<std::string> *toRemove,
@@ -75,19 +65,17 @@ bool RemoveVisitor::VisitCallExpr(clang::CallExpr *E) {
         if (name != removedName)
           continue;
 
-        const clang::BuiltinType *BT = returnType->getAs<clang::BuiltinType>();
-        if (!BT)
+        std::optional<std::string> verifierTypeName = verifierSuffixForType(returnType);
+        if (!verifierTypeName) {
+          std::cout << "Warning: Call to removed function '" << name << "' has unsupported return type "
+            << returnType.getAsString() << ", skipping replacement.\n";
           continue;
+        }
 
-        auto it = kVerifierNames.find(BT->getKind());
-        if (it == kVerifierNames.end())
-          continue;
-
-        const std::string &verifierTypeName = it->second;
-        std::string replacement = "__VERIFIER_nondet_" + verifierTypeName + "()";
+        std::string replacement = "__VERIFIER_nondet_" + *verifierTypeName + "()";
         if (E->getSourceRange().isValid()) {
           _Rewriter.ReplaceText(E->getSourceRange(), replacement);
-          _NeededTypes->insert(verifierTypeName);
+          _NeededTypes->insert(*verifierTypeName);
         }
       }
     }

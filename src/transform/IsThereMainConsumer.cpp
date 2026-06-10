@@ -2,6 +2,7 @@
 #include "AllFunctionsToCallHandler.hpp"
 #include "IsThereMainConsumer.hpp"
 #include "IsThereMainHandler.hpp"
+#include "VerifierNames.hpp"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
@@ -24,6 +25,7 @@
 #include <clang/Sema/DeclSpec.h>
 #include <llvm/ADT/APInt.h>
 #include <llvm/Support/raw_ostream.h>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -77,24 +79,21 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       }
     }
 
-    // For each 
+    // For each parameter, synthesise a __VERIFIER_nondet_* argument.
     for (clang::ParmVarDecl *var : vars) {
       // get the parameter original type
       clang::QualType varType = var->getOriginalType();
-      // outdated as we can handle pointers
-      if (varType->isPointerType() || varType->isArrayType()) {
+
+      // Resolve the verifier function name via the shared naming map (the same
+      // map RemoveVisitor uses, so the generated call and any stubbed callee
+      // agree on the symbol). Unsupported types (pointers, structs, etc.)
+      // abort synthesis for this function; the outer loop then skips it whole
+      // because tempArgs ends up smaller than vars.
+      std::optional<std::string> verifierName = verifierFnNameForType(varType);
+      if (!verifierName)
         break;
-      }
 
-      // Clean up discrepencies between ClangAST naming and ArgC src code
-      std::string varTypeString = varType->isBooleanType() ? "bool" : varType.getAsString();
-      std::replace(varTypeString.begin(), varTypeString.end(), ' ', '_');
-      std::replace(varTypeString.begin(), varTypeString.end(), '*', '\0');
-      if (!std::strcmp(&varTypeString.at(varTypeString.size() - 1), "_")) {
-        varTypeString.pop_back();
-      }
-
-      clang::IdentifierInfo *info = &Context.Idents.get("__VERIFIER_nondet_" + varTypeString);
+      clang::IdentifierInfo *info = &Context.Idents.get(*verifierName);
 
       // Get the VERIFIER function declaration info if it exists or create if missing
       clang::DeclarationName name(info);
@@ -202,8 +201,10 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       tempArgs.push_back(tempExpr);
     }
 
+    // A parameter had an unsupported type: skip this function entirely rather
+    // than aborting synthesis for every remaining function.
     if (tempArgs.size() < vars.size()) {
-      break;
+      continue;
     }
 
     // For each parameter add a corresponding verifier call

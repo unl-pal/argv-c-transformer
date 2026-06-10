@@ -29,7 +29,12 @@ void IsThereMainHandler::run(const clang::ast_matchers::MatchFinder::MatchResult
       // verify function is in the main file and not an expansion or header
       if (mgr->isInMainFile(func->getLocation())) {
         llvm::outs() << "FOUND " << func->getNameAsString() << "!!\n";
-        if (!func->isReferenced() && !func->isUsed()) {
+        // Harness every filter-kept function defined in this file, not only
+        // "root" functions nothing else calls. Gating on a definition skips
+        // extern/forward declarations (including the injected
+        // __VERIFIER_nondet_* externs) and dedups the case where a function
+        // has both a forward declaration and a definition.
+        if (func->isThisDeclarationADefinition()) {
           clang::NestedNameSpecifierLoc qualLoc;
           if (func->getQualifierLoc()) {
             qualLoc = func->getQualifierLoc();
