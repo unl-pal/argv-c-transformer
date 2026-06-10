@@ -4,7 +4,7 @@
 
 CountingConsumer::CountingConsumer(
     const std::vector<unsigned int> &types,
-    std::unordered_map<std::string, CountingVisitor::attributes *> *toFilter)
+    std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter)
     : _Types(types), _ToFilter(toFilter) {}
 
 void CountingConsumer::HandleTranslationUnit(clang::ASTContext &Context) {

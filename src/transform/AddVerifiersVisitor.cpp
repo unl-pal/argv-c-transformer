@@ -12,7 +12,7 @@
 #include <set>
 #include <string>
 
-AddVerifiersVisitor::AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output, std::set<clang::QualType> *neededTypes, clang::Rewriter &rewriter)
+AddVerifiersVisitor::AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output, std::shared_ptr<std::set<clang::QualType>> neededTypes, clang::Rewriter &rewriter)
     : _C(c), _Output(output), _NeededTypes(neededTypes), _Rewriter(rewriter) {
 }
 

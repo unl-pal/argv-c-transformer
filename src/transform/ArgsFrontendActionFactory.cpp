@@ -6,18 +6,16 @@
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
 
-// Constructor for our front end that allows for the output stream variable to
-// be passed to all consumers and actions to come
-ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_fd_ostream &output)
-    : _Output(output) {}
+ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_fd_ostream &output) : _Output(output) {}
 
-// overridden create method necessary to out put our frontend action
 std::unique_ptr<clang::FrontendAction> ArgsFrontendFactory::create() {
   return std::make_unique<TransformAction>(_Output);
 }
 
-bool ArgsFrontendFactory::runInvocation(std::shared_ptr<clang::CompilerInvocation> Invocation, clang::FileManager *Files, std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps, clang::DiagnosticConsumer *DiagConsumer) {
-  llvm::outs() << "Running Invocation\n";
-
-  return clang::tooling::FrontendActionFactory::runInvocation(Invocation, Files, PCHContainerOps, DiagConsumer);
+bool ArgsFrontendFactory::runInvocation(
+    std::shared_ptr<clang::CompilerInvocation> Invocation, clang::FileManager *Files,
+    std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps,
+    clang::DiagnosticConsumer *DiagConsumer) {
+  return clang::tooling::FrontendActionFactory::runInvocation(Invocation, Files, PCHContainerOps,
+                                                              DiagConsumer);
 }

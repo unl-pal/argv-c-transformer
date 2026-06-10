@@ -3,6 +3,7 @@
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/Tooling/Tooling.h>
 #include <gtest/gtest.h>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -16,12 +17,13 @@
 // in-process from a string — no temp files, no compiler invocation.
 //
 // We keep the ASTUnit alive in the struct below because the ASTContext it
-// owns is referenced by the attributes pointers in the map. If the unit is
+// owns is referenced while the visitor populates the map. If the unit is
 // destroyed before you read the map, you'd be looking at freed memory.
 
 struct CountResult {
   std::unique_ptr<clang::ASTUnit> ast;
-  std::unordered_map<std::string, CountingVisitor::attributes *> funcs;
+  std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> funcs =
+      std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
 };
 
 // Parse `code` as C and run CountingVisitor with the given type filter.
@@ -36,7 +38,7 @@ static CountResult runCounter(const std::string &code, std::vector<unsigned int>
   if (!r.ast)
     return r;
 
-  CountingVisitor visitor(&r.ast->getASTContext(), types, &r.funcs);
+  CountingVisitor visitor(&r.ast->getASTContext(), types, r.funcs);
   visitor.TraverseTranslationUnitDecl(r.ast->getASTContext().getTranslationUnitDecl());
 
   return r;
@@ -61,8 +63,8 @@ static CountResult runCounter(const std::string &code, std::vector<unsigned int>
 
 TEST(CountingVisitor, ForLoopInFunction) {
   auto r = runCounter("void foo() { for(int i=0;i<10;i++){} }");
-  ASSERT_TRUE(r.funcs.count("foo")) << "function 'foo' not registered";
-  EXPECT_EQ(r.funcs.at("foo")->ForLoops, 1);
+  ASSERT_TRUE(r.funcs->count("foo")) << "function 'foo' not registered";
+  EXPECT_EQ(r.funcs->at("foo").ForLoops, 1);
 }
 
 TEST(CountingVisitor, MultipleForLoops) {
@@ -72,14 +74,14 @@ TEST(CountingVisitor, MultipleForLoops) {
       for(int j=0;j<3;j++){}
     }
   )");
-  ASSERT_TRUE(r.funcs.count("foo"));
-  EXPECT_EQ(r.funcs.at("foo")->ForLoops, 2);
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").ForLoops, 2);
 }
 
 TEST(CountingVisitor, WhileLoopInFunction) {
   auto r = runCounter("void foo() { int x=0; while(x<10){x++;} }");
-  ASSERT_TRUE(r.funcs.count("foo"));
-  EXPECT_EQ(r.funcs.at("foo")->WhileLoops, 1);
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").WhileLoops, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -88,17 +90,17 @@ TEST(CountingVisitor, WhileLoopInFunction) {
 
 TEST(CountingVisitor, IfStmt) {
   auto r = runCounter("void foo(int x) { if(x>0){} }");
-  ASSERT_TRUE(r.funcs.count("foo"));
-  EXPECT_EQ(r.funcs.at("foo")->IfStmt, 1);
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").IfStmt, 1);
 }
 
 TEST(CountingVisitor, TypeIfStmtIntCondition) {
   // TypeIfStmt counts ifs whose condition is of a requested type.
   // We ask for int (BuiltinType::Int = 17).
   auto r = runCounter("void foo(int x) { if(x>0){} }", {clang::BuiltinType::Int});
-  ASSERT_TRUE(r.funcs.count("foo"));
-  EXPECT_EQ(r.funcs.at("foo")->IfStmt, 1);
-  EXPECT_EQ(r.funcs.at("foo")->TypeIfStmt, 1);
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").IfStmt, 1);
+  EXPECT_EQ(r.funcs->at("foo").TypeIfStmt, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -109,14 +111,14 @@ TEST(CountingVisitor, FunctionCountInProgram) {
   // The special "Program" key tracks file-scope counts.
   // Each unique function declaration increments Program.Functions.
   auto r = runCounter("void foo(){} void bar(){}");
-  ASSERT_TRUE(r.funcs.count("Program"));
-  EXPECT_EQ(r.funcs.at("Program")->Functions, 2);
+  ASSERT_TRUE(r.funcs->count("Program"));
+  EXPECT_EQ(r.funcs->at("Program").Functions, 2);
 }
 
 TEST(CountingVisitor, EachFunctionGetsItsOwnEntry) {
   auto r = runCounter("void foo(){} void bar(){}");
-  EXPECT_TRUE(r.funcs.count("foo"));
-  EXPECT_TRUE(r.funcs.count("bar"));
+  EXPECT_TRUE(r.funcs->count("foo"));
+  EXPECT_TRUE(r.funcs->count("bar"));
 }
 
 // ---------------------------------------------------------------------------
@@ -128,8 +130,8 @@ TEST(CountingVisitor, CallFuncCount) {
     void helper() {}
     void foo() { helper(); helper(); }
   )");
-  ASSERT_TRUE(r.funcs.count("foo"));
-  EXPECT_EQ(r.funcs.at("foo")->CallFunc, 2);
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").CallFunc, 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,15 +141,15 @@ TEST(CountingVisitor, CallFuncCount) {
 TEST(CountingVisitor, TypeVariablesCountsOnlyMatchingType) {
   // Only int variables should be counted when we filter for int.
   auto r = runCounter("void foo() { int x; float y; int z; }", {clang::BuiltinType::Int});
-  ASSERT_TRUE(r.funcs.count("foo"));
-  EXPECT_EQ(r.funcs.at("foo")->TypeVariables, 2); // x and z
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").TypeVariables, 2); // x and z
 }
 
 TEST(CountingVisitor, TypeVariablesAllTypesWhenFilterEmpty) {
   // Empty types vector → _allTypes = true → count every variable
   auto r = runCounter("void foo() { int x; float y; }");
-  ASSERT_TRUE(r.funcs.count("foo"));
-  EXPECT_EQ(r.funcs.at("foo")->TypeVariables, 2);
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").TypeVariables, 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,10 +161,10 @@ TEST(CountingVisitor, CountsAreIsolatedPerFunction) {
     void foo() { for(int i=0;i<1;i++){} }
     void bar() { int x; }
   )");
-  ASSERT_TRUE(r.funcs.count("foo"));
-  ASSERT_TRUE(r.funcs.count("bar"));
-  EXPECT_EQ(r.funcs.at("foo")->ForLoops, 1);
-  EXPECT_EQ(r.funcs.at("bar")->ForLoops, 0);
+  ASSERT_TRUE(r.funcs->count("foo"));
+  ASSERT_TRUE(r.funcs->count("bar"));
+  EXPECT_EQ(r.funcs->at("foo").ForLoops, 1);
+  EXPECT_EQ(r.funcs->at("bar").ForLoops, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,6 +173,6 @@ TEST(CountingVisitor, CountsAreIsolatedPerFunction) {
 
 TEST(CountingVisitor, ComparisonOperatorCounted) {
   auto r = runCounter("void foo(int x) { int y = x > 0; }", {clang::BuiltinType::Int});
-  ASSERT_TRUE(r.funcs.count("foo"));
-  EXPECT_EQ(r.funcs.at("foo")->TypeCompareOperation, 1);
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").TypeCompareOperation, 1);
 }

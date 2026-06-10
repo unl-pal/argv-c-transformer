@@ -15,8 +15,8 @@
 #include <vector>
 
 RemoveVisitor::RemoveVisitor(clang::ASTContext *C, clang::Rewriter &rewriter,
-                             std::vector<std::string> *toRemove,
-                             std::set<std::string> *neededTypes)
+                             std::shared_ptr<std::vector<std::string>> toRemove,
+                             std::shared_ptr<std::set<std::string>> neededTypes)
     : _C(C), _Mgr(rewriter.getSourceMgr()), _Rewriter(rewriter), _ToRemove(toRemove),
       _NeededTypes(neededTypes) {}
 

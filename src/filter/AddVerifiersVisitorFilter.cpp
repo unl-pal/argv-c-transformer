@@ -24,7 +24,7 @@ static const std::unordered_map<std::string, std::string> kCTypeNames = {
 };
 
 AddVerifiersVisitorFilter::AddVerifiersVisitorFilter(clang::ASTContext *c,
-                                                     std::set<std::string> *neededTypes,
+                                                     std::shared_ptr<std::set<std::string>> neededTypes,
                                                      clang::Rewriter &rewriter)
     : _C(c), _NeededTypes(neededTypes), _Rewriter(rewriter) {}
 

@@ -1,5 +1,6 @@
 #include "include/Filterer.hpp"
 #include "FrontendFactoryWithArgs.hpp"
+#include "ClangToolUtils.hpp"
 
 #include <algorithm>
 #include <clang/AST/Type.h>
@@ -7,7 +8,6 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -34,76 +34,58 @@ void Filterer::parseConfigFile(std::string configFile) {
     std::cerr << "Config file not found: " << configFile << " — using defaults" << std::endl;
     return;
   }
-  std::ifstream file(configFile);
-  if (!file.is_open()) {
-    std::cerr << "Failed to open config file: " << configFile << " — using defaults" << std::endl;
-    return;
-  }
-
-  /// TODO MAKE THE PARSERS MORE SECURE!!
-  std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|[\\w\\s,]+|[\\w/-_.]+)$");
-  std::string line;
-  std::smatch match;
-  while (std::getline(file, line)) {
-    if (std::regex_search(line, match, pattern)) {
-      std::string key = match[1];
-      std::string value = match[2];
-      if (config.count(key)) {
-        try {
-          int i = std::stoi(value);
-          config.at(key) = i;
-        } catch (...) {
-        }
-        if (value == "false" || value == "False") {
-          config.at(key) = 0;
-        } else if (value == "true" || value == "True") {
-          config.at(key) = 1;
-        }
-      } else if (key == "type" || key == "Type") {
-        std::regex typePattern("([\\w]+)");
-        std::smatch typeMatches;
-        while (std::regex_search(value, typeMatches, typePattern)) {
-          if (typeMatches[0] == "int" || typeMatches[0] == "Int") {
-            typesRequested.push_back(clang::BuiltinType::Int);
-            typeNames.push_back(typeMatches[0]);
-          } else if (typeMatches[0] == "float" || typeMatches[0] == "Float") {
-            typesRequested.push_back(clang::BuiltinType::Float);
-            typeNames.push_back(typeMatches[0]);
-          } else if (typeMatches[0] == "long" || typeMatches[0] == "Long") {
-            typesRequested.push_back(clang::BuiltinType::Long);
-            typeNames.push_back(typeMatches[0]);
-          } else if (typeMatches[0] == "bool" || typeMatches[0] == "Bool") {
-            typesRequested.push_back(clang::BuiltinType::Bool);
-            typeNames.push_back(typeMatches[0]);
-          } else if (typeMatches[0] == "char" || typeMatches[0] == "Char") {
-            typesRequested.push_back(clang::BuiltinType::UChar);
-            typeNames.push_back(typeMatches[0]);
-          } else {
-            std::cerr << "Warning: unrecognised type '" << typeMatches[0] << "' ignored"
-                      << std::endl;
-          }
-          value = typeMatches.suffix().str();
-        }
-      } else if (key == "databaseDir") {
-        configuration.databaseDir = value;
-        if (!std::filesystem::exists(value)) {
-          std::cerr << "Database directory not found: " << value << std::endl;
-        }
-      } else if (key == "filterDir") {
-        configuration.filterDir = value;
-        if (!std::filesystem::exists(value)) {
-          std::filesystem::create_directory(value);
-        }
-      } else if (key == "wipeOldBenchmarks") {
-        configuration.wipeOldBenchmarks = (value == "true" || value == "True");
-      } else if (key == "debug") {
-        // silently ignored: replaced by debugLevel
-      } else {
-        std::cerr << "Unknown config key: " << key << std::endl;
+  for (auto [key, value] : parseIniFile(configFile)) {
+    if (config.count(key)) {
+      try {
+        int i = std::stoi(value);
+        config.at(key) = i;
+      } catch (...) {
       }
+      if (value == "false" || value == "False") {
+        config.at(key) = 0;
+      } else if (value == "true" || value == "True") {
+        config.at(key) = 1;
+      }
+    } else if (key == "type" || key == "Type") {
+      std::regex typePattern("([\\w]+)");
+      std::smatch typeMatches;
+      while (std::regex_search(value, typeMatches, typePattern)) {
+        if (typeMatches[0] == "int" || typeMatches[0] == "Int") {
+          typesRequested.push_back(clang::BuiltinType::Int);
+          typeNames.push_back(typeMatches[0]);
+        } else if (typeMatches[0] == "float" || typeMatches[0] == "Float") {
+          typesRequested.push_back(clang::BuiltinType::Float);
+          typeNames.push_back(typeMatches[0]);
+        } else if (typeMatches[0] == "long" || typeMatches[0] == "Long") {
+          typesRequested.push_back(clang::BuiltinType::Long);
+          typeNames.push_back(typeMatches[0]);
+        } else if (typeMatches[0] == "bool" || typeMatches[0] == "Bool") {
+          typesRequested.push_back(clang::BuiltinType::Bool);
+          typeNames.push_back(typeMatches[0]);
+        } else if (typeMatches[0] == "char" || typeMatches[0] == "Char") {
+          typesRequested.push_back(clang::BuiltinType::UChar);
+          typeNames.push_back(typeMatches[0]);
+        } else {
+          std::cerr << "Warning: unrecognised type '" << typeMatches[0] << "' ignored" << std::endl;
+        }
+        value = typeMatches.suffix().str();
+      }
+    } else if (key == "databaseDir") {
+      configuration.databaseDir = value;
+      if (!std::filesystem::exists(value))
+        std::cerr << "Database directory not found: " << value << std::endl;
+    } else if (key == "filterDir") {
+      configuration.filterDir = value;
+      if (!std::filesystem::exists(value))
+        std::filesystem::create_directory(value);
+    } else if (key == "wipeOldBenchmarks") {
+      configuration.wipeOldBenchmarks = (value == "true" || value == "True");
+    } else if (key == "debug") {
+      // silently ignored: replaced by debugLevel
+    } else {
+      std::cerr << "Unknown config key: " << key << std::endl;
     }
   }
-  file.close();
 
   if (config.at("debugLevel") >= 1) {
     std::cout << "[filter] loaded config: " << configFile << std::endl;
@@ -231,28 +213,15 @@ int Filterer::run() {
 
       clang::IgnoringDiagConsumer diagConsumer;
 
-      std::string resourceDir;
-      try {
-        resourceDir = std::getenv("CLANG_RESOURCES");
-      } catch (...) {
+      std::optional<std::string> resourceDir = getResourceDir();
+      if (!resourceDir) {
         std::cerr << "Please set the CLANG_RESOURCES environment variable before proceeding"
                   << std::endl;
         return 1;
       }
 
-      std::vector<std::string> args = {
-          "clang",
-          "-extra-arg=-xc",
-          "-extra-arg=-resource-dir=" + resourceDir,
-          "-extra-arg=-fparse-all-comments",
-          oldPath.string(),
-      };
-
-      std::vector<const char *> argv;
-      for (const std::string &arg : args) {
-        argv.push_back(arg.c_str());
-      }
-      argv.push_back(nullptr);
+      std::vector<std::string> args = buildClangArgs(oldPath.string(), *resourceDir);
+      std::vector<const char *> argv = toArgv(args);
       int argc = static_cast<int>(args.size());
 
       std::filesystem::create_directories(newPath.parent_path());

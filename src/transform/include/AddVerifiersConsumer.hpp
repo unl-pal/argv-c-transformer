@@ -6,6 +6,7 @@
 #include <clang/Basic/SourceManager.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/raw_ostream.h>
+#include <memory>
 #include <set>
 
 class AddVerifiersConsumer : public clang::ASTConsumer {
@@ -14,8 +15,8 @@ public:
   /// functions and add them to the code file
   /// @param - output stream to print to
   /// @param - types that needs verrifiers to be created
-  AddVerifiersConsumer(llvm::raw_fd_ostream      &output,
-                       std::set<clang::QualType> *neededTypes,
+  AddVerifiersConsumer(llvm::raw_fd_ostream &output,
+                       std::shared_ptr<std::set<clang::QualType>> neededTypes,
                        clang::Rewriter &rewriter);
 
   /// Calls the AddVerifiersVisitor and supplies the needed context
@@ -23,6 +24,6 @@ public:
 
 private:
   llvm::raw_fd_ostream &_Output;
-  std::set<clang::QualType> *_NeededTypes;
+  std::shared_ptr<std::set<clang::QualType>> _NeededTypes;
   clang::Rewriter &_Rewriter;
 };

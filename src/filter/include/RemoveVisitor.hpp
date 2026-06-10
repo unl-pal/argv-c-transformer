@@ -7,6 +7,7 @@
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -32,8 +33,9 @@ public:
    * @param toRemove     Names of functions to remove, from {@code FilterFunctionsConsumer}.
    * @param neededTypes  Output set; populated with return types of replaced calls.
    */
-  RemoveVisitor(clang::ASTContext *C, clang::Rewriter &rewriter, std::vector<std::string> *toRemove,
-                std::set<std::string> *neededTypes);
+  RemoveVisitor(clang::ASTContext *C, clang::Rewriter &rewriter,
+                std::shared_ptr<std::vector<std::string>> toRemove,
+                std::shared_ptr<std::set<std::string>> neededTypes);
 
   /**
    * @brief Deletes function definitions (and their doc comments) for functions in {@code
@@ -61,6 +63,6 @@ private:
   clang::ASTContext *_C;
   clang::SourceManager &_Mgr;
   clang::Rewriter &_Rewriter;
-  std::vector<std::string> *_ToRemove;
-  std::set<std::string> *_NeededTypes;
+  std::shared_ptr<std::vector<std::string>> _ToRemove;
+  std::shared_ptr<std::set<std::string>> _NeededTypes;
 };
