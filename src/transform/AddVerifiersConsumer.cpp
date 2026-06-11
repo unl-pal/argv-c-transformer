@@ -1,22 +1,59 @@
 #include "AddVerifiersConsumer.hpp"
-#include "AddVerifiersVisitor.hpp"
+
+#include "VerifierNames.hpp"
 
 #include <clang/AST/ASTContext.h>
-#include <clang/ASTMatchers/ASTMatchFinder.h>
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclarationName.h>
+#include <clang/AST/RawCommentList.h>
+#include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
-#include <clang/Rewrite/Core/Rewriter.h>
-#include <llvm/Support/raw_ostream.h>
+#include <optional>
+#include <string>
 
-AddVerifiersConsumer::AddVerifiersConsumer(
-  llvm::raw_fd_ostream &output, std::shared_ptr<std::set<clang::QualType>> neededTypes,
-  clang::Rewriter &rewriter)
-    : _Output(output), _NeededTypes(neededTypes), _Rewriter(rewriter) {}
+AddVerifiersConsumer::AddVerifiersConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
+                                           clang::Rewriter &rewriter)
+    : _NeededSuffixes(neededSuffixes), _Rewriter(rewriter) {}
 
 void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
-  llvm::outs() << "Running the Verifiers\n";
-  if (_NeededTypes->size()) {
-    AddVerifiersVisitor Visitor(&Context, _Output, _NeededTypes, _Rewriter);
-    Visitor.HandleTranslationUnit(Context.getTranslationUnitDecl());
-    llvm::outs() << "Ran the Verifiers\n";
+  if (_NeededSuffixes->empty())
+    return;
+
+  clang::SourceManager &mgr = Context.getSourceManager();
+  clang::TranslationUnitDecl *TD = Context.getTranslationUnitDecl();
+
+  // Insert before the first main-file decl, which keeps the externs below
+  // the include block (includes are not decls). Fall back to the start of
+  // the file when there are no decls at all.
+  clang::SourceLocation loc;
+  clang::Decl *firstNode = nullptr;
+  for (clang::Decl *decl : TD->decls()) {
+    if (mgr.isInMainFile(decl->getLocation()) && !mgr.isMacroBodyExpansion(decl->getLocation())) {
+      firstNode = decl;
+      break;
+    }
   }
+  if (firstNode) {
+    loc = mgr.translateLineCol(mgr.getMainFileID(),
+                               mgr.getSpellingLineNumber(firstNode->getLocation()), 1);
+    // If the first node has a doc comment, insert before the comment instead
+    if (clang::RawComment *comment = Context.getRawCommentForDeclNoCache(firstNode))
+      loc = comment->getBeginLoc();
+  } else {
+    loc = mgr.translateLineCol(mgr.getMainFileID(), 1, 1);
+  }
+
+  std::string decls;
+  for (const std::string &suffix : *_NeededSuffixes) {
+    std::optional<std::string> cType = cTypeForSuffix(suffix);
+    if (!cType)
+      continue;
+    std::string name = "__VERIFIER_nondet_" + suffix;
+    // The filter step may already have injected this extern; skip duplicates
+    if (!TD->lookup(clang::DeclarationName(&Context.Idents.get(name))).empty())
+      continue;
+    decls += "extern " + *cType + " " + name + "(void);\n";
+  }
+  if (!decls.empty())
+    _Rewriter.InsertTextBefore(loc, decls + "\n");
 }

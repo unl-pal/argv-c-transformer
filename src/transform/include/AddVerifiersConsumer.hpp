@@ -2,28 +2,25 @@
 
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
-#include <clang/AST/Type.h>
-#include <clang/Basic/SourceManager.h>
 #include <clang/Rewrite/Core/Rewriter.h>
-#include <llvm/Support/raw_ostream.h>
 #include <memory>
 #include <set>
+#include <string>
 
 class AddVerifiersConsumer : public clang::ASTConsumer {
 public:
-  /// Consumer that launches the visitor that will create the verrifier
-  /// functions and add them to the code file
-  /// @param - output stream to print to
-  /// @param - types that needs verrifiers to be created
-  AddVerifiersConsumer(llvm::raw_fd_ostream &output,
-                       std::shared_ptr<std::set<clang::QualType>> neededTypes,
+  /// Inserts an extern __VERIFIER_nondet_<suffix>(void) declaration at the
+  /// top of the main file for every needed suffix not already declared
+  /// (the filter step may have injected some already).
+  /// @param neededSuffixes verifier suffixes collected by earlier consumers
+  /// @param rewriter rewriter for changing source code of AST
+  AddVerifiersConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
                        clang::Rewriter &rewriter);
 
-  /// Calls the AddVerifiersVisitor and supplies the needed context
-  void HandleTranslationUnit(clang::ASTContext &Context);
+  /// Inserts the extern declarations
+  void HandleTranslationUnit(clang::ASTContext &Context) override;
 
 private:
-  llvm::raw_fd_ostream &_Output;
-  std::shared_ptr<std::set<clang::QualType>> _NeededTypes;
+  std::shared_ptr<std::set<std::string>> _NeededSuffixes;
   clang::Rewriter &_Rewriter;
 };

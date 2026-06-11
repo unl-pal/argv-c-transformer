@@ -1,8 +1,8 @@
 #include "TransformAction.hpp"
 #include "AddVerifiersConsumer.hpp"
+#include "MainGenConsumer.hpp"
 #include "ReplaceDeadCallsConsumer.hpp"
 
-#include <IsThereMainConsumer.hpp>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/MultiplexConsumer.h>
 #include <clang/Lex/Preprocessor.h>
@@ -34,13 +34,14 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
   clang::Preprocessor &pp = compiler.getPreprocessor();
   pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
 
-  // Shared between ReplaceDeadCallsConsumer and AddVerifiersConsumer
-  auto neededTypes = std::make_shared<std::set<clang::QualType>>();
+  // Verifier suffixes needed by dead-call replacement and the generated
+  // main; AddVerifiersConsumer runs last and emits the extern declarations
+  auto neededSuffixes = std::make_shared<std::set<std::string>>();
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
-  tempVector.emplace_back(std::make_unique<ReplaceDeadCallsConsumer>(neededTypes, _Rewriter));
-  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(_Output, neededTypes, _Rewriter));
-  tempVector.emplace_back(std::make_unique<IsThereMainConsumer>(_Rewriter));
+  tempVector.emplace_back(std::make_unique<ReplaceDeadCallsConsumer>(neededSuffixes, _Rewriter));
+  tempVector.emplace_back(std::make_unique<MainGenConsumer>(neededSuffixes, _Rewriter));
+  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(neededSuffixes, _Rewriter));
 
   return std::make_unique<clang::MultiplexConsumer>(std::move(tempVector));
 }

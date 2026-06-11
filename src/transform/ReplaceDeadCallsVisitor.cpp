@@ -11,9 +11,9 @@
 #include <optional>
 
 ReplaceDeadCallsVisitor::ReplaceDeadCallsVisitor(
-    clang::ASTContext *C, std::shared_ptr<std::set<clang::QualType>> neededTypes,
+    clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededSuffixes,
     clang::Rewriter &rewriter)
-    : _C(C), _NeededTypes(neededTypes), _Rewriter(rewriter) {};
+    : _C(C), _NeededSuffixes(neededSuffixes), _Rewriter(rewriter) {};
 
 bool ReplaceDeadCallsVisitor::VisitTranslationUnit(clang::TranslationUnitDecl *D) {
   return clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor>::TraverseDecl(D);
@@ -37,9 +37,9 @@ bool ReplaceDeadCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
           clang::QualType returnType = E->getCallReturnType(*_C);
           // Unsupported return types (pointers, structs, ...) have no
           // __VERIFIER_nondet_* equivalent; leave the call as-is.
-          if (std::optional<std::string> verifierFn = verifierFnNameForType(returnType)) {
-            _Rewriter.ReplaceText(E->getSourceRange(), *verifierFn + "()");
-            _NeededTypes->emplace(returnType);
+          if (std::optional<std::string> suffix = verifierSuffixForType(returnType)) {
+            _Rewriter.ReplaceText(E->getSourceRange(), "__VERIFIER_nondet_" + *suffix + "()");
+            _NeededSuffixes->emplace(*suffix);
           }
         }
       }

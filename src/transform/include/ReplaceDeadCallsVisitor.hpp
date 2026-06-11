@@ -8,12 +8,13 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <memory>
 #include <set>
+#include <string>
 
 class ReplaceDeadCallsVisitor : public clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor> {
 public:
   /// Visitor replaces all dead calls to previously removed functions
   ReplaceDeadCallsVisitor(clang::ASTContext *C,
-                          std::shared_ptr<std::set<clang::QualType>> neededTypes,
+                          std::shared_ptr<std::set<std::string>> neededSuffixes,
                           clang::Rewriter &rewriter);
 
   /// Initializes the traversal
@@ -30,6 +31,6 @@ public:
 
 private:
   clang::ASTContext *_C;
-  std::shared_ptr<std::set<clang::QualType>> _NeededTypes;
+  std::shared_ptr<std::set<std::string>> _NeededSuffixes;
   clang::Rewriter &_Rewriter;
 };

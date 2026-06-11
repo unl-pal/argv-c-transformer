@@ -1,27 +1,12 @@
 #include "AddVerifiersVisitorFilter.hpp"
 
+#include "VerifierNames.hpp"
+
 #include <clang/AST/RawCommentList.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
+#include <optional>
 #include <string>
-#include <unordered_map>
-
-// Maps verifier name suffix to the C type string used in the extern declaration.
-static const std::unordered_map<std::string, std::string> kCTypeNames = {
-    {"bool", "_Bool"},
-    {"char", "char"},
-    {"uchar", "unsigned char"},
-    {"short", "short"},
-    {"ushort", "unsigned short"},
-    {"int", "int"},
-    {"uint", "unsigned int"},
-    {"long", "long"},
-    {"ulong", "unsigned long"},
-    {"longlong", "long long"},
-    {"ulonglong", "unsigned long long"},
-    {"float", "float"},
-    {"double", "double"},
-};
 
 AddVerifiersVisitorFilter::AddVerifiersVisitorFilter(clang::ASTContext *c,
                                                      std::shared_ptr<std::set<std::string>> neededTypes,
@@ -51,10 +36,10 @@ bool AddVerifiersVisitorFilter::HandleTranslationUnit(clang::TranslationUnitDecl
   _Rewriter.InsertTextBefore(loc, "\n");
 
   for (const std::string &typeName : *_NeededTypes) {
-    auto it = kCTypeNames.find(typeName);
-    if (it == kCTypeNames.end())
+    std::optional<std::string> cType = cTypeForSuffix(typeName);
+    if (!cType)
       continue;
-    std::string decl = "extern " + it->second + " __VERIFIER_nondet_" + typeName + "(void);\n";
+    std::string decl = "extern " + *cType + " __VERIFIER_nondet_" + typeName + "(void);\n";
     _Rewriter.InsertTextBefore(loc, decl);
   }
 
