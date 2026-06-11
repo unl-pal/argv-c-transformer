@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   pull_request:
 
+# TODO: CI is currently a work in progress.
+# Get local builds working on each platform first, then rewrite this workflow
+# to mirror the working local setup. Requires LLVM >= 19 on all platforms.
+
 jobs:
   build:
     strategy:
@@ -34,4 +38,9 @@ jobs:
         run: cmake -B build -S . -G Ninja -DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)
 
       - name: Build
-        run: ninja -C build filter transform full
+        run: ninja -C build filter transform full filter_tests
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+        env:
+          CLANG_RESOURCES: ${{ steps.find-llvm.outputs.clang_resources }}
