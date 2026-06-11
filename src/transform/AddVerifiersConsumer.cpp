@@ -54,6 +54,30 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     decls += "extern " + *cType + " " + name + "(void);\n";
   }
+
+  // HavocCallsVisitor marks pointer-returning call replacements with the
+  // helper names; emit the helper definitions they rely on. The helpers
+  // hand out valid havocked blocks per the SV-COMP __VERIFIER_nondet_memory
+  // contract (an arbitrary nondet pointer value must never be dereferenced).
+  bool needCString = _NeededSuffixes->count("__havoc_cstring");
+  bool needBlock = needCString || _NeededSuffixes->count("__havoc_block");
+  if (needBlock) {
+    decls += "extern void __VERIFIER_nondet_memory(void *, unsigned long);\n"
+             "extern void *malloc(unsigned long);\n"
+             "static void *__havoc_block(unsigned long size) {\n"
+             "  void *block = malloc(size);\n"
+             "  __VERIFIER_nondet_memory(block, size);\n"
+             "  return block;\n"
+             "}\n";
+  }
+  if (needCString) {
+    decls += "static char *__havoc_cstring(unsigned long size) {\n"
+             "  char *s = __havoc_block(size);\n"
+             "  s[size - 1] = '\\0';\n"
+             "  return s;\n"
+             "}\n";
+  }
+
   if (!decls.empty())
     _Rewriter.InsertTextBefore(loc, decls + "\n");
 }

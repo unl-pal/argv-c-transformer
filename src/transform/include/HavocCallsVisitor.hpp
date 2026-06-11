@@ -4,18 +4,20 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/AST/Type.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <memory>
 #include <set>
 #include <string>
 
-class ReplaceDeadCallsVisitor : public clang::RecursiveASTVisitor<ReplaceDeadCallsVisitor> {
+class HavocCallsVisitor : public clang::RecursiveASTVisitor<HavocCallsVisitor> {
 public:
-  /// Visitor replaces all dead calls to previously removed functions
-  ReplaceDeadCallsVisitor(clang::ASTContext *C,
-                          std::shared_ptr<std::set<std::string>> neededSuffixes,
-                          clang::Rewriter &rewriter);
+  /// Visitor that havocs every function call, making each function body
+  /// intraprocedural: calls yielding a primitive become
+  /// __VERIFIER_nondet_<type>(), pointer-returning calls become
+  /// __VERIFIER_nondet_pointer(), and void calls are dropped.
+  HavocCallsVisitor(clang::ASTContext *C,
+                    std::shared_ptr<std::set<std::string>> neededSuffixes,
+                    clang::Rewriter &rewriter);
 
   /// Initializes the traversal
   virtual bool VisitTranslationUnit(clang::TranslationUnitDecl *D);
@@ -23,10 +25,10 @@ public:
   /// Default Visit function for all Declarations
   virtual bool VisitDecl(clang::Decl *D);
 
-  /// Primary Visit needed to replace necessary calls with matching verifers
+  /// Primary Visit needed to replace calls with matching verifier nondets
   virtual bool VisitCallExpr(clang::CallExpr *E);
 
-  /// Instructs the visitor wether to recurse depth or breadth first
+  /// Instructs the visitor whether to recurse depth or breadth first
   bool shouldTraversePostOrder();
 
 private:

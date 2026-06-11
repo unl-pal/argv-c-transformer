@@ -10,25 +10,26 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
-#include <set>
 
 /**
- * @brief PPCallbacks hook that observes #include/#import directives during preprocessing.
+ * @brief PPCallbacks hook that strips non-system #include directives.
  *
- * Currently only tracks which standard headers have been seen so far in the
- * main file. Intended to drive include regeneration and, eventually,
- * classification of non-standard includes as internal (same-repo) vs
- * external dependencies.
+ * System headers (C stdlib and platform headers) are kept; project-local
+ * includes are removed from the output, since every function they declare is
+ * havocked by HavocCallsConsumer anyway. A file that uses types or macros
+ * from a local header will no longer compile after stripping — those outputs
+ * are weeded out by keepCompilesOnly (header type/macro handling is a future
+ * feature).
  */
 class IncludeFinder : public clang::PPCallbacks {
 public:
   /**
-   * @brief Constructs the callback, binding the source manager and output stream.
+   * @brief Constructs the callback, binding the source manager and rewriter.
    *
-   * @param SM     Source manager, used to check whether directives are in the main file.
-   * @param output Stream that regenerated #include statements are written to.
+   * @param SM       Source manager, used to check whether directives are in the main file.
+   * @param rewriter Shared rewriter the include directives are removed through.
    */
-  IncludeFinder(clang::SourceManager &SM, llvm::raw_fd_ostream &output);
+  IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter);
 
   /**
    * @brief Called by the preprocessor for each #include/#import directive.
@@ -54,15 +55,7 @@ public:
 
 private:
   clang::SourceManager &_Mgr;
-  llvm::raw_fd_ostream &_Output;
-  std::set<llvm::StringRef> _AlreadyIncluded;
-  std::set<llvm::StringRef> _AllStandardHeaders = {
-      "assert.h",      "complex.h",  "ctype.h",  "errno.h",     "fenv.h",   "float.h",
-      "inttypes.h",    "iso646.h",   "limits.h", "locale.h",    "math.h",   "setjmp.h",
-      "signal.h",      "stdalign.h", "stdarg.h", "stdatomic.h", "stdbit.h", "stdbool.h",
-      "stdckdint.h",   "stddef.h",   "stdint.h", "stdio.h",     "stdlib.h", "stdmchar.h",
-      "stdnoreturn.h", "string.h",   "tgmath.h", "threads.h",   "time.h",   "uchar.h",
-      "wchar.h",       "wctype.h"};
+  clang::Rewriter &_Rewriter;
 };
 
 /**
@@ -85,9 +78,8 @@ public:
    * @brief Builds the multiplexed consumer chain for the transform pipeline.
    *
    * Registers IncludeFinder on the preprocessor and returns a
-   * MultiplexConsumer running ReplaceDeadCallsConsumer,
-   * AddVerifiersConsumer, and IsThereMainConsumer (in that order) over the
-   * shared Rewriter.
+   * MultiplexConsumer running HavocCallsConsumer, MainGenConsumer, and
+   * AddVerifiersConsumer (in that order) over the shared Rewriter.
    *
    * @param Compiler The compiler instance for this translation unit.
    * @param Filename Name of the file being processed.

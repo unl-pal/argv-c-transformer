@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <iostream>
 
 MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
                                  clang::Rewriter &rewriter)
@@ -35,8 +36,12 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
-    if (func->isVariadic())
+    if (func->isVariadic()) {
+      std::cout << "Warning: variadic functions unsupported\n" + func->getNameAsString() +
+                       " not harnessed"
+                << std::endl;
       continue;
+    }
     std::string args;
     std::set<std::string> argSuffixes;
     bool supported = true;
@@ -53,8 +58,12 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     }
     // A parameter without a nondet equivalent (pointer, struct, ...): skip
     // this function but keep harnessing the rest.
-    if (!supported)
+    if (!supported) {
+      std::cout << "Warning: only primitive symbolics supported\n" + func->getNameAsString() +
+                       " not harnessed"
+                << std::endl;
       continue;
+    }
     std::string name = func->isMain() ? "original_main" : func->getNameAsString();
     harness += "  " + name + "(" + args + ");\n";
     _NeededSuffixes->insert(argSuffixes.begin(), argSuffixes.end());

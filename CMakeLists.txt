@@ -55,8 +55,8 @@ set(SOURCE_TRANSFORM
   src/transform/GenerateCodeConsumer.cpp
   src/transform/MainGenConsumer.cpp
   src/transform/RegenCode.cpp
-  src/transform/ReplaceDeadCallsVisitor.cpp
-  src/transform/ReplaceDeadCallsConsumer.cpp
+  src/transform/HavocCallsVisitor.cpp
+  src/transform/HavocCallsConsumer.cpp
   src/transform/TransformAction.cpp
   src/transform/Transformer.cpp
 )

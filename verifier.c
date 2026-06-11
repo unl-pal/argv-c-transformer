@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stddef.h>
 
 bool __VERIFIER_nondet_bool(void) {
    return false;
@@ -41,6 +42,13 @@ double __VERIFIER_nondet_double(void) {
 }
 void* __VERIFIER_nondet_pointer(void) {
    return (void*)(4);
+}
+
+void __VERIFIER_nondet_memory(void *mem, size_t size) {
+   unsigned char *p = (unsigned char *)mem;
+   for (size_t i = 0; i < size; i++) {
+      p[i] = __VERIFIER_nondet_uchar();
+   }
 }
 
 void reach_error() {

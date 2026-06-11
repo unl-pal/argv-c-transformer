@@ -1,7 +1,7 @@
 #include "TransformAction.hpp"
 #include "AddVerifiersConsumer.hpp"
+#include "HavocCallsConsumer.hpp"
 #include "MainGenConsumer.hpp"
-#include "ReplaceDeadCallsConsumer.hpp"
 
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/MultiplexConsumer.h>
@@ -9,21 +9,24 @@
 #include <memory>
 #include <vector>
 
-// Tracks standard headers seen so far; output/regeneration logic is not yet implemented
+// Strip non-system includes: their functions are havocked by
+// HavocCallsConsumer, so the directives only leave unresolvable references
+// in the output. Unresolved includes also classify as C_User and get
+// dropped. Files that needed a local header's types or macros stop
+// compiling and are weeded out by keepCompilesOnly.
 void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &,
-                                       llvm::StringRef FileName, bool, clang::CharSourceRange,
+                                       llvm::StringRef, bool,
+                                       clang::CharSourceRange FilenameRange,
                                        clang::OptionalFileEntryRef, llvm::StringRef,
                                        llvm::StringRef, const clang::Module *, bool,
-                                       clang::SrcMgr::CharacteristicKind) {
-  if (_Mgr.isInMainFile(HashLoc)) {
-    if (_AllStandardHeaders.count(FileName)) {
-      _AlreadyIncluded.emplace(FileName);
-    }
-  }
+                                       clang::SrcMgr::CharacteristicKind FileType) {
+  if (!_Mgr.isInMainFile(HashLoc) || FileType != clang::SrcMgr::C_User)
+    return;
+  _Rewriter.RemoveText(clang::CharSourceRange::getCharRange(HashLoc, FilenameRange.getEnd()));
 }
 
-IncludeFinder::IncludeFinder(clang::SourceManager &SM, llvm::raw_fd_ostream &output)
-    : _Mgr(SM), _Output(output) {}
+IncludeFinder::IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter)
+    : _Mgr(SM), _Rewriter(rewriter) {}
 
 TransformAction::TransformAction(llvm::raw_fd_ostream &output) : _Output(output), _Rewriter() {}
 
@@ -32,14 +35,14 @@ TransformAction::TransformAction(llvm::raw_fd_ostream &output) : _Output(output)
 std::unique_ptr<clang::ASTConsumer>
 TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef) {
   clang::Preprocessor &pp = compiler.getPreprocessor();
-  pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
+  pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), _Rewriter));
 
-  // Verifier suffixes needed by dead-call replacement and the generated
-  // main; AddVerifiersConsumer runs last and emits the extern declarations
+  // Verifier suffixes needed by call havocking and the generated main;
+  // AddVerifiersConsumer runs last and emits the extern declarations
   auto neededSuffixes = std::make_shared<std::set<std::string>>();
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
-  tempVector.emplace_back(std::make_unique<ReplaceDeadCallsConsumer>(neededSuffixes, _Rewriter));
+  tempVector.emplace_back(std::make_unique<HavocCallsConsumer>(neededSuffixes, _Rewriter));
   tempVector.emplace_back(std::make_unique<MainGenConsumer>(neededSuffixes, _Rewriter));
   tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(neededSuffixes, _Rewriter));
 
