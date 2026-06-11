@@ -80,6 +80,10 @@ void Filterer::parseConfigFile(std::string configFile) {
         std::filesystem::create_directory(value);
     } else if (key == "wipeOldBenchmarks") {
       configuration.wipeOldBenchmarks = (value == "true" || value == "True");
+    } else if (key == "benchmarkDir" || key == "keepCompilesOnly" || key == "csv" ||
+               key == "downloadDir" || key == "language" || key == "projectCount" ||
+               key == "minNumStars" || key == "minRepoLoc") {
+      // consumed by the transform step or Downloader.py; not a filter key
     } else if (key == "debug") {
       // silently ignored: replaced by debugLevel
     } else {
