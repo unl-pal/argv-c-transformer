@@ -70,9 +70,10 @@ public:
   /**
    * @brief Constructs the action, binding the output stream.
    *
-   * @param output Stream the transformed source is written to.
+   * @param output Stream the transformed source is written to (a file in
+   *               production, a string stream in tests).
    */
-  TransformAction(llvm::raw_fd_ostream &output);
+  TransformAction(llvm::raw_ostream &output);
 
   /**
    * @brief Builds the multiplexed consumer chain for the transform pipeline.
@@ -102,6 +103,6 @@ public:
   void EndSourceFileAction() override;
 
 private:
-  llvm::raw_fd_ostream &_Output;
+  llvm::raw_ostream &_Output;
   clang::Rewriter _Rewriter;
 };

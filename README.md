@@ -57,6 +57,42 @@ AST pipeline to resolve standard library headers in processed files:
 export CLANG_RESOURCES=$(clang -print-resource-dir)
 ```
 
+# Testing
+
+Build and run the test suite (GoogleTest is fetched automatically by CMake):
+
+```sh
+export CLANG_RESOURCES=$(clang -print-resource-dir)
+cmake -B build -S . -G Ninja
+ninja -C build
+ctest --test-dir build
+```
+
+Two suites run:
+
+- **`filter_tests`** — unit tests for the filter stage's AST counting
+  (`tests/filter/`).
+- **`transform_tests`** — golden-file tests for the transform stage
+  (`tests/transform/`). Each case is a pair of files in
+  `tests/transform/cases/`: `<name>.input.c` is fed through the full transform
+  pipeline (include stripping → call havocking → main generation → verifier
+  extern injection) and the output must match `<name>.expected.c` exactly.
+
+To add a transform test, drop a new `<name>.input.c` into the cases directory
+(support headers can sit alongside; quoted includes resolve there) and generate
+its golden:
+
+```sh
+UPDATE_GOLDENS=1 ./build/tests/transform_tests
+```
+
+Review the generated/changed `.expected.c` files like any other code change —
+this is also how goldens are refreshed after an intentional behavior change.
+
+Note: test cases that include system headers are skipped (with an explanatory
+message) when `CLANG_RESOURCES` is unset or points at a stale directory, e.g.
+after a clang upgrade.
+
 # Downloader (optional)
 
 The downloader fetches C source repositories from GitHub for use as pipeline

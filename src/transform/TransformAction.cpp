@@ -28,7 +28,7 @@ void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc, const clan
 IncludeFinder::IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter)
     : _Mgr(SM), _Rewriter(rewriter) {}
 
-TransformAction::TransformAction(llvm::raw_fd_ostream &output) : _Output(output), _Rewriter() {}
+TransformAction::TransformAction(llvm::raw_ostream &output) : _Output(output), _Rewriter() {}
 
 // Builds the multiplexed consumer chain; tempVector is built up and moved into
 // the MultiplexConsumer to avoid type-inference/optimization issues seen previously
