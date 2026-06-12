@@ -25,9 +25,9 @@ public:
    * @param types     Clang BuiltinType values for the requested verifier types.
    * @param toFilter  Output map; visitor writes function name → attribute counts.
    */
-  CountingConsumer(const std::vector<unsigned int> &types,
-                   std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>>
-                       toFilter);
+  CountingConsumer(
+      const std::vector<unsigned int> &types,
+      std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter);
 
   /**
    * @brief Entry point called by Clang once the AST is fully parsed.

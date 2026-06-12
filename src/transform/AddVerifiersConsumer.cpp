@@ -7,9 +7,9 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/raw_ostream.h>
 
-AddVerifiersConsumer::AddVerifiersConsumer(
-  llvm::raw_fd_ostream &output, std::shared_ptr<std::set<clang::QualType>> neededTypes,
-  clang::Rewriter &rewriter)
+AddVerifiersConsumer::AddVerifiersConsumer(llvm::raw_fd_ostream &output,
+                                           std::shared_ptr<std::set<clang::QualType>> neededTypes,
+                                           clang::Rewriter &rewriter)
     : _Output(output), _NeededTypes(neededTypes), _Rewriter(rewriter) {}
 
 void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {

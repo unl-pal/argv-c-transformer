@@ -62,9 +62,9 @@ public:
    * all.
    * @param allFunctions  Output map shared with downstream consumers.
    */
-  CountingVisitor(clang::ASTContext *C, const std::vector<unsigned int> &T,
-                  std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>>
-                      allFunctions);
+  CountingVisitor(
+      clang::ASTContext *C, const std::vector<unsigned int> &T,
+      std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> allFunctions);
 
   /**
    * @brief Walks up the parent chain of a {@code Stmt} to find its enclosing

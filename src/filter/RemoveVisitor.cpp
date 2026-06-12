@@ -67,8 +67,9 @@ bool RemoveVisitor::VisitCallExpr(clang::CallExpr *E) {
 
         std::optional<std::string> verifierTypeName = verifierSuffixForType(returnType);
         if (!verifierTypeName) {
-          std::cout << "Warning: Call to removed function '" << name << "' has unsupported return type "
-            << returnType.getAsString() << ", skipping replacement.\n";
+          std::cout << "Warning: Call to removed function '" << name
+                    << "' has unsupported return type " << returnType.getAsString()
+                    << ", skipping replacement.\n";
           continue;
         }
 

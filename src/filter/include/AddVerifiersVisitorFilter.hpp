@@ -26,7 +26,8 @@ public:
    * @param neededTypes  Set of verifier name suffixes (e.g. "int", "uint") to declare.
    * @param rewriter     Shared rewriter; declarations are inserted here.
    */
-  AddVerifiersVisitorFilter(clang::ASTContext *c, std::shared_ptr<std::set<std::string>> neededTypes,
+  AddVerifiersVisitorFilter(clang::ASTContext *c,
+                            std::shared_ptr<std::set<std::string>> neededTypes,
                             clang::Rewriter &rewriter);
 
   /**
