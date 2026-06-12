@@ -23,8 +23,7 @@ std::unique_ptr<clang::ASTConsumer>
 FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef /*filename*/) {
   compiler.createASTContext();
 
-  auto toFilter =
-      std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
+  auto toFilter = std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
   auto toRemove = std::make_shared<std::vector<std::string>>();
 
   // unique_ptr can't be copied, so the vector must be moved into MultiplexConsumer.

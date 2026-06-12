@@ -18,8 +18,7 @@ public:
   /// @param neededSuffixes verifier suffixes used by the harness, shared
   ///        with AddVerifiersConsumer which emits the extern declarations
   /// @param rewriter rewriter for changing source code of AST
-  MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
-                  clang::Rewriter &rewriter);
+  MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes, clang::Rewriter &rewriter);
 
   /// Renames an existing main and appends the generated harness main
   void HandleTranslationUnit(clang::ASTContext &Context) override;

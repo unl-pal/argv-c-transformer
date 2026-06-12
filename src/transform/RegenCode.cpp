@@ -20,16 +20,14 @@
 // class var _M is a SourceManager derived from the provided context
 //    _M can be used to find info on location which can be used for Rewriters and other uses
 RegenCodeVisitor::RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &output)
-    : _C(C),
-  _M(C->getSourceManager()),
-  _Output(output) {
-}
+    : _C(C), _M(C->getSourceManager()), _Output(output) {}
 
 // Catch all do nothing unless specified
 bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
-  if (!D) return false;
+  if (!D)
+    return false;
   if (!D->getParentFunctionOrMethod()) {
-    if (clang::RawComment * rawComment = _C->getRawCommentForDeclNoCache(D)) {
+    if (clang::RawComment *rawComment = _C->getRawCommentForDeclNoCache(D)) {
       _Output << rawComment->getRawText(_M) << "\n";
     }
   }
@@ -38,8 +36,10 @@ bool RegenCodeVisitor::VisitDecl(clang::Decl *D) {
 
 // Prints functions and their children with a ';' for externs
 bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
-  if (!D) return false;
-  if (!_M.isInMainFile(D->getLocation())) return true;
+  if (!D)
+    return false;
+  if (!_M.isInMainFile(D->getLocation()))
+    return true;
   if (D->getAsFunction()->getStorageClass() == clang::SC_Extern) {
     if (!D->getName().starts_with("__VERIFIER_nondet_")) {
       D->print(_Output);
@@ -54,8 +54,10 @@ bool RegenCodeVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
 
 // Print globally avaiable variables not parameters or function specific
 bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
-  if (!D) return false;
-  if (!_M.isInMainFile(D->getLocation())) return true;
+  if (!D)
+    return false;
+  if (!_M.isInMainFile(D->getLocation()))
+    return true;
   if (D->isDefinedOutsideFunctionOrMethod()) {
     if (!D->isLocalVarDeclOrParm()) {
       D->print(_Output);
@@ -67,8 +69,10 @@ bool RegenCodeVisitor::VisitVarDecl(clang::VarDecl *D) {
 
 // Print Structs and Unions and their children
 bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
-  if (!D) return false;
-  if (!_M.isInMainFile(D->getLocation())) return true;
+  if (!D)
+    return false;
+  if (!_M.isInMainFile(D->getLocation()))
+    return true;
   if (!D->isAnonymousStructOrUnion()) {
     D->print(_Output);
     _Output << ";\n";
@@ -79,31 +83,30 @@ bool RegenCodeVisitor::VisitRecordDecl(clang::RecordDecl *D) {
 
 // Print TypeDefs
 bool RegenCodeVisitor::VisitTypedefDecl(clang::TypedefDecl *D) {
-  if (!_M.isInMainFile(D->getLocation())) return true;
-      D->print(_Output);
-      _Output << ";\n";
+  if (!_M.isInMainFile(D->getLocation()))
+    return true;
+  D->print(_Output);
+  _Output << ";\n";
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitTypedefDecl(D);
 }
 
 // Parameter Variables are handled in the functions so they are passed over via this function
-bool RegenCodeVisitor::VisitParmVarDecl(clang::ParmVarDecl * D){
+bool RegenCodeVisitor::VisitParmVarDecl(clang::ParmVarDecl *D) {
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitParmVarDecl(D);
 }
 
 // Field Declarations are handled by the Struct and Union print and are passed over
-bool RegenCodeVisitor::VisitFieldDecl(clang::FieldDecl * D){
+bool RegenCodeVisitor::VisitFieldDecl(clang::FieldDecl *D) {
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitFieldDecl(D);
 }
 
 // Print Unnamed Global Constants
-bool RegenCodeVisitor::VisitUnnamedGlobalConstantDecl(
-  clang::UnnamedGlobalConstantDecl *D) {
-  if (!_M.isInMainFile(D->getLocation())) return true;
+bool RegenCodeVisitor::VisitUnnamedGlobalConstantDecl(clang::UnnamedGlobalConstantDecl *D) {
+  if (!_M.isInMainFile(D->getLocation()))
+    return true;
   D->print(_Output);
   _Output << ";\n";
   return clang::RecursiveASTVisitor<RegenCodeVisitor>::VisitUnnamedGlobalConstantDecl(D);
 }
 
-bool RegenCodeVisitor::shouldTraversePostOrder() {
-  return false;
-}
+bool RegenCodeVisitor::shouldTraversePostOrder() { return false; }

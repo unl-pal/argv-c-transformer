@@ -15,8 +15,7 @@
 // dropped. Files that needed a local header's types or macros stop
 // compiling and are weeded out by keepCompilesOnly.
 void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &,
-                                       llvm::StringRef, bool,
-                                       clang::CharSourceRange FilenameRange,
+                                       llvm::StringRef, bool, clang::CharSourceRange FilenameRange,
                                        clang::OptionalFileEntryRef, llvm::StringRef,
                                        llvm::StringRef, const clang::Module *, bool,
                                        clang::SrcMgr::CharacteristicKind FileType) {

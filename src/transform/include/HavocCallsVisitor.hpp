@@ -15,8 +15,7 @@ public:
   /// intraprocedural: calls yielding a primitive become
   /// __VERIFIER_nondet_<type>(), pointer-returning calls become
   /// __VERIFIER_nondet_pointer(), and void calls are dropped.
-  HavocCallsVisitor(clang::ASTContext *C,
-                    std::shared_ptr<std::set<std::string>> neededSuffixes,
+  HavocCallsVisitor(clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededSuffixes,
                     clang::Rewriter &rewriter);
 
   /// Initializes the traversal
