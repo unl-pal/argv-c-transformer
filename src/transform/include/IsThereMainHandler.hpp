@@ -9,7 +9,7 @@ class IsThereMainHandler : public clang::ast_matchers::MatchFinder::MatchCallbac
 public:
   // IsThereMainHandler(clang::Rewriter &rewriter);
   // IsThereMainHandler(std::set<clang::CallExpr*> &callsToMake);
-  IsThereMainHandler(std::set<clang::DeclRefExpr*> &callsToMake);
+  IsThereMainHandler(std::set<clang::DeclRefExpr *> &callsToMake);
 
   void run(const clang::ast_matchers::MatchFinder::MatchResult &results);
 
@@ -19,5 +19,5 @@ private:
   bool _hasMain;
   // clang::Rewriter &_Rewriter;
   // std::set<clang::CallExpr*> &_CallsToMake;
-  std::set<clang::DeclRefExpr*> &_CallsToMake;
+  std::set<clang::DeclRefExpr *> &_CallsToMake;
 };

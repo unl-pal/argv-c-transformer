@@ -5,6 +5,7 @@
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Type.h>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -24,8 +25,9 @@ public:
    * @param types     Clang BuiltinType values for the requested verifier types.
    * @param toFilter  Output map; visitor writes function name → attribute counts.
    */
-  CountingConsumer(const std::vector<unsigned int> &types,
-                   std::unordered_map<std::string, CountingVisitor::attributes *> *toFilter);
+  CountingConsumer(
+      const std::vector<unsigned int> &types,
+      std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter);
 
   /**
    * @brief Entry point called by Clang once the AST is fully parsed.
@@ -39,5 +41,5 @@ public:
 
 private:
   const std::vector<unsigned int> &_Types;
-  std::unordered_map<std::string, CountingVisitor::attributes *> *_ToFilter;
+  std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> _ToFilter;
 };

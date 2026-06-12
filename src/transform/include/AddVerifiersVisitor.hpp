@@ -7,6 +7,7 @@
 #include <clang/Basic/SourceManager.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/raw_ostream.h>
+#include <memory>
 #include <set>
 
 class AddVerifiersVisitor : public clang::RecursiveASTVisitor<AddVerifiersVisitor> {
@@ -16,7 +17,7 @@ public:
   /// @param - output to be written to
   /// @param - neededTypes types of verifier functions needed to complete the code
   AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output,
-                      std::set<clang::QualType> *neededTypes,
+                      std::shared_ptr<std::set<clang::QualType>> neededTypes,
                       clang::Rewriter &rewriter);
 
   /// Starts the traversal process
@@ -25,6 +26,6 @@ public:
 private:
   clang::ASTContext *_C;
   llvm::raw_fd_ostream &_Output;
-  std::set<clang::QualType> *_NeededTypes;
+  std::shared_ptr<std::set<clang::QualType>> _NeededTypes;
   clang::Rewriter &_Rewriter;
 };

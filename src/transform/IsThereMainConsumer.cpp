@@ -2,6 +2,7 @@
 #include "AllFunctionsToCallHandler.hpp"
 #include "IsThereMainConsumer.hpp"
 #include "IsThereMainHandler.hpp"
+#include "VerifierNames.hpp"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
@@ -24,36 +25,25 @@
 #include <clang/Sema/DeclSpec.h>
 #include <llvm/ADT/APInt.h>
 #include <llvm/Support/raw_ostream.h>
+#include <optional>
 #include <string>
 #include <vector>
 
-IsThereMainConsumer::IsThereMainConsumer(clang::Rewriter &rewriter) : _Rewriter(rewriter) 
-{
-}
+IsThereMainConsumer::IsThereMainConsumer(clang::Rewriter &rewriter) : _Rewriter(rewriter) {}
 
 using namespace clang::ast_matchers;
 void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   llvm::outs() << "Looking for Main Function\n";
   clang::ast_matchers::MatchFinder MatchFinder;
-  std::set<clang::DeclRefExpr*> callsToMake;
+  std::set<clang::DeclRefExpr *> callsToMake;
   IsThereMainHandler Handler(callsToMake);
 
   // Identify the main function via a matcher and assign to the "main" tag
-  MatchFinder.addMatcher(
-    functionDecl(
-      isMain()
-    ).bind("main"),
-    &Handler);
+  MatchFinder.addMatcher(functionDecl(isMain()).bind("main"), &Handler);
 
   // Identify all other functions and add to the "function" tag for call check
   MatchFinder.addMatcher(
-    functionDecl(
-      unless(
-        anyOf(
-          isMain(),
-          isExpandedFromMacro("*")
-        ))).bind("functions"),
-    &Handler);
+      functionDecl(unless(anyOf(isMain(), isExpandedFromMacro("*")))).bind("functions"), &Handler);
 
   // Run all matchers on the context
   MatchFinder.matchAST(Context);
@@ -61,12 +51,12 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   // Variables used in the for loop and beyond
   clang::TranslationUnitDecl *TD = Context.getTranslationUnitDecl();
   clang::SourceManager &mgr = Context.getSourceManager();
-  std::vector<clang::Stmt*> stmts;
+  std::vector<clang::Stmt *> stmts;
 
   llvm::outs() << "Calls to Make: " << callsToMake.size() << "\n";
   for (clang::DeclRefExpr *call : callsToMake) { // ends line ... needs rework
-    std::vector<clang::Expr*> tempArgs({});
-    std::vector<clang::ParmVarDecl*> vars({});
+    std::vector<clang::Expr *> tempArgs({});
+    std::vector<clang::ParmVarDecl *> vars({});
     // get the function declaration for the call to make to get all param info
     if (clang::NamedDecl *namedDecl = call->getFoundDecl()) {
       if (clang::FunctionDecl *func = namedDecl->getAsFunction()) {
@@ -77,24 +67,21 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       }
     }
 
-    // For each 
+    // For each parameter, synthesise a __VERIFIER_nondet_* argument.
     for (clang::ParmVarDecl *var : vars) {
       // get the parameter original type
       clang::QualType varType = var->getOriginalType();
-      // outdated as we can handle pointers
-      if (varType->isPointerType() || varType->isArrayType()) {
+
+      // Resolve the verifier function name via the shared naming map (the same
+      // map RemoveVisitor uses, so the generated call and any stubbed callee
+      // agree on the symbol). Unsupported types (pointers, structs, etc.)
+      // abort synthesis for this function; the outer loop then skips it whole
+      // because tempArgs ends up smaller than vars.
+      std::optional<std::string> verifierName = verifierFnNameForType(varType);
+      if (!verifierName)
         break;
-      }
 
-      // Clean up discrepencies between ClangAST naming and ArgC src code
-      std::string varTypeString = varType->isBooleanType() ? "bool" : varType.getAsString();
-      std::replace(varTypeString.begin(), varTypeString.end(), ' ', '_');
-      std::replace(varTypeString.begin(), varTypeString.end(), '*', '\0');
-      if (!std::strcmp(&varTypeString.at(varTypeString.size() - 1), "_")) {
-        varTypeString.pop_back();
-      }
-
-      clang::IdentifierInfo *info = &Context.Idents.get("__VERIFIER_nondet_" + varTypeString);
+      clang::IdentifierInfo *info = &Context.Idents.get(*verifierName);
 
       // Get the VERIFIER function declaration info if it exists or create if missing
       clang::DeclarationName name(info);
@@ -115,53 +102,28 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
         }
         clang::FunctionProtoType::ExtProtoInfo varEpi;
 
-        clang::QualType funcQualType = Context.getFunctionType(
-          varType,
-          {Context.VoidTy},
-          varEpi
-        );
+        clang::QualType funcQualType = Context.getFunctionType(varType, {Context.VoidTy}, varEpi);
 
         verifier = clang::FunctionDecl::Create(
-          Context,
-          TD,
-          insertFirst,
-          insertFirst.getLocWithOffset(1),
-          name,
-          funcQualType,
-          Context.CreateTypeSourceInfo(varType),
-          clang::SC_Extern
-        );
+            Context, TD, insertFirst, insertFirst.getLocWithOffset(1), name, funcQualType,
+            Context.CreateTypeSourceInfo(varType), clang::SC_Extern);
 
         verifier->setLocation(insertFirst);
         verifier->setReferenced();
         verifier->setIsUsed();
 
         clang::ParmVarDecl *vParm = clang::ParmVarDecl::Create(
-          Context,
-          verifier->getDeclContext(),
-          verifier->getLocation(),
-          verifier->getLocation(),
-          nullptr,
-          Context.VoidTy,
-          nullptr,
-          clang::SC_None,
-          nullptr
-        );
+            Context, verifier->getDeclContext(), verifier->getLocation(), verifier->getLocation(),
+            nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr);
 
         verifier->setParams({vParm});
         vParm->setOwningFunction(verifier);
         verifier->addDecl(vParm);
 
         verifier->addDecl(clang::ParmVarDecl::Create(
-          Context,
-          verifier->getDeclContext(),
-          verifier->getInnerLocStart(),
-          verifier->getLocation(),
-          &Context.Idents.get(""),
-          Context.VoidTy,
-          Context.CreateTypeSourceInfo(Context.VoidTy),
-          clang::SC_None, nullptr
-        ));
+            Context, verifier->getDeclContext(), verifier->getInnerLocStart(),
+            verifier->getLocation(), &Context.Idents.get(""), Context.VoidTy,
+            Context.CreateTypeSourceInfo(Context.VoidTy), clang::SC_None, nullptr));
 
         TD->addDecl(verifier);
         if (insertFirst.isValid()) {
@@ -177,50 +139,32 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       }
 
       // create a call for the verifier function found or created
-      clang::DeclRefExpr *verifierCall = clang::DeclRefExpr::Create(
-        Context,
-        verifier->getQualifierLoc(),
-        clang::SourceLocation(),
-        verifier,
-        false,
-        verifier->getLocation(),
-        var->getType(),
-        clang::ExprValueKind::VK_LValue,
-        verifier,
-        nullptr
-      );
+      clang::DeclRefExpr *verifierCall =
+          clang::DeclRefExpr::Create(Context, verifier->getQualifierLoc(), clang::SourceLocation(),
+                                     verifier, false, verifier->getLocation(), var->getType(),
+                                     clang::ExprValueKind::VK_LValue, verifier, nullptr);
 
       clang::CallExpr *tempExpr = clang::CallExpr::Create(
-        Context,
-        verifierCall,
-        {},
-        var->getType(),
-        clang::ExprValueKind::VK_LValue,
-        var->getLocation(),
-        clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto)
-      );
+          Context, verifierCall, {}, var->getType(), clang::ExprValueKind::VK_LValue,
+          var->getLocation(), clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto));
       tempArgs.push_back(tempExpr);
     }
 
+    // A parameter had an unsupported type: skip this function entirely rather
+    // than aborting synthesis for every remaining function.
     if (tempArgs.size() < vars.size()) {
-      break;
+      continue;
     }
 
     // For each parameter add a corresponding verifier call
     llvm::outs() << "Args Size: " << tempArgs.size() << "\n";
     clang::CallExpr *callExpr = clang::CallExpr::Create(
-      Context,
-      call,
-      tempArgs,
-      call->getType(),
-      clang::ExprValueKind::VK_LValue,
-      call->getLocation(),
-      clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto)
-    );
+        Context, call, tempArgs, call->getType(), clang::ExprValueKind::VK_LValue,
+        call->getLocation(), clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_Auto));
     stmts.emplace_back(callExpr);
   } // end of for (clang::DeclRefExpr *call : callsToMake) on line 67
 
-  clang::FunctionDecl* mainFunc;
+  clang::FunctionDecl *mainFunc;
   // Create main function if missing
   if (!Handler.HasMain()) {
     llvm::outs() << "Building Main\n";
@@ -231,58 +175,34 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
     clang::QualType funcQualType = Context.getFunctionType(Context.IntTy, {Context.VoidTy}, epi);
 
-    mainFunc = clang::FunctionDecl::Create(
-      Context,
-      TD,
-      loc,
-      loc.getLocWithOffset(1),
-      declName,
-      funcQualType,
-      Context.CreateTypeSourceInfo(Context.IntTy),
-      clang::SC_None//,
-    );
+    mainFunc =
+        clang::FunctionDecl::Create(Context, TD, loc, loc.getLocWithOffset(1), declName,
+                                    funcQualType, Context.CreateTypeSourceInfo(Context.IntTy),
+                                    clang::SC_None //,
+        );
     mainFunc->setWillHaveBody(true);
 
     clang::ParmVarDecl *parm = clang::ParmVarDecl::Create(
-      Context,
-      mainFunc->getDeclContext(),
-      mainFunc->getInnerLocStart(),
-      mainFunc->getLocation(),
-      nullptr,
-      Context.VoidTy,
-      nullptr,
-      clang::SC_None,
-      nullptr
-    );
+        Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(),
+        nullptr, Context.VoidTy, nullptr, clang::SC_None, nullptr);
 
-    std::vector<clang::ParmVarDecl*> parms = {parm};
+    std::vector<clang::ParmVarDecl *> parms = {parm};
     llvm::outs() << "Parameters size: " << parms.size() << "\n";
     mainFunc->setParams({parm});
     mainFunc->addDecl(parm);
 
     mainFunc->addDecl(clang::ParmVarDecl::Create(
-      Context,
-      mainFunc->getDeclContext(),
-      mainFunc->getInnerLocStart(),
-      mainFunc->getLocation(),
-      &Context.Idents.get(""),
-      Context.VoidTy,
-      Context.CreateTypeSourceInfo(Context.VoidTy),
-      clang::SC_None,
-      nullptr
-    ));
+        Context, mainFunc->getDeclContext(), mainFunc->getInnerLocStart(), mainFunc->getLocation(),
+        &Context.Idents.get(""), Context.VoidTy, Context.CreateTypeSourceInfo(Context.VoidTy),
+        clang::SC_None, nullptr));
 
     TD->addDecl(mainFunc);
 
     clang::ReturnStmt *returnStmt = clang::ReturnStmt::Create(
-      Context,
-      mainFunc->getLocation(),
-      clang::IntegerLiteral::Create(Context,
-                                    llvm::APInt::doubleToBits(0),
-                                    Context.IntTy,
-                                    mainFunc->getLocation()),
-      clang::VarDecl::CreateDeserialized(Context, TD->getGlobalID())
-    );
+        Context, mainFunc->getLocation(),
+        clang::IntegerLiteral::Create(Context, llvm::APInt::doubleToBits(0), Context.IntTy,
+                                      mainFunc->getLocation()),
+        clang::VarDecl::CreateDeserialized(Context, TD->getGlobalID()));
 
     // add a return statement to the newly formed body
     stmts.emplace_back(returnStmt);
@@ -297,12 +217,8 @@ void IsThereMainConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   // create the body from all the added statements and old body if exists
   clang::CompoundStmt *body = clang::CompoundStmt::Create(
-    Context,
-    stmts,
-    clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_None),
-    mainFunc->getBeginLoc(),
-    mainFunc->getBodyRBrace()
-  );
+      Context, stmts, clang::FPOptionsOverride::getFromOpaqueInt(clang::SC_None),
+      mainFunc->getBeginLoc(), mainFunc->getBodyRBrace());
 
   // Set main to use the new body
   mainFunc->setBody(body);

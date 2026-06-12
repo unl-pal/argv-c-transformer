@@ -9,13 +9,13 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <vector>
 
-AddMainVisitor::AddMainVisitor(clang::ASTContext       *c,
-                               std::vector<std::string> functionsToCall,
-                               clang::Rewriter         &r)
+AddMainVisitor::AddMainVisitor(clang::ASTContext *c, std::vector<std::string> functionsToCall,
+                               clang::Rewriter &r)
     : _Context(c), _FunctionsToCall(functionsToCall), _Rewriter(r) {}
 
 bool AddMainVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
-  if (!D) return false;
+  if (!D)
+    return false;
 
   // Create a main function for benchmarks missing main and add to the tree at the end of the file
   clang::SourceLocation loc = D->decls_end()->getPreviousDecl()->getLocation();
@@ -24,16 +24,8 @@ bool AddMainVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
   clang::FunctionProtoType::ExtProtoInfo epi;
   clang::QualType funcQualType = _Context->IntTy;
 
-  clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
-    *_Context,
-    D,
-    loc,
-    loc,
-    declName,
-    funcQualType,
-    nullptr,
-    clang::SC_Extern
-  );
+  clang::FunctionDecl *newFunction = clang::FunctionDecl::Create(
+      *_Context, D, loc, loc, declName, funcQualType, nullptr, clang::SC_Extern);
 
   newFunction->setReferenced();
   newFunction->setIsUsed();
@@ -43,7 +35,8 @@ bool AddMainVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
 
   // Add Main to the tree
   D->addDecl(newFunction);
-  _Rewriter.InsertTextAfter(loc, newFunction->getReturnType().getAsString() + " " + newFunction->getNameAsString() + "() {\n");
+  _Rewriter.InsertTextAfter(loc, newFunction->getReturnType().getAsString() + " " +
+                                     newFunction->getNameAsString() + "() {\n");
   clang::SourceRange range;
   loc = newFunction->getLocation();
   range.setBegin(loc);
@@ -61,11 +54,14 @@ bool AddMainVisitor::VisitTranslationUnitDecl(clang::TranslationUnitDecl *D) {
     // Replace all parameters in the function call with calls to __VERIFIER functions
     for (clang::ParmVarDecl *parm : func->parameters()) {
       clang::ValueDecl *tempDecl = func;
-      clang::DeclRefExpr *call = clang::DeclRefExpr::Create(*_Context, func->getQualifierLoc(), loc, tempDecl, false, loc, parm->getType(), clang::ExprValueKind::VK_LValue);
+      clang::DeclRefExpr *call =
+          clang::DeclRefExpr::Create(*_Context, func->getQualifierLoc(), loc, tempDecl, false, loc,
+                                     parm->getType(), clang::ExprValueKind::VK_LValue);
       body->addStmtClass(call->getStmtClass());
       std::string comma;
-      i++? comma = ", " : comma = "";
-      std::string tempName = comma + verifierName + std::string(parm->getType()->getTypeClassName());
+      i++ ? comma = ", " : comma = "";
+      std::string tempName =
+          comma + verifierName + std::string(parm->getType()->getTypeClassName());
       _Rewriter.InsertTextAfter(loc, tempName);
       loc = loc.getLocWithOffset(tempName.size());
     }

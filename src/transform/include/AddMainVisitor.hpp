@@ -25,5 +25,4 @@ private:
   clang::ASTContext *_Context;
   std::vector<std::string> &_FunctionsToCall;
   clang::Rewriter &_Rewriter;
-
 };

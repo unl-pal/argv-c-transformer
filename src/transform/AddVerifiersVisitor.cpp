@@ -12,9 +12,10 @@
 #include <set>
 #include <string>
 
-AddVerifiersVisitor::AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output, std::set<clang::QualType> *neededTypes, clang::Rewriter &rewriter)
-    : _C(c), _Output(output), _NeededTypes(neededTypes), _Rewriter(rewriter) {
-}
+AddVerifiersVisitor::AddVerifiersVisitor(clang::ASTContext *c, llvm::raw_fd_ostream &output,
+                                         std::shared_ptr<std::set<clang::QualType>> neededTypes,
+                                         clang::Rewriter &rewriter)
+    : _C(c), _Output(output), _NeededTypes(neededTypes), _Rewriter(rewriter) {}
 
 bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
   clang::SourceManager &mgr = _C->getSourceManager();
@@ -27,14 +28,15 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
       }
     }
   }
-  
-  clang::SourceLocation loc;
-  if (firstNode && firstNode->getSourceRange().isValid()){
 
-    loc = mgr.translateLineCol(mgr.getMainFileID(), mgr.getSpellingLineNumber(firstNode->getLocation()), 1);
+  clang::SourceLocation loc;
+  if (firstNode && firstNode->getSourceRange().isValid()) {
+
+    loc = mgr.translateLineCol(mgr.getMainFileID(),
+                               mgr.getSpellingLineNumber(firstNode->getLocation()), 1);
     if (clang::RawComment *comment = _C->getRawCommentForDeclNoCache(firstNode)) {
-        llvm::outs() << comment->getRawText(mgr) << "\n";
-        loc = comment->getBeginLoc();
+      llvm::outs() << comment->getRawText(mgr) << "\n";
+      loc = comment->getBeginLoc();
     }
   } else {
     loc = mgr.translateLineCol(mgr.getMainFileID(), 1, 1);
@@ -49,11 +51,8 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
 
     // Should probably have a enum or def somewhere with all supported
     // verrifiers to draw on for situations like this, or in config?
-    if (!returnType->isBuiltinType() &&
-        !returnType->isBooleanType() &&
-        !returnType->isAnyCharacterType() &&
-        !returnType->isAnyPointerType()
-    ) {
+    if (!returnType->isBuiltinType() && !returnType->isBooleanType() &&
+        !returnType->isAnyCharacterType() && !returnType->isAnyPointerType()) {
       continue;
     }
 
@@ -80,22 +79,17 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
     // Handle all pointers to void* type conversion
     clang::QualType funcQualType;
     if (isPointer) {
-      funcQualType = _C->getFunctionType(_C->VoidPtrTy, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
+      funcQualType =
+          _C->getFunctionType(_C->VoidPtrTy, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
     } else {
-      funcQualType = _C->getFunctionType(returnType, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
+      funcQualType =
+          _C->getFunctionType(returnType, clang::ArrayRef<clang::QualType>({_C->VoidTy}), epi);
     }
 
     // Create the new verifier with the appropriate return type
-    clang::FunctionDecl* newFunction = clang::FunctionDecl::Create(
-      *_C,
-      D,
-      loc,
-      loc.getLocWithOffset(1),
-      declName,
-      funcQualType,
-      _C->CreateTypeSourceInfo(_C->VoidTy),
-      clang::SC_Extern
-    );
+    clang::FunctionDecl *newFunction =
+        clang::FunctionDecl::Create(*_C, D, loc, loc.getLocWithOffset(1), declName, funcQualType,
+                                    _C->CreateTypeSourceInfo(_C->VoidTy), clang::SC_Extern);
 
     // Set used and reference for AST meta knowledge
     newFunction->setReferenced();
@@ -103,16 +97,8 @@ bool AddVerifiersVisitor::HandleTranslationUnit(clang::TranslationUnitDecl *D) {
 
     // Create dummy parameter variable to finish verifier signature
     clang::ParmVarDecl *vParm = clang::ParmVarDecl::Create(
-      *_C,
-      newFunction->getDeclContext(),
-      newFunction->getLocation(),
-      newFunction->getLocation(),
-      nullptr,
-      _C->VoidTy,
-      nullptr,
-      clang::SC_None,
-      nullptr
-    );
+        *_C, newFunction->getDeclContext(), newFunction->getLocation(), newFunction->getLocation(),
+        nullptr, _C->VoidTy, nullptr, clang::SC_None, nullptr);
 
     // Add the dummy void parameter to the verifier code
     newFunction->setParams({vParm});

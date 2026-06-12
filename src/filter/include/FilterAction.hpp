@@ -35,10 +35,9 @@ public:
    * @brief Builds a {@code MultiplexConsumer} containing all four filter passes.
    *
    * Creates the shared state ({@code toFilter}, {@code toRemove},
-   * {@code neededTypes}) and hands them to the consumers in pipeline order.
-   * NOTE: the three shared objects are currently heap-allocated with raw
-   * pointers — known memory leak, to be fixed when consumer signatures are
-   * updated to accept {@code shared_ptr}.
+   * {@code neededTypes}) as {@code shared_ptr}s and hands them to the
+   * consumers in pipeline order; each is freed once the last owning
+   * consumer is destroyed.
    *
    * @param compiler  The active compiler instance.
    * @param filename  Path of the file being processed.

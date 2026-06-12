@@ -4,6 +4,7 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/raw_ostream.h>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -23,7 +24,8 @@ public:
    * @param neededTypes  Set of verifier name suffixes (e.g. "int", "uint") to declare.
    * @param rewriter     Shared rewriter; declarations are inserted here.
    */
-  AddVerifiersConsumerFilter(llvm::raw_fd_ostream &output, std::set<std::string> *neededTypes,
+  AddVerifiersConsumerFilter(llvm::raw_fd_ostream &output,
+                             std::shared_ptr<std::set<std::string>> neededTypes,
                              clang::Rewriter &rewriter);
 
   /**
@@ -38,6 +40,6 @@ public:
 
 private:
   llvm::raw_fd_ostream &_Output;
-  std::set<std::string> *_NeededTypes;
+  std::shared_ptr<std::set<std::string>> _NeededTypes;
   clang::Rewriter &_Rewriter;
 };

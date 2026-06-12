@@ -3,6 +3,7 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <memory>
 #include <set>
 #include <string>
 
@@ -25,7 +26,8 @@ public:
    * @param neededTypes  Set of verifier name suffixes (e.g. "int", "uint") to declare.
    * @param rewriter     Shared rewriter; declarations are inserted here.
    */
-  AddVerifiersVisitorFilter(clang::ASTContext *c, std::set<std::string> *neededTypes,
+  AddVerifiersVisitorFilter(clang::ASTContext *c,
+                            std::shared_ptr<std::set<std::string>> neededTypes,
                             clang::Rewriter &rewriter);
 
   /**
@@ -43,6 +45,6 @@ public:
 
 private:
   clang::ASTContext *_C;
-  std::set<std::string> *_NeededTypes;
+  std::shared_ptr<std::set<std::string>> _NeededTypes;
   clang::Rewriter &_Rewriter;
 };

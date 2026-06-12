@@ -5,6 +5,7 @@
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
 #include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -28,8 +29,9 @@ public:
    * @param toRemove  Output vector; names of functions that fail thresholds are appended.
    * @param config    Threshold map (min/max per attribute) owned by {@code Filterer}.
    */
-  FilterFunctionsConsumer(std::unordered_map<std::string, CountingVisitor::attributes *> *toFilter,
-                          std::vector<std::string> *toRemove, std::map<std::string, int> *config);
+  FilterFunctionsConsumer(
+      std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,
+      std::shared_ptr<std::vector<std::string>> toRemove, std::map<std::string, int> *config);
 
   /**
    * @brief Entry point called by Clang once the AST is fully parsed.
@@ -50,7 +52,7 @@ public:
   void FilterFunctions();
 
 private:
-  std::unordered_map<std::string, CountingVisitor::attributes *> *_ToFilter;
-  std::vector<std::string> *_ToRemove;
+  std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> _ToFilter;
+  std::shared_ptr<std::vector<std::string>> _ToRemove;
   std::map<std::string, int> *_Config;
 };

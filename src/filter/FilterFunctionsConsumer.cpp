@@ -2,8 +2,8 @@
 #include "FilterFunctionsConsumer.hpp"
 
 FilterFunctionsConsumer::FilterFunctionsConsumer(
-    std::unordered_map<std::string, CountingVisitor::attributes *> *toFilter,
-    std::vector<std::string> *toRemove, std::map<std::string, int> *config)
+    std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,
+    std::shared_ptr<std::vector<std::string>> toRemove, std::map<std::string, int> *config)
     : _ToFilter(toFilter), _ToRemove(toRemove), _Config(config) {}
 
 void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext & /*context*/) {
@@ -13,9 +13,9 @@ void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext & /*contex
 void FilterFunctionsConsumer::FilterFunctions() {
   if (_ToFilter->empty())
     return;
-  for (const std::pair<std::string, CountingVisitor::attributes *> func : *_ToFilter) {
+  for (const std::pair<const std::string, CountingVisitor::attributes> &func : *_ToFilter) {
     std::string key = func.first;
-    CountingVisitor::attributes attr = *func.second;
+    CountingVisitor::attributes attr = func.second;
     if (key == "Program" || key == "main") {
       continue;
     } else if (attr.ForLoops > _Config->at("maxForLoops")) {

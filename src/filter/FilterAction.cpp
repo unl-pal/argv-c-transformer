@@ -21,15 +21,12 @@ FilterAction::FilterAction(std::map<std::string, int> *config,
     : _Config(config), _Types(types), _Rewriter(), _Output(output) {}
 
 std::unique_ptr<clang::ASTConsumer>
-FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler,
-                                llvm::StringRef /*filename*/) {
+FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef /*filename*/) {
   compiler.createASTContext();
 
-  // TODO: these three are leaked — fix when consumer signatures accept shared_ptr
-  std::unordered_map<std::string, CountingVisitor::attributes *> *toFilter =
-      new std::unordered_map<std::string, CountingVisitor::attributes *>();
-  std::vector<std::string> *toRemove = new std::vector<std::string>();
-  std::set<std::string> *neededTypes = new std::set<std::string>();
+  auto toFilter = std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
+  auto toRemove = std::make_shared<std::vector<std::string>>();
+  auto neededTypes = std::make_shared<std::set<std::string>>();
 
   // unique_ptr can't be copied, so the vector must be moved into MultiplexConsumer.
   // Building a named local makes that std::move explicit and unambiguous.

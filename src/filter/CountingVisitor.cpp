@@ -8,10 +8,10 @@
 
 CountingVisitor::CountingVisitor(
     clang::ASTContext *C, const std::vector<unsigned int> &T,
-    std::unordered_map<std::string, CountingVisitor::attributes *> *allFunctions)
+    std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> allFunctions)
     : _C(C), _mgr(&(C->getSourceManager())), _allFunctions(allFunctions), _T(T),
       _allTypes(T.empty()) {
-  _allFunctions->try_emplace("Program", new attributes);
+  _allFunctions->try_emplace("Program");
 }
 
 bool CountingVisitor::matchesType(clang::QualType QT) const {
@@ -63,7 +63,7 @@ bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
     return false;
   if (_mgr->isInMainFile(VD->getLocation())) {
     if (matchesType(VD->getType()))
-      _allFunctions->at(getDeclParentFuncName(*VD))->TypeVariables++;
+      _allFunctions->at(getDeclParentFuncName(*VD)).TypeVariables++;
   }
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitVarDecl(VD);
 }
@@ -73,8 +73,8 @@ bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
     return false;
   if (_mgr->isInMainFile(FD->getLocation())) {
     if (!_allFunctions->count(FD->getNameAsString())) {
-      _allFunctions->try_emplace(FD->getNameAsString(), new attributes);
-      _allFunctions->at("Program")->Functions++;
+      _allFunctions->try_emplace(FD->getNameAsString());
+      _allFunctions->at("Program").Functions++;
     }
   }
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitFunctionDecl(FD);
@@ -83,7 +83,7 @@ bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
 bool CountingVisitor::VisitDeclRefExpr(clang::DeclRefExpr *S) {
   if (_mgr->isInMainFile(S->getLocation())) {
     if (matchesType(S->getType()))
-      _allFunctions->at(getStmtParentFuncName(*S))->TypeVariableReference++;
+      _allFunctions->at(getStmtParentFuncName(*S)).TypeVariableReference++;
   }
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitDeclRefExpr(S);
 }
@@ -93,7 +93,7 @@ bool CountingVisitor::VisitStmt(clang::Stmt *S) {
     return false;
   if (_mgr->isInMainFile(S->getBeginLoc())) {
     if (S->getStmtClass() == clang::Stmt::CallExprClass)
-      _allFunctions->at(getStmtParentFuncName(*S))->CallFunc++;
+      _allFunctions->at(getStmtParentFuncName(*S)).CallFunc++;
   }
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitStmt(S);
 }
@@ -103,9 +103,9 @@ bool CountingVisitor::VisitIfStmt(clang::IfStmt *If) {
     return false;
   if (_mgr->isInMainFile(If->getIfLoc())) {
     std::string currentFunc = getStmtParentFuncName(*If);
-    _allFunctions->at(currentFunc)->IfStmt++;
+    _allFunctions->at(currentFunc).IfStmt++;
     if (matchesType(If->getCond()->getType()))
-      _allFunctions->at(currentFunc)->TypeIfStmt++;
+      _allFunctions->at(currentFunc).TypeIfStmt++;
   }
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitIfStmt(If);
 }
@@ -114,7 +114,7 @@ bool CountingVisitor::VisitForStmt(clang::ForStmt *F) {
   if (!F)
     return false;
   if (_mgr->isInMainFile(F->getForLoc()))
-    _allFunctions->at(getStmtParentFuncName(*F))->ForLoops++;
+    _allFunctions->at(getStmtParentFuncName(*F)).ForLoops++;
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitForStmt(F);
 }
 
@@ -122,7 +122,7 @@ bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
   if (!W)
     return false;
   if (_mgr->isInMainFile(W->getWhileLoc()))
-    _allFunctions->at(getStmtParentFuncName(*W))->WhileLoops++;
+    _allFunctions->at(getStmtParentFuncName(*W)).WhileLoops++;
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitWhileStmt(W);
 }
 
@@ -132,12 +132,12 @@ bool CountingVisitor::VisitUnaryOperator(clang::UnaryOperator *O) {
   if (_mgr->isInMainFile(O->getOperatorLoc()) && matchesType(O->getType())) {
     std::string currentFunc = getStmtParentFuncName(*O);
     if (O->isArithmeticOp())
-      _allFunctions->at(currentFunc)->TypeArithmeticOperation++;
-    _allFunctions->at(currentFunc)->TypeUnaryOperation++;
+      _allFunctions->at(currentFunc).TypeArithmeticOperation++;
+    _allFunctions->at(currentFunc).TypeUnaryOperation++;
     if (O->isPrefix())
-      _allFunctions->at(currentFunc)->TypePrefix++;
+      _allFunctions->at(currentFunc).TypePrefix++;
     if (O->isPostfix())
-      _allFunctions->at(currentFunc)->TypePostfix++;
+      _allFunctions->at(currentFunc).TypePostfix++;
   }
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitUnaryOperator(O);
 }
@@ -148,9 +148,9 @@ bool CountingVisitor::VisitBinaryOperator(clang::BinaryOperator *O) {
   if (_mgr->isInMainFile(O->getOperatorLoc()) && matchesType(O->getType())) {
     std::string currentFunc = getStmtParentFuncName(*O);
     if (O->isAdditiveOp())
-      _allFunctions->at(currentFunc)->TypeArithmeticOperation++;
+      _allFunctions->at(currentFunc).TypeArithmeticOperation++;
     if (O->isComparisonOp()) {
-      _allFunctions->at(currentFunc)->TypeCompareOperation++;
+      _allFunctions->at(currentFunc).TypeCompareOperation++;
       return clang::RecursiveASTVisitor<CountingVisitor>::VisitBinaryOperator(O);
     }
   }
@@ -161,7 +161,7 @@ bool CountingVisitor::VisitConditionalOperator(clang::ConditionalOperator *O) {
   if (!O)
     return false;
   if (_mgr->isInMainFile(O->getExprLoc()) && matchesType(O->getType()))
-    _allFunctions->at(getStmtParentFuncName(*O))->TypeCompareOperation++;
+    _allFunctions->at(getStmtParentFuncName(*O)).TypeCompareOperation++;
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitConditionalOperator(O);
 }
 
@@ -173,6 +173,6 @@ bool CountingVisitor::VisitBinaryConditionalOperator(clang::BinaryConditionalOpe
 
 bool CountingVisitor::VisitImplicitParamDecl(clang::ImplicitParamDecl *D) {
   if (matchesType(D->getType()))
-    _allFunctions->at(getDeclParentFuncName(*D))->TypeParameters++;
+    _allFunctions->at(getDeclParentFuncName(*D)).TypeParameters++;
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitImplicitParamDecl(D);
 }

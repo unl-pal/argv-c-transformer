@@ -4,6 +4,7 @@
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Type.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -25,8 +26,8 @@ public:
    * @param toRemove      Names of functions to delete, written by {@code FilterFunctionsConsumer}.
    * @param neededTypes   Output set; visitor adds return types of replaced calls.
    */
-  RemoveConsumer(clang::Rewriter &rewriter, std::vector<std::string> *toRemove,
-                 std::set<std::string> *neededTypes);
+  RemoveConsumer(clang::Rewriter &rewriter, std::shared_ptr<std::vector<std::string>> toRemove,
+                 std::shared_ptr<std::set<std::string>> neededTypes);
 
   /**
    * @brief Entry point called by Clang once the AST is fully parsed.
@@ -40,6 +41,6 @@ public:
 
 private:
   clang::Rewriter &_Rewriter;
-  std::vector<std::string> *_ToRemove;
-  std::set<std::string> *_NeededTypes;
+  std::shared_ptr<std::vector<std::string>> _ToRemove;
+  std::shared_ptr<std::set<std::string>> _NeededTypes;
 };
