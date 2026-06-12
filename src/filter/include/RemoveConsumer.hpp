@@ -2,20 +2,17 @@
 
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
-#include <clang/AST/Type.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
 /**
- * @brief ASTConsumer that drives the removal pass over the AST.
+ * @brief ASTConsumer that drives the body-stripping pass over the AST.
  *
  * Skips the visitor entirely if {@code toRemove} is empty. Otherwise
  * constructs a {@code RemoveVisitor} and traverses the translation unit,
- * which deletes function bodies and populates {@code neededTypes} for
- * the next consumer ({@code AddVerifiersConsumerFilter}).
+ * which replaces the bodies of filtered-out functions with {@code ;}.
  */
 class RemoveConsumer : public clang::ASTConsumer {
 public:
@@ -23,11 +20,9 @@ public:
    * @brief Constructs the consumer with the shared pipeline state.
    *
    * @param rewriter      Shared rewriter; edits accumulate here across all consumers.
-   * @param toRemove      Names of functions to delete, written by {@code FilterFunctionsConsumer}.
-   * @param neededTypes   Output set; visitor adds return types of replaced calls.
+   * @param toRemove      Names of functions to strip, written by {@code FilterFunctionsConsumer}.
    */
-  RemoveConsumer(clang::Rewriter &rewriter, std::shared_ptr<std::vector<std::string>> toRemove,
-                 std::shared_ptr<std::set<std::string>> neededTypes);
+  RemoveConsumer(clang::Rewriter &rewriter, std::shared_ptr<std::vector<std::string>> toRemove);
 
   /**
    * @brief Entry point called by Clang once the AST is fully parsed.
@@ -42,5 +37,4 @@ public:
 private:
   clang::Rewriter &_Rewriter;
   std::shared_ptr<std::vector<std::string>> _ToRemove;
-  std::shared_ptr<std::set<std::string>> _NeededTypes;
 };

@@ -2,67 +2,46 @@
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
-#include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
 /**
- * @brief Visitor that removes filtered functions and replaces their call sites.
+ * @brief Visitor that strips the bodies of filtered-out functions.
  *
- * Two passes in one traversal:
- * - {@code VisitFunctionDecl}: deletes the source text of each function in
- *   {@code _ToRemove}, including any attached doc comment.
- * - {@code VisitCallExpr}: replaces calls to removed functions with
- *   {@code __VERIFIER_nondet_<type>()} and records the return type in
- *   {@code _NeededTypes} for {@code AddVerifiersConsumerFilter} to inject
- *   the corresponding extern declaration.
+ * {@code VisitFunctionDecl} replaces the {@code { ... }} body of each
+ * function in {@code _ToRemove} with {@code ;}, turning the definition into
+ * a bare declaration. The signature is left intact so that later transform
+ * passes (e.g. {@code HavocCallsVisitor}) still see the real return type for
+ * any remaining calls to it, instead of Clang's implicit-int fallback for an
+ * undeclared function.
  */
 class RemoveVisitor : public clang::RecursiveASTVisitor<RemoveVisitor> {
 public:
   /**
    * @brief Constructs the visitor with the shared pipeline state.
    *
-   * @param C            AST context, used for comment lookup and type queries.
-   * @param rewriter     Shared rewriter; deletions and replacements accumulate here.
-   * @param toRemove     Names of functions to remove, from {@code FilterFunctionsConsumer}.
-   * @param neededTypes  Output set; populated with return types of replaced calls.
+   * @param rewriter     Shared rewriter; body replacements accumulate here.
+   * @param toRemove     Names of functions to strip, from {@code FilterFunctionsConsumer}.
    */
-  RemoveVisitor(clang::ASTContext *C, clang::Rewriter &rewriter,
-                std::shared_ptr<std::vector<std::string>> toRemove,
-                std::shared_ptr<std::set<std::string>> neededTypes);
+  RemoveVisitor(clang::Rewriter &rewriter, std::shared_ptr<std::vector<std::string>> toRemove);
 
   /**
-   * @brief Deletes function definitions (and their doc comments) for functions in {@code
-   * _ToRemove}.
+   * @brief Replaces the body of each function in {@code _ToRemove} with {@code ;}.
    *
-   * Skips macro-expanded locations (not writable by the Rewriter) and
-   * {@code main}. For forward declarations the range is extended by one
-   * character to include the trailing semicolon.
+   * Skips macro-expanded locations (not writable by the Rewriter), {@code main},
+   * and declarations with no body (already bare prototypes).
    */
   bool VisitFunctionDecl(clang::FunctionDecl *D);
-
-  /**
-   * @brief Records the return type of calls to removed functions in {@code _NeededTypes}.
-   *
-   * Looks up the return type's {@code BuiltinType::Kind} in {@code kVerifierNames} to
-   * resolve the verifier suffix. Unsupported types are skipped. Call sites are replaced
-   * by {@code TransformAction} in a later pipeline stage, not here.
-   */
-  bool VisitCallExpr(clang::CallExpr *E);
 
   /** @brief Uses pre-order traversal (default); post-order left as future option. */
   bool shouldTraversePostOrder();
 
 private:
-  clang::ASTContext *_C;
   clang::SourceManager &_Mgr;
   clang::Rewriter &_Rewriter;
   std::shared_ptr<std::vector<std::string>> _ToRemove;
-  std::shared_ptr<std::set<std::string>> _NeededTypes;
 };

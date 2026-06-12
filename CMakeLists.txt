@@ -37,8 +37,6 @@ set(HEADERS_TRANSFORM src/transform/include)
 set(HEADERS_COMMON src/common/include)
 
 set(SOURCE_FILTER
-  src/filter/AddVerifiersConsumerFilter.cpp
-  src/filter/AddVerifiersVisitorFilter.cpp
   src/filter/CountingConsumer.cpp
   src/filter/CountingVisitor.cpp
   src/filter/FilterAction.cpp
