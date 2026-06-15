@@ -7,8 +7,10 @@
  * a benchmark for Static Verification tools
  */
 
+#include <assert.h>
+
 extern void abort();
-void reach_error();
+void reach_error() { assert(0); }
 
 extern unsigned int __VERIFIER_nondet_uint(void);
 

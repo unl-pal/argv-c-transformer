@@ -37,19 +37,12 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <assert.h>
 
 extern void abort();
-void reach_error();
 
 extern int __VERIFIER_nondet_int(void);
 extern char __VERIFIER_nondet_char(void);
-
-void __VERIFIER_assert(int cond) {
-  if (!cond) {
-    reach_error();
-    abort();
-  }
-}
 
 #undef get16bits
 #if (defined(__GNUC__) && defined(__i386__)) || defined(__WATCOMC__) ||        \
@@ -120,19 +113,12 @@ int main(void) {
   if (!(len < BOUND)) { abort(); }
 
   char data[BOUND];
-  char data_2[BOUND];
   if (len > 0) {
     for (int i = 0; i < len; i++) {
       data[i] = __VERIFIER_nondet_char();
-      data_2[i] = __VERIFIER_nondet_char();
     }
   }
   uint32_t result = SuperFastHash(data, len);
-  uint32_t result_2 = SuperFastHash(data_2, len);
-
-  if (len > 0){
-    __VERIFIER_assert(result != result_2);
-  }
 
   return result;
 }

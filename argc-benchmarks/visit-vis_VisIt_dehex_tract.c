@@ -39,9 +39,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 extern void abort();
-void reach_error();
+void reach_error() { assert(0); }
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {

@@ -114,19 +114,38 @@ uint32_t SuperFastHash(const char *data, int len) {
 }
 
 // Arg-C verification harness
-// BOUND reduced from 2048 to 8 so the main loop runs at most 1 iteration,
-// making valid-memsafety and termination tractable.
-#define BOUND 8
+#define BOUND 2048
 int main(void) {
   int len = __VERIFIER_nondet_int();
 
-  if (!(len >= 1 && len < BOUND)) { abort(); }
+  if (!(len < BOUND)) { abort(); }
 
   char data[BOUND];
-  for (int i = 0; i < len; i++) {
-    data[i] = __VERIFIER_nondet_char();
+  char data_2[BOUND];
+  if (len > 0) {
+    for (int i = 0; i < len; i++) {
+      data[i] = __VERIFIER_nondet_char();
+      data_2[i] = __VERIFIER_nondet_char();
+    }
   }
+
+  // force check for hash collision
+  int equal=1;
+  for (int i = 0; i < len; i ++) {
+    if (data[i] != data_2[i]) {
+      equal=0;
+    }
+  }
+  if (equal) {
+    abort();
+  }
+
   uint32_t result = SuperFastHash(data, len);
+  uint32_t result_2 = SuperFastHash(data_2, len);
+
+  if (len > 0){
+    __VERIFIER_assert(result != result_2);
+  }
 
   return result;
 }

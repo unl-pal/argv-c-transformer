@@ -18,6 +18,7 @@
  */
 
 // #include <time.h>
+#include <assert.h>
 
 /* This is a safe version of localtime() which contains no locks and is
  * fork() friendly. Even the _r version of localtime() cannot be used safely
@@ -41,7 +42,7 @@
  * logging of the dates, it's not really a complete implementation. */
 
 extern void abort();
-void reach_error();
+void reach_error() { assert(0); }
 
 extern long __VERIFIER_nondet_long(void);
 extern int __VERIFIER_nondet_int(void);

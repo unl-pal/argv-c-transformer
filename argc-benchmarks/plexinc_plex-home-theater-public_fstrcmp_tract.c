@@ -36,11 +36,13 @@
    +----------------------------------------------------------------------+
  */
 
+#include <assert.h>
+
 extern int __VERIFIER_nondet_int(void);
 extern char __VERIFIER_nondet_char(void);
 
 extern void abort();
-void reach_error();
+void reach_error() { assert(0); }
 
 void __VERIFIER_assert(int cond) {
   if (!cond) {
