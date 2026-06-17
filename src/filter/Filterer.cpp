@@ -117,6 +117,11 @@ bool Filterer::checkPotentialFile(std::string fileName) {
             std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) != stdLibNames.end();
         if (!isStdLib && !config.at("useNonStdHeaders")) {
           file.close();
+          if (config.at("debugLevel") >= 1) {
+            std::cout << "[filter] skipped (non-std header '" << match[2].str()
+                      << "', useNonStdHeaders=" << config.at("useNonStdHeaders") << "): " << fileName
+                      << std::endl;
+          }
           return false;
         }
       }
@@ -127,8 +132,16 @@ bool Filterer::checkPotentialFile(std::string fileName) {
     }
     file.close();
     if (count < config.at("minFileLoC")) {
+      if (config.at("debugLevel") >= 1) {
+        std::cout << "[filter] skipped (LoC " << count << " < minFileLoC " << config.at("minFileLoC")
+                  << "): " << fileName << std::endl;
+      }
       return false;
     } else if (count > config.at("maxFileLoC")) {
+      if (config.at("debugLevel") >= 1) {
+        std::cout << "[filter] skipped (LoC " << count << " > maxFileLoC " << config.at("maxFileLoC")
+                  << "): " << fileName << std::endl;
+      }
       return false;
     } else {
       return true;
