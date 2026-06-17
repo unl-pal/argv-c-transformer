@@ -53,14 +53,23 @@ bool Transformer::transformFile(std::filesystem::path path) {
   if (!std::filesystem::exists(path))
     return false;
 
-  // File handling: mirror path under benchmarkDir, dropping the filterDir
-  // component so files can't be written outside the project folder
-  std::filesystem::path srcPath = std::filesystem::path(configuration.benchmarkDir);
-  for (const std::filesystem::path &component : path) {
-    if (component.string() != configuration.filterDir && component.string() != "..") {
-      srcPath /= component;
-    }
+  // Flatten the filtered path into a single filename under benchmarkDir:
+  //   filtered-files/antirez/redis/src/endianconv.c
+  //   → transformed-files/antirez_redis_src_endianconv.c
+  // Strip the filterDir prefix (works for both relative and absolute paths),
+  // then join remaining components with underscores.
+  std::filesystem::path relPath = std::filesystem::relative(path, configuration.filterDir);
+  std::string flatName;
+  for (const std::filesystem::path &component : relPath) {
+    std::string part = component.string();
+    if (part == ".." || part == ".")
+      continue;
+    if (!flatName.empty())
+      flatName += "_";
+    flatName += part;
   }
+  std::filesystem::path srcPath =
+      std::filesystem::path(configuration.benchmarkDir) / flatName;
 
   // Tool setup: build the ClangTool from CLANG_RESOURCES and the source path
   static llvm::cl::OptionCategory myToolCategory("transformer");
@@ -113,6 +122,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
     }
     return 0;
   }
+  writeBenchmarkTask(srcPath);
   return 1;
 }
 
@@ -201,6 +211,47 @@ bool Transformer::harnessIsEmpty(std::filesystem::path path) {
   // so when no function could be harnessed (harness is empty), this exact
   // block appears verbatim. Coupled to that format string in MainGenConsumer.
   return content.find("int main(void) {\n  return 0;\n}") != std::string::npos;
+}
+
+std::vector<BenchmarkProperty> Transformer::selectProperties() {
+  // TODO(you): later, accept AST characteristics and conditionally include
+  // properties (loops → termination, int arithmetic → no-overflow, etc.).
+  // For now, every benchmark gets both.
+  return {
+      {"../properties/no-overflow.prp", true},
+      {"../properties/termination.prp", true},
+  };
+}
+
+void Transformer::writeBenchmarkTask(std::filesystem::path cPath) {
+  std::filesystem::path ymlPath = cPath;
+  ymlPath.replace_extension(".yml");
+
+  std::string inputFile = cPath.stem().string() + ".i";
+  std::vector<BenchmarkProperty> properties = selectProperties();
+
+  std::ofstream out(ymlPath);
+  if (!out) {
+    std::cerr << "Failed to write task file: " << ymlPath.string() << std::endl;
+    return;
+  }
+
+  out << "# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project\n"
+      << "# SPDX-License-Identifier: Apache-2.0\n"
+      << "\n"
+      << "format_version: '2.0'\n"
+      << "\n"
+      << "input_files: '" << inputFile << "'\n"
+      << "\n"
+      << "properties:\n";
+  for (const BenchmarkProperty &prop : properties) {
+    out << "  - property_file: " << prop.propertyFile << "\n"
+        << "    expected_verdict: " << (prop.expectedVerdict ? "true" : "false") << "\n";
+  }
+  out << "\n"
+      << "options:\n"
+      << "  language: C\n"
+      << "  data_model: LP64\n";
 }
 
 void Transformer::parseConfig(std::string configFile) {

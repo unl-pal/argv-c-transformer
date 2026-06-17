@@ -2,6 +2,20 @@
 
 #include <filesystem>
 #include <string>
+#include <vector>
+
+/**
+ * @brief A single property entry in an SV-Comp .yml task file.
+ *
+ * Maps to one block under the {@code properties:} key. For now every benchmark
+ * gets the same fixed set; later, {@code selectProperties} will choose based on
+ * AST characteristics (loops → termination, integer arithmetic → no-overflow,
+ * etc.).
+ */
+struct BenchmarkProperty {
+  std::string propertyFile; ///< Relative path to the .prp file (e.g. "../properties/termination.prp").
+  bool expectedVerdict;     ///< {@code true} = program satisfies the property.
+};
 
 /**
  * @brief Runtime configuration loaded from the INI-style config file.
@@ -98,6 +112,29 @@ public:
    * @return The number of compilable benchmarks produced.
    */
   int run();
+
+  /**
+   * @brief Returns the set of verification properties for a benchmark.
+   *
+   * Currently returns a fixed set (termination + no-overflow) for every file.
+   * Future: accepts AST characteristics and conditionally includes properties
+   * (e.g. only termination if loops are present, only no-overflow if integer
+   * arithmetic is present, unreach-call when {@code reach_error()} guards exist).
+   *
+   * @return Vector of properties to include in the task .yml.
+   */
+  std::vector<BenchmarkProperty> selectProperties();
+
+  /**
+   * @brief Writes an SV-Comp .yml task definition alongside the benchmark .c file.
+   *
+   * The task file references the preprocessed {@code .i} form of the input
+   * (preprocessing is assumed as a later step). Properties are selected via
+   * {@code selectProperties()}.
+   *
+   * @param cPath Path to the transformed .c benchmark file.
+   */
+  void writeBenchmarkTask(std::filesystem::path cPath);
 
 private:
   /// Path settings and flags loaded from the config file.

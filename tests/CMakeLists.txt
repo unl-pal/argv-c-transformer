@@ -46,8 +46,26 @@ target_link_libraries(transform_tests PRIVATE
   GTest::gtest_main
 )
 
+add_executable(transform_stage_tests transform/TransformStageTest.cpp)
+
+target_include_directories(transform_stage_tests SYSTEM PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+)
+target_include_directories(transform_stage_tests PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/transform/include
+  ${CMAKE_SOURCE_DIR}/src/transform
+  ${CMAKE_SOURCE_DIR}/src/common/include
+)
+
+target_link_libraries(transform_stage_tests PRIVATE
+  transform_lib
+  ${LLVM_LIBS}
+  GTest::gtest_main
+)
+
 # gtest_discover_tests registers each TEST() as a separate CTest case,
 # so `ctest` output shows individual pass/fail rather than just "filter_tests passed"
 include(GoogleTest)
 gtest_discover_tests(filter_tests)
 gtest_discover_tests(transform_tests)
+gtest_discover_tests(transform_stage_tests)
