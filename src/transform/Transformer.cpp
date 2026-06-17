@@ -182,7 +182,7 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   clang::DiagnosticOptions diagOpts;
   std::unique_ptr<clang::DiagnosticConsumer> diagConsumer;
   if (configuration.debugLevel >= 1) {
-    diagConsumer = std::make_unique<clang::TextDiagnosticPrinter>(llvm::errs(), diagOpts);
+    diagConsumer = std::make_unique<clang::TextDiagnosticPrinter>(llvm::errs(), &diagOpts);
   } else {
     diagConsumer = std::make_unique<clang::DiagnosticConsumer>();
   }
