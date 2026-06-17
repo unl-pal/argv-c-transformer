@@ -80,8 +80,10 @@ inline std::vector<std::string> buildClangArgs(const std::string &filePath,
       "-extra-arg=-fparse-all-comments",
   };
   std::optional<std::string> sysroot = getSysroot();
-  if (sysroot)
-    args.push_back("-extra-arg=-isysroot=" + *sysroot);
+  if (sysroot) {
+    args.push_back("-extra-arg=-isysroot");
+    args.push_back("-extra-arg=" + *sysroot);
+  }
   args.push_back(filePath);
   return args;
 }

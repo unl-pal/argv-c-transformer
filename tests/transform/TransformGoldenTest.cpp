@@ -92,8 +92,10 @@ TEST_P(TransformGolden, MatchesExpected) {
   if (resourceDir)
     args.push_back("-resource-dir=" + *resourceDir);
   std::optional<std::string> sysroot = getSysroot();
-  if (sysroot)
-    args.push_back("-isysroot=" + *sysroot);
+  if (sysroot) {
+    args.push_back("-isysroot");
+    args.push_back(*sysroot);
+  }
 
   // The input's real path is used as the tool's file name so that quoted
   // includes resolve against the cases directory.
