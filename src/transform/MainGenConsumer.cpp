@@ -21,8 +21,7 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   // Collect every function defined in this file, in source order, renaming
   // any existing main along the way so the generated main below is the sole
   // entry point. The renamed original_main is then harnessed like any other
-  // function. Calls to main from within the file are not rewritten (calling
-  // main is vanishingly rare in C and ill-formed in most dialects).
+  // function
   std::vector<const clang::FunctionDecl *> defined;
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
     const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
@@ -36,6 +35,12 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
+    // main has a known pointer contract (argc/argv), so synthesize a real
+    // call instead of skipping it like an arbitrary unsupported-param function
+    if (func->isMain()) {
+      harness += genMainHarness(func);
+      continue;
+    }
     if (func->isVariadic()) {
       std::cout << "Warning: variadic functions unsupported\n" + func->getNameAsString() +
                        " not harnessed"
@@ -62,6 +67,7 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       std::cout << "Warning: only primitive symbolics supported\n" + func->getNameAsString() +
                        " not harnessed"
                 << std::endl;
+      std::cerr << "This function should not have survived the filter step" << std::endl;
       continue;
     }
     std::string name = func->isMain() ? "original_main" : func->getNameAsString();
@@ -71,4 +77,29 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
   _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainFn);
+}
+
+std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
+  unsigned numParams = mainFn->getNumParams();
+
+  // int main(void): no args to synthesize, just call it.
+  if (numParams == 0)
+    return "  original_main();\n";
+
+  // int main(int argc, char **argv[, char **envp]): build a nondet argc and
+  // an argv of havocked C strings, then call original_main(argc, argv).
+
+  std::string body;
+  body += "  extern void abort(void);\n";
+  body += "  int argc = __VERIFIER_nondet_int();\n";
+  body += "  if (argc < 0 || argc > 7) abort();\n";
+  body += "  char *argv[argc + 1];\n";
+  body += "  for (int i = 0; i < argc; i++)\n";
+  body += "    argv[i] = __havoc_cstring(16);\n";
+  body += "  argv[argc] = 0;\n";
+  body += "  original_main(argc, argv);\n";
+
+  _NeededSuffixes->insert("int");
+  _NeededSuffixes->insert("__havoc_cstring");
+  return body;
 }

@@ -18,6 +18,8 @@
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <llvm/ADT/IntrusiveRefCntPtr.h>
 #include <llvm/ADT/StringRef.h>
 #include <iostream>
@@ -66,7 +68,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   std::optional<std::string> resourceDir = getResourceDir();
   if (!resourceDir) {
-    std::cerr << "Please set the CLANG_RESOURCES environment variable before proceeding"
+    std::cerr << "Could not determine clang resource directory (set CLANG_RESOURCES to override)"
               << std::endl;
     return false;
   }
@@ -97,6 +99,12 @@ bool Transformer::transformFile(std::filesystem::path path) {
     std::cerr << "Clang tool reported errors while transforming: " << path.string() << std::endl;
   }
   output.close();
+
+  // harness may be empty due to unsupported transforming
+  if (harnessIsEmpty(srcPath)) {
+    std::filesystem::remove(srcPath);
+    return 0;
+  }
 
   // Result: drop the output if it doesn't compile and we're keeping compiles only
   if (!checkCompilable(srcPath)) {
@@ -158,18 +166,41 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   clang::tooling::ClangTool tool(optionsParser.getCompilations(),
                                  optionsParser.getSourcePathList());
 
-  // Diagnostics are counted but not printed, to avoid clutter
-  clang::DiagnosticConsumer diagConsumer;
-  tool.setDiagnosticConsumer(&diagConsumer);
+  // At debugLevel 0 diagnostics are counted but not printed, to avoid clutter.
+  // At debugLevel >= 1 the real clang diagnostics are emitted so failures are
+  // actionable (e.g. which symbol/header the benchmark is missing).
+  clang::DiagnosticOptions diagOpts;
+  std::unique_ptr<clang::DiagnosticConsumer> diagConsumer;
+  if (configuration.debugLevel >= 1) {
+    diagConsumer = std::make_unique<clang::TextDiagnosticPrinter>(llvm::errs(), diagOpts);
+  } else {
+    diagConsumer = std::make_unique<clang::DiagnosticConsumer>();
+  }
+  tool.setDiagnosticConsumer(diagConsumer.get());
 
   // Equivalent to running "clang -xc -fsyntax-only `file-name` verifier.c"
   tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
 
   // If there are errors do not count the file as compilable
-  if (diagConsumer.getNumErrors()) {
+  if (diagConsumer->getNumErrors()) {
     return 0;
   }
   return 1;
+}
+
+bool Transformer::harnessIsEmpty(std::filesystem::path path) {
+  std::ifstream in(path);
+  if (!in)
+    return false;
+  std::stringstream buffer;
+  buffer << in.rdbuf();
+  std::string content = buffer.str();
+
+  // MainGenConsumer builds the entry point as
+  //   "\nint main(void) {\n" + harness + "  return 0;\n}\n"
+  // so when no function could be harnessed (harness is empty), this exact
+  // block appears verbatim. Coupled to that format string in MainGenConsumer.
+  return content.find("int main(void) {\n  return 0;\n}") != std::string::npos;
 }
 
 void Transformer::parseConfig(std::string configFile) {

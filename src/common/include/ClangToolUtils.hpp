@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -10,20 +11,28 @@
 #include <vector>
 
 /**
- * @brief Returns the value of CLANG_RESOURCES, or nullopt if unset.
+ * @brief Returns the clang resource directory.
  *
- * {@code getenv} returns nullptr when the variable is missing; constructing
- * {@code std::string} from nullptr is UB, so callers must not use the env var
- * directly.
- *
- * @return The resource directory string, or {@code std::nullopt} if
- *         {@code CLANG_RESOURCES} is not set.
+ * Checks CLANG_RESOURCES first (lets callers override, e.g. for cross-compile
+ * setups). Falls back to running `clang -print-resource-dir` so the binary
+ * is self-configuring on systems where the env var isn't set.
  */
 inline std::optional<std::string> getResourceDir() {
   const char *r = std::getenv("CLANG_RESOURCES");
-  if (!r)
+  if (r)
+    return std::string(r);
+
+  FILE *pipe = popen("clang -print-resource-dir 2>/dev/null", "r");
+  if (!pipe)
     return std::nullopt;
-  return std::string(r);
+  char buf[512];
+  std::string result;
+  while (fgets(buf, sizeof(buf), pipe))
+    result += buf;
+  pclose(pipe);
+  if (!result.empty() && result.back() == '\n')
+    result.pop_back();
+  return result.empty() ? std::nullopt : std::optional<std::string>(result);
 }
 
 /**

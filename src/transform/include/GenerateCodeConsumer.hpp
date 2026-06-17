@@ -3,12 +3,26 @@
 #include <clang/AST/ASTConsumer.h>
 #include <llvm/Support/raw_ostream.h>
 
+/**
+ * @brief ASTConsumer that launches the visitor to write final source code.
+ *
+ * Delegates to {@code RegenCodeVisitor} to pretty-print the transformed AST
+ * back to C source, writing the result to the provided output stream.
+ */
 class GenerateCodeConsumer : public clang::ASTConsumer {
 public:
-  /// Consumer used to launch the visitor that will write all the final source code
+  /**
+   * @brief Constructs the consumer, binding the output stream.
+   *
+   * @param output File stream to write the regenerated source code to.
+   */
   GenerateCodeConsumer(llvm::raw_fd_ostream &output);
 
-  /// Launches the visitor to print the code supplying the output location to write to
+  /**
+   * @brief Launches the visitor to print the code to the output location.
+   *
+   * @param context The AST context for the translation unit being transformed.
+   */
   void HandleTranslationUnit(clang::ASTContext &context);
 
 private:

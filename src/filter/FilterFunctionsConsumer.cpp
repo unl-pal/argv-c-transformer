@@ -1,18 +1,36 @@
 #include "CountingVisitor.hpp"
 #include "FilterFunctionsConsumer.hpp"
+#include "VerifierNames.hpp"
+
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclBase.h>
+#include <clang/Basic/SourceManager.h>
+#include <llvm/Support/Casting.h>
+#include <unordered_map>
 
 FilterFunctionsConsumer::FilterFunctionsConsumer(
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,
     std::shared_ptr<std::vector<std::string>> toRemove, std::map<std::string, int> *config)
     : _ToFilter(toFilter), _ToRemove(toRemove), _Config(config) {}
 
-void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext & /*context*/) {
-  FilterFunctions();
+void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &context) {
+  FilterFunctions(context);
 }
 
-void FilterFunctionsConsumer::FilterFunctions() {
+void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
   if (_ToFilter->empty())
     return;
+
+  // Build name → FunctionDecl* so the param-type check below can look up
+  // the actual declaration for each function in _ToFilter.
+  clang::SourceManager &mgr = context.getSourceManager();
+  std::unordered_map<std::string, const clang::FunctionDecl *> declByName;
+  for (clang::Decl *decl : context.getTranslationUnitDecl()->decls()) {
+    const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
+    if (func && func->isThisDeclarationADefinition() && mgr.isInMainFile(func->getLocation()))
+      declByName[func->getNameAsString()] = func;
+  }
+
   for (const std::pair<const std::string, CountingVisitor::attributes> &func : *_ToFilter) {
     std::string key = func.first;
     CountingVisitor::attributes attr = func.second;
@@ -78,6 +96,19 @@ void FilterFunctionsConsumer::FilterFunctions() {
       _ToRemove->push_back(key);
     } else if (attr.WhileLoops < _Config->at("minWhileLoops")) {
       _ToRemove->push_back(key);
+    } else {
+      // All threshold checks passed — now check whether every parameter has a
+      // nondet equivalent. If any param type is unsupported (pointer, struct,
+      // etc.), strip the body so HavocCallsVisitor can still use the return
+      // type from the remaining declaration.
+      if (declByName.contains(key)) {
+        for (auto parm : declByName.at(key)->parameters()) {
+          if (!verifierSuffixForType(parm->getOriginalType())) {
+            _ToRemove->push_back(key);
+            break;
+          }
+        }
+      }
     }
   }
 }

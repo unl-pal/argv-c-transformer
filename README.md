@@ -50,19 +50,11 @@ cmake -B build -S . -G Ninja
 ninja -C build filter transform full
 ```
 
-Before running any binary, set the Clang resource directory — required for the
-AST pipeline to resolve standard library headers in processed files:
-
-```sh
-export CLANG_RESOURCES=$(clang -print-resource-dir)
-```
-
 # Testing
 
 Build and run the test suite (GoogleTest is fetched automatically by CMake):
 
 ```sh
-export CLANG_RESOURCES=$(clang -print-resource-dir)
 cmake -B build -S . -G Ninja
 ninja -C build
 ctest --test-dir build
@@ -90,8 +82,8 @@ Review the generated/changed `.expected.c` files like any other code change —
 this is also how goldens are refreshed after an intentional behavior change.
 
 Note: test cases that include system headers are skipped (with an explanatory
-message) when `CLANG_RESOURCES` is unset or points at a stale directory, e.g.
-after a clang upgrade.
+message) when the clang resource directory cannot be resolved — this usually
+means `clang` is not on `PATH`.
 
 # Downloader (optional)
 

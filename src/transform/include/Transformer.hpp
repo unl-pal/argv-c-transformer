@@ -69,6 +69,20 @@ public:
   int checkCompilable(std::filesystem::path path);
 
   /**
+   * @brief Detects a trivial benchmark whose generated main calls nothing.
+   *
+   * When every function in a file is skipped by the harness (all params are
+   * pointers/structs, etc.), MainGenConsumer emits an empty `main` whose body
+   * is just `return 0;`. Such a benchmark exercises no code and should be
+   * discarded. This is a post-write text check, coupled to MainGenConsumer's
+   * generated-main format.
+   *
+   * @param path Path to the transformed C file to inspect.
+   * @return true if the generated main contains no calls.
+   */
+  bool harnessIsEmpty(std::filesystem::path path);
+
+  /**
    * @brief Parses the config file, populating {@code configuration}.
    *
    * Recognised keys: benchmarkDir, filterDir, debugLevel, keepCompilesOnly,

@@ -219,7 +219,7 @@ int Filterer::run() {
 
       std::optional<std::string> resourceDir = getResourceDir();
       if (!resourceDir) {
-        std::cerr << "Please set the CLANG_RESOURCES environment variable before proceeding"
+        std::cerr << "Could not determine clang resource directory (set CLANG_RESOURCES to override)"
                   << std::endl;
         return 1;
       }

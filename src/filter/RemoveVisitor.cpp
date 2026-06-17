@@ -14,7 +14,7 @@ bool RemoveVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
     if (D->getLocation().isMacroID())
       return clang::RecursiveASTVisitor<RemoveVisitor>::VisitFunctionDecl(D);
 
-    if (D->hasBody() && !D->isMain()) {
+    if (D->doesThisDeclarationHaveABody() && !D->isMain()) {
       for (const std::string &name : *_ToRemove) {
         if (name == D->getNameAsString()) {
           clang::SourceRange bodyRange = D->getBody()->getSourceRange();
