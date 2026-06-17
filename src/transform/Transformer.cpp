@@ -187,9 +187,12 @@ int Transformer::checkCompilable(std::filesystem::path path) {
       "-extra-arg=-fsyntax-only",
       "-extra-arg=-xc",
       "-extra-arg=-resource-dir=" + *resourceDir,
-      path.string(),
-      verifierPath.string(),
   });
+  std::optional<std::string> sysroot = getSysroot();
+  if (sysroot)
+    args.push_back("-extra-arg=-isysroot=" + *sysroot);
+  args.push_back(path.string());
+  args.push_back(verifierPath.string());
   std::vector<const char *> argv = toArgv(args);
   int argc = static_cast<int>(args.size());
 
