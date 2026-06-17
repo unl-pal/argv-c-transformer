@@ -88,7 +88,7 @@ uint32_t SuperFastHash(const char *data, int len) {
   case 3:
     hash += get16bits(data);
     hash ^= hash << 16;
-    hash ^= ((signed char)data[sizeof(uint16_t)]) << 18;
+    hash ^= (uint32_t)((signed char)data[sizeof(uint16_t)]) << 18;
     hash += hash >> 11;
     break;
   case 2:
