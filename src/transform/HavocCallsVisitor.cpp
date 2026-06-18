@@ -49,6 +49,10 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   }
 
   clang::QualType returnType = E->getCallReturnType(*_C);
+  // A null return type can come back for calls whose callee type can't be
+  // resolved to a FunctionType (e.g. macro-expanded)
+  if (returnType.isNull())
+    return clang::RecursiveASTVisitor<HavocCallsVisitor>::VisitCallExpr(E);
   if (returnType->isVoidType()) {
     // A void call yields no value to havoc; drop it (the statement's
     // semicolon stays behind, leaving an empty statement)

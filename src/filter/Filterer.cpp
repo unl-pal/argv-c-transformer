@@ -274,10 +274,6 @@ int Filterer::run() {
                     << outFile.rdbuf() << std::endl;
         }
       }
-    } else {
-      if (config.at("debugLevel") >= 1) {
-        std::cout << "[filter] skipped (pre-filter): " << fileName << std::endl;
-      }
     }
   }
   return 0;

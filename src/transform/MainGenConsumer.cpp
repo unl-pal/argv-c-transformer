@@ -65,9 +65,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     // this function but keep harnessing the rest.
     if (!supported) {
       std::cout << "Warning: only primitive symbolics supported\n" + func->getNameAsString() +
-                       " not harnessed"
+                       " not harnessed (filter's param check did not strip it)"
                 << std::endl;
-      std::cerr << "This function should not have survived the filter step" << std::endl;
       continue;
     }
     std::string name = func->isMain() ? "original_main" : func->getNameAsString();
