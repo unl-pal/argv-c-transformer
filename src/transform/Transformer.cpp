@@ -176,56 +176,24 @@ void reach_error(void) {}
 )";
 
 int Transformer::checkCompilable(std::filesystem::path path) {
-  static llvm::cl::OptionCategory myToolCategory("CheckCompiles");
-
   std::optional<std::string> resourceDir = getResourceDir();
-  if (!resourceDir) {
+  if (!resourceDir)
     return 0;
-  }
 
-  // Write embedded verifier stubs to a temp file next to the benchmark
   std::filesystem::path verifierPath = path.parent_path() / "__verifier_stubs.c";
   {
     std::ofstream out(verifierPath);
     out << kVerifierStubs;
   }
 
-  std::vector<std::string> args({
-      "clang",
-      "-extra-arg=-fsyntax-only",
-      "-extra-arg=-xc",
-      "-extra-arg=-resource-dir=" + *resourceDir,
-  });
+  std::string cmd = "clang -fsyntax-only -xc"
+                    " -resource-dir=" + *resourceDir;
   std::optional<std::string> sysroot = getSysroot();
-  if (sysroot) {
-    args.push_back("-extra-arg=-isysroot");
-    args.push_back("-extra-arg=" + *sysroot);
-  }
-  args.push_back(path.string());
-  args.push_back(verifierPath.string());
-  std::vector<const char *> argv = toArgv(args);
-  int argc = static_cast<int>(args.size());
+  if (sysroot)
+    cmd += " -isysroot " + *sysroot;
+  cmd += " " + path.string() + " " + verifierPath.string() + " 2>/dev/null";
 
-  llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
-      clang::tooling::CommonOptionsParser::create(argc, argv.data(), myToolCategory);
-
-  if (!expectedParser) {
-    llvm::errs() << expectedParser.takeError();
-    std::filesystem::remove(verifierPath);
-    return 0;
-  }
-
-  clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
-
-  clang::tooling::ClangTool tool(optionsParser.getCompilations(),
-                                 optionsParser.getSourcePathList());
-
-  clang::IgnoringDiagConsumer diagConsumer;
-  tool.setDiagnosticConsumer(&diagConsumer);
-
-  int result = tool.run(
-      clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
-
+  int result = std::system(cmd.c_str());
   std::filesystem::remove(verifierPath);
   return result == 0 ? 1 : 0;
 }

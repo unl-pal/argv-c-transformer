@@ -1,14 +1,24 @@
 #pragma once
 
+#include <clang/Basic/Version.h>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <map>
 #include <optional>
 #include <regex>
 #include <string>
 #include <vector>
+
+inline void checkClangVersion() {
+  if (CLANG_VERSION_MAJOR != 20) {
+    std::cerr << "Warning: built against Clang " << CLANG_VERSION_STRING
+              << ", expected Clang 20. Rebuild with the correct LLVM version."
+              << "Specify Clang version for Cmake per README.md" << std::endl;
+  }
+}
 
 /**
  * @brief Returns the macOS SDK sysroot, if applicable.
