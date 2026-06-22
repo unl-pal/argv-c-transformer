@@ -10,6 +10,8 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
+#include <set>
+#include <string>
 
 /**
  * @brief PPCallbacks hook that strips non-system #include directives.
@@ -29,7 +31,8 @@ public:
    * @param SM       Source manager, used to check whether directives are in the main file.
    * @param rewriter Shared rewriter the include directives are removed through.
    */
-  IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter);
+  IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter,
+                std::shared_ptr<std::set<std::string>> existingIncludes);
 
   /**
    * @brief Called by the preprocessor for each #include/#import directive.
@@ -56,6 +59,7 @@ public:
 private:
   clang::SourceManager &_Mgr;
   clang::Rewriter &_Rewriter;
+  std::shared_ptr<std::set<std::string>> _ExistingIncludes;
 };
 
 /**

@@ -108,6 +108,54 @@ TEST_F(TransformStageTest, EmptyHarnessDiscardedNoYml) {
   EXPECT_FALSE(fs::exists(benchmarkDir / "ptrs_only.yml"));
 }
 
+TEST_F(TransformStageTest, KeepCompilesOnlyDiscardsUndefinedTypes) {
+  // Uses an undefined type in a variable declaration — this survives
+  // transformation but won't compile, so keepCompilesOnly should discard it.
+  // The type is declared as a typedef so clang can parse the input, but
+  // the typedef comes from a local header that gets stripped.
+  writeFile(filterDir / "local_types.h",
+            "typedef struct { int id; } widget_t;\n");
+  writeFile(filterDir / "badtype.c",
+            "#include \"local_types.h\"\n"
+            "int process(widget_t w) {\n"
+            "  return w.id + 1;\n"
+            "}\n");
+
+  Transformer t(configPath.string());
+  int count = t.run();
+
+  EXPECT_EQ(count, 0);
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.c"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.yml"));
+}
+
+TEST_F(TransformStageTest, KeepCompilesOffRetainsUncompilable) {
+  // Same uncompilable file, but with keepCompilesOnly off — should be kept
+  fs::path offConfig = tmpDir / "off.config";
+  {
+    std::ofstream cfg(offConfig);
+    cfg << "[File Locations]\n"
+        << "filterDir = " << filterDir.string() << "\n"
+        << "benchmarkDir = " << benchmarkDir.string() << "\n"
+        << "[Debugging Flags]\n"
+        << "debugLevel = 0\n"
+        << "[File Requirements and Settings]\n"
+        << "keepCompilesOnly = false\n";
+  }
+
+  writeFile(filterDir / "badtype.c",
+            "#include \"project.h\"\n"
+            "int process(int x) {\n"
+            "  return x + 1;\n"
+            "}\n");
+
+  Transformer t(offConfig.string());
+  int count = t.run();
+
+  EXPECT_GE(count, 1);
+  EXPECT_TRUE(fs::exists(benchmarkDir / "badtype.c"));
+}
+
 TEST_F(TransformStageTest, ArgcArgvMainProducesBenchmark) {
   writeFile(filterDir / "withmain.c",
             "int main(int argc, char *argv[]) {\n"
