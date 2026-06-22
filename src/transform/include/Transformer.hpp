@@ -180,4 +180,6 @@ public:
 private:
   /// Path settings and flags loaded from the config file.
   struct transformConfigs configuration;
+  /// Count of .c files attempted across the run, for the end-of-run summary.
+  int _totalProcessed = 0;
 };

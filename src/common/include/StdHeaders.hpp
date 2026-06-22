@@ -1,10 +1,24 @@
 #pragma once
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+/**
+ * @file StdHeaders.hpp
+ * @brief Registry mapping standard/POSIX type names to their defining headers.
+ *
+ * Used by the transform step to re-inject the standard headers that include
+ * stripping leaves missing. Each entry also carries a {@code HeaderCategory} so
+ * future passes can filter benchmarks by logical structure (concurrency, file
+ * I/O, etc.).
+ */
+
+/**
+ * @brief Logical grouping for a standard header, for future structure-based filtering.
+ */
 enum class HeaderCategory {
   Core,
   IO,
@@ -15,11 +29,17 @@ enum class HeaderCategory {
   Time,
 };
 
+/**
+ * @brief A standard type's defining header together with its logical category.
+ */
 struct StdHeaderInfo {
-  std::string header;
-  HeaderCategory category;
+  std::string header;       ///< Header that defines the type (e.g. "stdint.h").
+  HeaderCategory category;  ///< Logical grouping of the header.
 };
 
+/**
+ * @brief Maps a standard/POSIX type name to the header that defines it.
+ */
 inline const std::unordered_map<std::string, StdHeaderInfo> kStdTypeHeaders = {
     // <stdbool.h>
     {"bool", {"stdbool.h", HeaderCategory::Core}},
@@ -139,6 +159,12 @@ inline const std::unordered_map<std::string, StdHeaderInfo> kStdTypeHeaders = {
     {"stat", {"sys/stat.h", HeaderCategory::IO}},
 };
 
+/**
+ * @brief Looks up the header and category for a standard type name.
+ *
+ * @param typeName Type name as spelled in source (e.g. "size_t").
+ * @return The header/category info, or std::nullopt if the type is not standard.
+ */
 inline std::optional<StdHeaderInfo> stdHeaderForType(const std::string &typeName) {
   auto it = kStdTypeHeaders.find(typeName);
   if (it == kStdTypeHeaders.end())
@@ -146,6 +172,12 @@ inline std::optional<StdHeaderInfo> stdHeaderForType(const std::string &typeName
   return it->second;
 }
 
+/**
+ * @brief Returns the set of headers belonging to a logical category.
+ *
+ * @param cat Category to collect headers for.
+ * @return All distinct header names whose entries are tagged with {@code cat}.
+ */
 inline std::unordered_set<std::string> headersForCategory(HeaderCategory cat) {
   std::unordered_set<std::string> result;
   for (const auto &[type, info] : kStdTypeHeaders) {

@@ -12,11 +12,18 @@
 #include <string>
 #include <vector>
 
+/**
+ * @brief Aborts the process when built against an unsupported Clang.
+ *
+ * LLVM 20 is the minimum; older versions miss APIs this project relies on and
+ * have produced AST-traversal crashes. Newer versions are accepted.
+ */
 inline void checkClangVersion() {
-  if (CLANG_VERSION_MAJOR != 20) {
-    std::cerr << "Warning: built against Clang " << CLANG_VERSION_STRING
-              << ", expected Clang 20. Rebuild with the correct LLVM version."
-              << "Specify Clang version for Cmake per README.md" << std::endl;
+  if (CLANG_VERSION_MAJOR < 20) {
+    std::cerr << "Error: built against Clang " << CLANG_VERSION_STRING
+              << ", but Clang 20 or newer is required. "
+              << "Specify the Clang version for CMake per README.md." << std::endl;
+    std::exit(1);
   }
 }
 

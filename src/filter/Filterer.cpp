@@ -1,6 +1,7 @@
 #include "include/Filterer.hpp"
 #include "FrontendFactoryWithArgs.hpp"
 #include "ClangToolUtils.hpp"
+#include "DebugLog.hpp"
 
 #include <algorithm>
 #include <clang/AST/Type.h>
@@ -91,14 +92,15 @@ void Filterer::parseConfigFile(std::string configFile) {
     }
   }
 
-  if (config.at("debugLevel") >= 1) {
-    std::cout << "[filter] loaded config: " << configFile << std::endl;
-    for (const auto &[k, v] : config) {
-      std::cout << "  " << k << " = " << v << std::endl;
-    }
-    for (const std::string &t : typeNames) {
-      std::cout << "  type: " << t << std::endl;
-    }
+  globalDebugLevel() = config.at("debugLevel");
+
+  if (globalDebugLevel() >= 1) {
+    std::string dump = "[filter] loaded config: " + configFile;
+    for (const auto &[k, v] : config)
+      dump += "\n  " + k + " = " + std::to_string(v);
+    for (const std::string &t : typeNames)
+      dump += "\n  type: " + t;
+    debugLog(1, dump);
   }
 }
 
@@ -117,11 +119,9 @@ bool Filterer::checkPotentialFile(std::string fileName) {
             std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) != stdLibNames.end();
         if (!isStdLib && !config.at("useNonStdHeaders")) {
           file.close();
-          if (config.at("debugLevel") >= 1) {
-            std::cout << "[filter] skipped (non-std header '" << match[2].str()
-                      << "', useNonStdHeaders=" << config.at("useNonStdHeaders") << "): " << fileName
-                      << std::endl;
-          }
+          debugLog(1, "[filter] skipped (non-std header '" + match[2].str() +
+                          "', useNonStdHeaders=" + std::to_string(config.at("useNonStdHeaders")) +
+                          "): " + fileName);
           return false;
         }
       }
@@ -132,16 +132,12 @@ bool Filterer::checkPotentialFile(std::string fileName) {
     }
     file.close();
     if (count < config.at("minFileLoC")) {
-      if (config.at("debugLevel") >= 1) {
-        std::cout << "[filter] skipped (LoC " << count << " < minFileLoC " << config.at("minFileLoC")
-                  << "): " << fileName << std::endl;
-      }
+      debugLog(1, "[filter] skipped (LoC " + std::to_string(count) + " < minFileLoC " +
+                      std::to_string(config.at("minFileLoC")) + "): " + fileName);
       return false;
     } else if (count > config.at("maxFileLoC")) {
-      if (config.at("debugLevel") >= 1) {
-        std::cout << "[filter] skipped (LoC " << count << " > maxFileLoC " << config.at("maxFileLoC")
-                  << "): " << fileName << std::endl;
-      }
+      debugLog(1, "[filter] skipped (LoC " + std::to_string(count) + " > maxFileLoC " +
+                      std::to_string(config.at("maxFileLoC")) + "): " + fileName);
       return false;
     } else {
       return true;
@@ -155,30 +151,21 @@ bool Filterer::checkPotentialFile(std::string fileName) {
 int Filterer::getAllCFiles(std::filesystem::path pathObject,
                            std::vector<std::string> &filesToFilter, int numFiles) {
   if (!std::filesystem::exists(pathObject)) {
-    if (config.at("debugLevel") >= 2) {
-      std::cout << "[filter] path does not exist: " << pathObject.string() << std::endl;
-    }
+    debugLog(2, "[filter] path does not exist: " + pathObject.string());
     return 0;
   }
   if (std::filesystem::is_regular_file(pathObject)) {
     if (pathObject.has_extension()) {
       if (pathObject.extension() == ".c") {
-        if (config.at("debugLevel") >= 2) {
-          std::cout << "[filter] queued: " << pathObject.filename().string() << std::endl;
-        }
+        debugLog(2, "[filter] queued: " + pathObject.filename().string());
         filesToFilter.push_back(pathObject.string());
         return 1;
       } else {
-        if (config.at("debugLevel") >= 3) {
-          std::cout << "[filter] skipped (not .c): " << pathObject.filename().string() << std::endl;
-        }
+        debugLog(3, "[filter] skipped (not .c): " + pathObject.filename().string());
         return 0;
       }
     } else {
-      if (config.at("debugLevel") >= 3) {
-        std::cout << "[filter] skipped (no extension): " << pathObject.filename().string()
-                  << std::endl;
-      }
+      debugLog(3, "[filter] skipped (no extension): " + pathObject.filename().string());
       return 0;
     }
   } else if (std::filesystem::is_directory(pathObject)) {
@@ -188,42 +175,42 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
     }
     return numFiles;
   } else {
-    if (config.at("debugLevel") >= 3) {
-      std::cout << "[filter] ignored: " << pathObject.filename().string() << std::endl;
-    }
+    debugLog(3, "[filter] ignored: " + pathObject.filename().string());
     return 0;
   }
   return 0;
 }
 
-void Filterer::debugInfo(std::string info) {
-  if (config.at("debugLevel") > 0) {
-    std::cout << "[filter] " << info << std::endl;
-  }
-}
+void Filterer::debugInfo(std::string info) { debugLog(1, "[filter] " + info); }
 
 /// Main driver for the Filter System
 int Filterer::run() {
   std::filesystem::path pathObject(configuration.databaseDir);
   std::vector<std::string> filesToFilter = std::vector<std::string>();
 
-  if (config.at("debugLevel") >= 1) {
-    std::cout << "[filter] scanning: " << pathObject.string() << std::endl;
-  }
+  debugLog(1, "[filter] scanning: " + pathObject.string());
 
   int filesFound = getAllCFiles(pathObject, filesToFilter, 0);
-  if (config.at("debugLevel") >= 1) {
-    std::cout << "[filter] found " << filesFound << " .c file(s)" << std::endl;
-  }
+  debugLog(1, "[filter] found " + std::to_string(filesFound) + " .c file(s)");
 
+  int passed = 0;
   for (std::string fileName : filesToFilter) {
     if (checkPotentialFile(fileName)) {
+      passed++;
       std::filesystem::path oldPath(fileName);
-      std::filesystem::path newPath(std::filesystem::current_path() / configuration.filterDir);
-      for (const std::filesystem::path &component : oldPath) {
-        if (component.string() != ".." && component.string() != configuration.databaseDir) {
-          newPath /= component;
-        }
+      // Mirror the input's path under filterDir by stripping the databaseDir
+      // prefix; relative() handles absolute and relative inputs uniformly.
+      std::filesystem::path relPath =
+          std::filesystem::relative(oldPath, configuration.databaseDir);
+      if (relPath.empty() || *relPath.begin() == "..")
+        relPath = oldPath.filename();
+      std::filesystem::path newPath = std::filesystem::path(configuration.filterDir) / relPath;
+
+      // Hard guard: never write over the source, whatever the path arithmetic.
+      if (std::filesystem::weakly_canonical(oldPath) ==
+          std::filesystem::weakly_canonical(newPath)) {
+        std::cerr << "Refusing to overwrite source file: " << oldPath.string() << std::endl;
+        continue;
       }
 
       static llvm::cl::OptionCategory myToolCategory("filterer");
@@ -261,20 +248,24 @@ int Filterer::run() {
       FrontendFactoryWithArgs factory(&config, typesRequested, output);
 
       int result = tool.run(&factory);
-      if (config.at("debugLevel") >= 2) {
-        std::cout << "[filter] tool result for " << fileName << ": " << result << std::endl;
-      }
+      debugLog(2, "[filter] tool result for " + fileName + ": " + std::to_string(result));
 
       output.close();
 
-      if (config.at("debugLevel") >= 2 && std::filesystem::exists(newPath)) {
+      if (globalDebugLevel() >= 2 && std::filesystem::exists(newPath)) {
         std::ifstream outFile(newPath.string());
         if (outFile.is_open()) {
-          std::cout << "[filter] output for " << newPath.string() << ":\n"
-                    << outFile.rdbuf() << std::endl;
+          std::stringstream contents;
+          contents << outFile.rdbuf();
+          debugLog(2, "[filter] output for " + newPath.string() + ":\n" + contents.str());
         }
       }
     }
   }
+
+  std::cout << "\n=== Filter summary ===\n"
+            << "  Files found:            " << filesFound << "\n"
+            << "  Passed pre-filter:      " << passed << "\n"
+            << "  Skipped:                " << (filesFound - passed) << std::endl;
   return 0;
 }

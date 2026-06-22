@@ -1,6 +1,7 @@
 #include "include/Transformer.hpp"
 #include "ArgsFrontendActionFactory.hpp"
 #include "ClangToolUtils.hpp"
+#include "DebugLog.hpp"
 
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/DiagnosticIDs.h>
@@ -52,6 +53,7 @@ Transformer::Transformer(std::string configFile) : configuration() {
   configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   parseConfig(configFile);
+  globalDebugLevel() = configuration.debugLevel;
 }
 
 // Flatten the filtered path into a single filename under benchmarkDir:
@@ -74,7 +76,7 @@ std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path pat
 }
 
 bool Transformer::transformFile(std::filesystem::path path) {
-  std::cout << "Transforming: " << path.string() << std::endl;
+  debugLog(1, "Transforming: " + path.string());
   if (!std::filesystem::exists(path))
     return false;
 
@@ -149,6 +151,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
 // produced benchmark, 0 otherwise; the parent enforces a wall-clock timeout
 // and reaps the child, translating its fate into the success count.
 int Transformer::transformFileIsolated(std::filesystem::path path) {
+  _totalProcessed++;
   pid_t pid = fork();
   if (pid < 0) {
     std::cerr << "fork failed, transforming in-process: " << path.string() << std::endl;
@@ -375,10 +378,15 @@ void Transformer::parseConfig(std::string configFile) {
 
 int Transformer::run() {
   std::filesystem::path path(configuration.filterDir);
-  if (std::filesystem::exists(path)) {
-    int result = transformAll(path, 0);
-    std::cout << "Number of Compilable Benchmarks: " << result << std::endl;
-    return result;
+  if (!std::filesystem::exists(path)) {
+    std::cerr << "Filter directory not found: " << configuration.filterDir << std::endl;
+    return 0;
   }
-  return 0;
+  int result = transformAll(path, 0);
+  int discarded = _totalProcessed - result;
+  std::cout << "\n=== Transform summary ===\n"
+            << "  Files processed:        " << _totalProcessed << "\n"
+            << "  Benchmarks produced:    " << result << "\n"
+            << "  Discarded/failed:       " << discarded << std::endl;
+  return result;
 }
