@@ -68,6 +68,7 @@ TEST_F(TransformStageTest, FlatFileProducesYml) {
 
   EXPECT_GE(count, 1);
   EXPECT_TRUE(fs::exists(benchmarkDir / "simple.c"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "simple.i"));
   EXPECT_TRUE(fs::exists(benchmarkDir / "simple.yml"));
 
   std::string yml = readFile(benchmarkDir / "simple.yml");

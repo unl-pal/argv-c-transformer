@@ -136,6 +136,17 @@ public:
    */
   void writeBenchmarkTask(std::filesystem::path cPath);
 
+  /**
+   * @brief Preprocesses a transformed .c file into a .i file.
+   *
+   * Runs {@code gcc -E -P -std=gnu11} on the source file, writing the
+   * preprocessed output alongside it with a {@code .i} extension.
+   *
+   * @param cPath Path to the transformed .c benchmark file.
+   * @return true if preprocessing succeeded, false otherwise.
+   */
+  bool preprocess(std::filesystem::path cPath);
+
 private:
   /// Path settings and flags loaded from the config file.
   struct transformConfigs configuration;

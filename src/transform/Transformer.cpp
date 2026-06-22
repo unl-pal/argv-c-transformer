@@ -122,6 +122,14 @@ bool Transformer::transformFile(std::filesystem::path path) {
     return 0;
   }
   writeBenchmarkTask(srcPath);
+  if (!preprocess(srcPath)) {
+    std::cerr << "Preprocessing failed, discarding: " << srcPath.string() << std::endl;
+    std::filesystem::path ymlPath = srcPath;
+    ymlPath.replace_extension(".yml");
+    std::filesystem::remove(srcPath);
+    std::filesystem::remove(ymlPath);
+    return 0;
+  }
   return 1;
 }
 
@@ -276,6 +284,15 @@ void Transformer::writeBenchmarkTask(std::filesystem::path cPath) {
       << "options:\n"
       << "  language: C\n"
       << "  data_model: LP64\n";
+}
+
+bool Transformer::preprocess(std::filesystem::path cPath) {
+  std::filesystem::path iPath = cPath;
+  iPath.replace_extension(".i");
+
+  std::string cmd = "gcc -E -P -std=gnu11 " +
+                    cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
+  return std::system(cmd.c_str()) == 0;
 }
 
 void Transformer::parseConfig(std::string configFile) {
