@@ -38,9 +38,7 @@ jobs:
         run: cmake -B build -S . -G Ninja -DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)
 
       - name: Build
-        run: ninja -C build filter transform full filter_tests
+        run: ninja -C build
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
-        env:
-          CLANG_RESOURCES: ${{ steps.find-llvm.outputs.clang_resources }}

@@ -55,6 +55,10 @@ inline std::optional<std::string> cTypeForSuffix(const std::string &suffix) {
 /// Returns the verifier suffix for a type (e.g. "uint" for `unsigned int`),
 /// or std::nullopt if the type is not a supported builtin.
 inline std::optional<std::string> verifierSuffixForType(clang::QualType QT) {
+  // A null type comes back from error-recovery AST nodes (e.g. calls or
+  // params built from undefined macros when headers are missing).
+  if (QT.isNull())
+    return std::nullopt;
   const clang::BuiltinType *BT = QT->getAs<clang::BuiltinType>();
   if (!BT)
     return std::nullopt;
