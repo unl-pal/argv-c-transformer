@@ -4,10 +4,6 @@ on:
   workflow_dispatch:
   pull_request:
 
-# TODO: CI is currently a work in progress.
-# Get local builds working on each platform first, then rewrite this workflow
-# to mirror the working local setup. Requires LLVM >= 19 on all platforms.
-
 jobs:
   build:
     strategy:
