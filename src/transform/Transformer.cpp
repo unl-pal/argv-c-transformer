@@ -12,7 +12,6 @@
 #include <clang/Frontend/CompilerInvocation.h>
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Frontend/FrontendActions.h>
-#include <clang/Frontend/TextDiagnosticPrinter.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Serialization/PCHContainerOperations.h>
 #include <clang/Tooling/CommonOptionsParser.h>
@@ -144,6 +143,30 @@ int Transformer::transformAll(std::filesystem::path path, int count) {
   return count;
 }
 
+static constexpr const char *kVerifierStubs = R"(
+#include <stdbool.h>
+#include <stddef.h>
+bool __VERIFIER_nondet_bool(void) { return false; }
+char __VERIFIER_nondet_char(void) { return 'a'; }
+unsigned char __VERIFIER_nondet_uchar(void) { return 'a'; }
+short __VERIFIER_nondet_short(void) { return 0; }
+unsigned short __VERIFIER_nondet_ushort(void) { return 0; }
+int __VERIFIER_nondet_int(void) { return 0; }
+unsigned int __VERIFIER_nondet_uint(void) { return 0; }
+long __VERIFIER_nondet_long(void) { return 0; }
+unsigned long __VERIFIER_nondet_ulong(void) { return 0; }
+long long __VERIFIER_nondet_longlong(void) { return 0; }
+unsigned long long __VERIFIER_nondet_ulonglong(void) { return 0; }
+float __VERIFIER_nondet_float(void) { return 0; }
+double __VERIFIER_nondet_double(void) { return 0; }
+void* __VERIFIER_nondet_pointer(void) { return (void*)(0); }
+void __VERIFIER_nondet_memory(void *mem, size_t size) {
+  unsigned char *p = (unsigned char *)mem;
+  for (size_t i = 0; i < size; i++) p[i] = __VERIFIER_nondet_uchar();
+}
+void reach_error(void) {}
+)";
+
 int Transformer::checkCompilable(std::filesystem::path path) {
   static llvm::cl::OptionCategory myToolCategory("CheckCompiles");
 
@@ -152,14 +175,26 @@ int Transformer::checkCompilable(std::filesystem::path path) {
     return 0;
   }
 
+  // Write embedded verifier stubs to a temp file next to the benchmark
+  std::filesystem::path verifierPath = path.parent_path() / "__verifier_stubs.c";
+  {
+    std::ofstream out(verifierPath);
+    out << kVerifierStubs;
+  }
+
   std::vector<std::string> args({
       "clang",
       "-extra-arg=-fsyntax-only",
       "-extra-arg=-xc",
       "-extra-arg=-resource-dir=" + *resourceDir,
-      path.string(),
-      "verifier.c",
   });
+  std::optional<std::string> sysroot = getSysroot();
+  if (sysroot) {
+    args.push_back("-extra-arg=-isysroot");
+    args.push_back("-extra-arg=" + *sysroot);
+  }
+  args.push_back(path.string());
+  args.push_back(verifierPath.string());
   std::vector<const char *> argv = toArgv(args);
   int argc = static_cast<int>(args.size());
 
@@ -168,6 +203,7 @@ int Transformer::checkCompilable(std::filesystem::path path) {
 
   if (!expectedParser) {
     llvm::errs() << expectedParser.takeError();
+    std::filesystem::remove(verifierPath);
     return 0;
   }
 
@@ -176,26 +212,14 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   clang::tooling::ClangTool tool(optionsParser.getCompilations(),
                                  optionsParser.getSourcePathList());
 
-  // At debugLevel 0 diagnostics are counted but not printed, to avoid clutter.
-  // At debugLevel >= 1 the real clang diagnostics are emitted so failures are
-  // actionable (e.g. which symbol/header the benchmark is missing).
-  clang::DiagnosticOptions diagOpts;
-  std::unique_ptr<clang::DiagnosticConsumer> diagConsumer;
-  if (configuration.debugLevel >= 1) {
-    diagConsumer = std::make_unique<clang::TextDiagnosticPrinter>(llvm::errs(), diagOpts);
-  } else {
-    diagConsumer = std::make_unique<clang::DiagnosticConsumer>();
-  }
-  tool.setDiagnosticConsumer(diagConsumer.get());
+  clang::IgnoringDiagConsumer diagConsumer;
+  tool.setDiagnosticConsumer(&diagConsumer);
 
-  // Equivalent to running "clang -xc -fsyntax-only `file-name` verifier.c"
-  tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
+  int result = tool.run(
+      clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
 
-  // If there are errors do not count the file as compilable
-  if (diagConsumer->getNumErrors()) {
-    return 0;
-  }
-  return 1;
+  std::filesystem::remove(verifierPath);
+  return result == 0 ? 1 : 0;
 }
 
 bool Transformer::harnessIsEmpty(std::filesystem::path path) {
