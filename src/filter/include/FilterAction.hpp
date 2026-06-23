@@ -14,10 +14,9 @@
 /**
  * @brief ASTFrontendAction that runs the full filter consumer chain.
  *
- * Wires together the four consumers (count → filter → remove → inject
- * verifiers) over a single parsed AST. A shared {@code Rewriter} accumulates
- * all edits; the final buffer is flushed to the output file in
- * {@code EndSourceFileAction}.
+ * Wires together the three consumers (count → filter → strip bodies) over a
+ * single parsed AST. A shared {@code Rewriter} accumulates all edits; the
+ * final buffer is flushed to the output file in {@code EndSourceFileAction}.
  */
 class FilterAction : public clang::ASTFrontendAction {
 public:
@@ -32,12 +31,11 @@ public:
                llvm::raw_fd_ostream &output);
 
   /**
-   * @brief Builds a {@code MultiplexConsumer} containing all four filter passes.
+   * @brief Builds a {@code MultiplexConsumer} containing all three filter passes.
    *
-   * Creates the shared state ({@code toFilter}, {@code toRemove},
-   * {@code neededTypes}) as {@code shared_ptr}s and hands them to the
-   * consumers in pipeline order; each is freed once the last owning
-   * consumer is destroyed.
+   * Creates the shared state ({@code toFilter}, {@code toRemove}) as
+   * {@code shared_ptr}s and hands them to the consumers in pipeline order;
+   * each is freed once the last owning consumer is destroyed.
    *
    * @param compiler  The active compiler instance.
    * @param filename  Path of the file being processed.
@@ -62,8 +60,8 @@ public:
    * @brief Flushes the Rewriter's edited buffer to the output file.
    *
    * Called after all consumers have finished. Writes the modified source
-   * text (with function bodies removed and verifier declarations injected)
-   * to the destination stream.
+   * text, with the bodies of filtered-out functions stripped, to the
+   * destination stream.
    */
   void EndSourceFileAction() override;
 

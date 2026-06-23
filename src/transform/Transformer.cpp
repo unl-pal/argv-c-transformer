@@ -12,12 +12,13 @@
 #include <clang/Frontend/CompilerInvocation.h>
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Frontend/FrontendActions.h>
-#include <clang/Frontend/TextDiagnosticPrinter.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Serialization/PCHContainerOperations.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <llvm/ADT/IntrusiveRefCntPtr.h>
 #include <llvm/ADT/StringRef.h>
 #include <iostream>
@@ -51,14 +52,23 @@ bool Transformer::transformFile(std::filesystem::path path) {
   if (!std::filesystem::exists(path))
     return false;
 
-  // File handling: mirror path under benchmarkDir, dropping the filterDir
-  // component so files can't be written outside the project folder
-  std::filesystem::path srcPath = std::filesystem::path(configuration.benchmarkDir);
-  for (const std::filesystem::path &component : path) {
-    if (component.string() != configuration.filterDir && component.string() != "..") {
-      srcPath /= component;
-    }
+  // Flatten the filtered path into a single filename under benchmarkDir:
+  //   filtered-files/antirez/redis/src/endianconv.c
+  //   → transformed-files/antirez_redis_src_endianconv.c
+  // Strip the filterDir prefix (works for both relative and absolute paths),
+  // then join remaining components with underscores.
+  std::filesystem::path relPath = std::filesystem::relative(path, configuration.filterDir);
+  std::string flatName;
+  for (const std::filesystem::path &component : relPath) {
+    std::string part = component.string();
+    if (part == ".." || part == ".")
+      continue;
+    if (!flatName.empty())
+      flatName += "_";
+    flatName += part;
   }
+  std::filesystem::path srcPath =
+      std::filesystem::path(configuration.benchmarkDir) / flatName;
 
   // Tool setup: build the ClangTool from CLANG_RESOURCES and the source path
   static llvm::cl::OptionCategory myToolCategory("transformer");
@@ -66,7 +76,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   std::optional<std::string> resourceDir = getResourceDir();
   if (!resourceDir) {
-    std::cerr << "Please set the CLANG_RESOURCES environment variable before proceeding"
+    std::cerr << "Could not determine clang resource directory (set CLANG_RESOURCES to override)"
               << std::endl;
     return false;
   }
@@ -98,6 +108,12 @@ bool Transformer::transformFile(std::filesystem::path path) {
   }
   output.close();
 
+  // harness may be empty due to unsupported transforming
+  if (harnessIsEmpty(srcPath)) {
+    std::filesystem::remove(srcPath);
+    return 0;
+  }
+
   // Result: drop the output if it doesn't compile and we're keeping compiles only
   if (!checkCompilable(srcPath)) {
     if (configuration.keepCompilesOnly) {
@@ -105,6 +121,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
     }
     return 0;
   }
+  writeBenchmarkTask(srcPath);
   return 1;
 }
 
@@ -126,6 +143,30 @@ int Transformer::transformAll(std::filesystem::path path, int count) {
   return count;
 }
 
+static constexpr const char *kVerifierStubs = R"(
+#include <stdbool.h>
+#include <stddef.h>
+bool __VERIFIER_nondet_bool(void) { return false; }
+char __VERIFIER_nondet_char(void) { return 'a'; }
+unsigned char __VERIFIER_nondet_uchar(void) { return 'a'; }
+short __VERIFIER_nondet_short(void) { return 0; }
+unsigned short __VERIFIER_nondet_ushort(void) { return 0; }
+int __VERIFIER_nondet_int(void) { return 0; }
+unsigned int __VERIFIER_nondet_uint(void) { return 0; }
+long __VERIFIER_nondet_long(void) { return 0; }
+unsigned long __VERIFIER_nondet_ulong(void) { return 0; }
+long long __VERIFIER_nondet_longlong(void) { return 0; }
+unsigned long long __VERIFIER_nondet_ulonglong(void) { return 0; }
+float __VERIFIER_nondet_float(void) { return 0; }
+double __VERIFIER_nondet_double(void) { return 0; }
+void* __VERIFIER_nondet_pointer(void) { return (void*)(0); }
+void __VERIFIER_nondet_memory(void *mem, size_t size) {
+  unsigned char *p = (unsigned char *)mem;
+  for (size_t i = 0; i < size; i++) p[i] = __VERIFIER_nondet_uchar();
+}
+void reach_error(void) {}
+)";
+
 int Transformer::checkCompilable(std::filesystem::path path) {
   static llvm::cl::OptionCategory myToolCategory("CheckCompiles");
 
@@ -134,14 +175,26 @@ int Transformer::checkCompilable(std::filesystem::path path) {
     return 0;
   }
 
+  // Write embedded verifier stubs to a temp file next to the benchmark
+  std::filesystem::path verifierPath = path.parent_path() / "__verifier_stubs.c";
+  {
+    std::ofstream out(verifierPath);
+    out << kVerifierStubs;
+  }
+
   std::vector<std::string> args({
       "clang",
       "-extra-arg=-fsyntax-only",
       "-extra-arg=-xc",
       "-extra-arg=-resource-dir=" + *resourceDir,
-      path.string(),
-      "verifier.c",
   });
+  std::optional<std::string> sysroot = getSysroot();
+  if (sysroot) {
+    args.push_back("-extra-arg=-isysroot");
+    args.push_back("-extra-arg=" + *sysroot);
+  }
+  args.push_back(path.string());
+  args.push_back(verifierPath.string());
   std::vector<const char *> argv = toArgv(args);
   int argc = static_cast<int>(args.size());
 
@@ -150,6 +203,7 @@ int Transformer::checkCompilable(std::filesystem::path path) {
 
   if (!expectedParser) {
     llvm::errs() << expectedParser.takeError();
+    std::filesystem::remove(verifierPath);
     return 0;
   }
 
@@ -158,18 +212,70 @@ int Transformer::checkCompilable(std::filesystem::path path) {
   clang::tooling::ClangTool tool(optionsParser.getCompilations(),
                                  optionsParser.getSourcePathList());
 
-  // Diagnostics are counted but not printed, to avoid clutter
-  clang::DiagnosticConsumer diagConsumer;
+  clang::IgnoringDiagConsumer diagConsumer;
   tool.setDiagnosticConsumer(&diagConsumer);
 
-  // Equivalent to running "clang -xc -fsyntax-only `file-name` verifier.c"
-  tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
+  int result = tool.run(
+      clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
 
-  // If there are errors do not count the file as compilable
-  if (diagConsumer.getNumErrors()) {
-    return 0;
+  std::filesystem::remove(verifierPath);
+  return result == 0 ? 1 : 0;
+}
+
+bool Transformer::harnessIsEmpty(std::filesystem::path path) {
+  std::ifstream in(path);
+  if (!in)
+    return false;
+  std::stringstream buffer;
+  buffer << in.rdbuf();
+  std::string content = buffer.str();
+
+  // MainGenConsumer builds the entry point as
+  //   "\nint main(void) {\n" + harness + "  return 0;\n}\n"
+  // so when no function could be harnessed (harness is empty), this exact
+  // block appears verbatim. Coupled to that format string in MainGenConsumer.
+  return content.find("int main(void) {\n  return 0;\n}") != std::string::npos;
+}
+
+std::vector<BenchmarkProperty> Transformer::selectProperties() {
+  // TODO(you): later, accept AST characteristics and conditionally include
+  // properties (loops → termination, int arithmetic → no-overflow, etc.).
+  // For now, every benchmark gets both.
+  return {
+      {"../properties/no-overflow.prp", true},
+      {"../properties/termination.prp", true},
+  };
+}
+
+void Transformer::writeBenchmarkTask(std::filesystem::path cPath) {
+  std::filesystem::path ymlPath = cPath;
+  ymlPath.replace_extension(".yml");
+
+  std::string inputFile = cPath.stem().string() + ".i";
+  std::vector<BenchmarkProperty> properties = selectProperties();
+
+  std::ofstream out(ymlPath);
+  if (!out) {
+    std::cerr << "Failed to write task file: " << ymlPath.string() << std::endl;
+    return;
   }
-  return 1;
+
+  out << "# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project\n"
+      << "# SPDX-License-Identifier: Apache-2.0\n"
+      << "\n"
+      << "format_version: '2.0'\n"
+      << "\n"
+      << "input_files: '" << inputFile << "'\n"
+      << "\n"
+      << "properties:\n";
+  for (const BenchmarkProperty &prop : properties) {
+    out << "  - property_file: " << prop.propertyFile << "\n"
+        << "    expected_verdict: " << (prop.expectedVerdict ? "true" : "false") << "\n";
+  }
+  out << "\n"
+      << "options:\n"
+      << "  language: C\n"
+      << "  data_model: LP64\n";
 }
 
 void Transformer::parseConfig(std::string configFile) {

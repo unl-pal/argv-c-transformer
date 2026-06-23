@@ -80,6 +80,10 @@ void Filterer::parseConfigFile(std::string configFile) {
         std::filesystem::create_directory(value);
     } else if (key == "wipeOldBenchmarks") {
       configuration.wipeOldBenchmarks = (value == "true" || value == "True");
+    } else if (key == "benchmarkDir" || key == "keepCompilesOnly" || key == "csv" ||
+               key == "downloadDir" || key == "language" || key == "projectCount" ||
+               key == "minNumStars" || key == "minRepoLoc") {
+      // consumed by the transform step or Downloader.py; not a filter key
     } else if (key == "debug") {
       // silently ignored: replaced by debugLevel
     } else {
@@ -113,6 +117,11 @@ bool Filterer::checkPotentialFile(std::string fileName) {
             std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) != stdLibNames.end();
         if (!isStdLib && !config.at("useNonStdHeaders")) {
           file.close();
+          if (config.at("debugLevel") >= 1) {
+            std::cout << "[filter] skipped (non-std header '" << match[2].str()
+                      << "', useNonStdHeaders=" << config.at("useNonStdHeaders") << "): " << fileName
+                      << std::endl;
+          }
           return false;
         }
       }
@@ -123,8 +132,16 @@ bool Filterer::checkPotentialFile(std::string fileName) {
     }
     file.close();
     if (count < config.at("minFileLoC")) {
+      if (config.at("debugLevel") >= 1) {
+        std::cout << "[filter] skipped (LoC " << count << " < minFileLoC " << config.at("minFileLoC")
+                  << "): " << fileName << std::endl;
+      }
       return false;
     } else if (count > config.at("maxFileLoC")) {
+      if (config.at("debugLevel") >= 1) {
+        std::cout << "[filter] skipped (LoC " << count << " > maxFileLoC " << config.at("maxFileLoC")
+                  << "): " << fileName << std::endl;
+      }
       return false;
     } else {
       return true;
@@ -215,7 +232,7 @@ int Filterer::run() {
 
       std::optional<std::string> resourceDir = getResourceDir();
       if (!resourceDir) {
-        std::cerr << "Please set the CLANG_RESOURCES environment variable before proceeding"
+        std::cerr << "Could not determine clang resource directory (set CLANG_RESOURCES to override)"
                   << std::endl;
         return 1;
       }
@@ -256,10 +273,6 @@ int Filterer::run() {
           std::cout << "[filter] output for " << newPath.string() << ":\n"
                     << outFile.rdbuf() << std::endl;
         }
-      }
-    } else {
-      if (config.at("debugLevel") >= 1) {
-        std::cout << "[filter] skipped (pre-filter): " << fileName << std::endl;
       }
     }
   }

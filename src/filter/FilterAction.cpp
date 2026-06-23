@@ -1,4 +1,3 @@
-#include "AddVerifiersConsumerFilter.hpp"
 #include "CountingConsumer.hpp"
 #include "CountingVisitor.hpp"
 #include "FilterAction.hpp"
@@ -26,16 +25,13 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringR
 
   auto toFilter = std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
   auto toRemove = std::make_shared<std::vector<std::string>>();
-  auto neededTypes = std::make_shared<std::set<std::string>>();
 
   // unique_ptr can't be copied, so the vector must be moved into MultiplexConsumer.
   // Building a named local makes that std::move explicit and unambiguous.
   std::vector<std::unique_ptr<clang::ASTConsumer>> consumers;
   consumers.emplace_back(std::make_unique<CountingConsumer>(_Types, toFilter));
   consumers.emplace_back(std::make_unique<FilterFunctionsConsumer>(toFilter, toRemove, _Config));
-  consumers.emplace_back(std::make_unique<RemoveConsumer>(_Rewriter, toRemove, neededTypes));
-  consumers.emplace_back(
-      std::make_unique<AddVerifiersConsumerFilter>(_Output, neededTypes, _Rewriter));
+  consumers.emplace_back(std::make_unique<RemoveConsumer>(_Rewriter, toRemove));
 
   return std::make_unique<clang::MultiplexConsumer>(std::move(consumers));
 }

@@ -20,7 +20,7 @@ public:
    *
    * @param output Reference to the output stream for the transformed file.
    */
-  ArgsFrontendFactory(llvm::raw_fd_ostream &output);
+  ArgsFrontendFactory(llvm::raw_ostream &output);
 
   /**
    * @brief Called by {@code ClangTool} once per source file to create the action.
@@ -48,5 +48,5 @@ public:
                      clang::DiagnosticConsumer *DiagConsumer) override;
 
 private:
-  llvm::raw_fd_ostream &_Output;
+  llvm::raw_ostream &_Output;
 };

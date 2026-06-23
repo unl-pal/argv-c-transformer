@@ -6,43 +6,95 @@
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
 
+/**
+ * @brief RecursiveASTVisitor that pretty-prints the AST back to C source.
+ *
+ * Iterates through all top-level nodes and prints them to the output stream.
+ * Currently handles functions, variables, records (structs/unions), and typedefs.
+ * Comment preservation within function bodies and structs, as well as trailing
+ * comments, is not yet implemented.
+ */
 class RegenCodeVisitor : public clang::RecursiveASTVisitor<RegenCodeVisitor> {
 public:
-  /// Visitor currently iterates through all top level nodes and prints the code
-  /// This will need to be updated to a more fine tuned version to handle more
-  /// complex code and retain comments within function and structs as well as
-  /// trailing comments
+  /**
+   * @brief Constructs the visitor with the AST context and output stream.
+   *
+   * @param C      AST context, used for source manager and comment lookups.
+   * @param output File stream to write the regenerated source code to.
+   */
   RegenCodeVisitor(clang::ASTContext *C, llvm::raw_fd_ostream &output);
 
   // bool VisitTranslationUnitDecl(clang::TranslationUnitDecl *D);
 
-  /// Base visit called at the end of all declarations after specific visits have run
+  /**
+   * @brief Base visit called at the end of all declarations after specific visits.
+   *
+   * @param D The declaration being visited.
+   * @return {@code false} to stop traversal, {@code true} to continue.
+   */
   bool VisitDecl(clang::Decl *D);
 
-  /// Visits and prints Functions to the output
+  /**
+   * @brief Visits and prints function declarations to the output.
+   *
+   * @param D The function declaration being visited.
+   * @return {@code false} to stop traversal, {@code true} to continue.
+   */
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 
-  /// Visits and prints Variables to the output
+  /**
+   * @brief Visits and prints variable declarations to the output.
+   *
+   * @param D The variable declaration being visited.
+   * @return {@code false} to stop traversal, {@code true} to continue.
+   */
   bool VisitVarDecl(clang::VarDecl *D);
 
-  /// Visits and prints Records such as Unions and Structs to the output
+  /**
+   * @brief Visits and prints record types (structs, unions) to the output.
+   *
+   * @param D The record declaration being visited.
+   * @return {@code false} to stop traversal, {@code true} to continue.
+   */
   bool VisitRecordDecl(clang::RecordDecl *D);
 
-  /// Visits and prints TypeDefs to the output
+  /**
+   * @brief Visits and prints typedef declarations to the output.
+   *
+   * @param D The typedef declaration being visited.
+   * @return {@code false} to stop traversal, {@code true} to continue.
+   */
   bool VisitTypedefDecl(clang::TypedefDecl *D);
 
-  /// Visits and prints Globals to the output
+  /**
+   * @brief Visits and prints unnamed global constant declarations to the output.
+   *
+   * @param D The unnamed global constant declaration being visited.
+   * @return {@code false} to stop traversal, {@code true} to continue.
+   */
   bool VisitUnnamedGlobalConstantDecl(clang::UnnamedGlobalConstantDecl *D);
 
-  /// Visits prevents the printing of Parameter Variables to the output letting
-  /// the Function visit handle instead
+  /**
+   * @brief Skips parameter variable printing, deferring to the function visit.
+   *
+   * @param D The parameter declaration being visited.
+   * @return {@code false} to stop traversal, {@code true} to continue.
+   */
   bool VisitParmVarDecl(clang::ParmVarDecl *D);
 
-  /// Visits prevents the printing of Field Variables to the output letting
-  /// the Record visit handle instead
+  /**
+   * @brief Skips field declaration printing, deferring to the record visit.
+   *
+   * @param D The field declaration being visited.
+   * @return {@code false} to stop traversal, {@code true} to continue.
+   */
   bool VisitFieldDecl(clang::FieldDecl *D);
 
-  /// Tells the visitor wether to run depth or breadth first on traversal
+  /**
+   * @brief Instructs the visitor to use post-order (depth-first) traversal.
+   *
+   * @return {@code true} for post-order traversal.
+   */
   bool shouldTraversePostOrder();
 
 private:

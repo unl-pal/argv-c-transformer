@@ -14,7 +14,7 @@ if(APPLE)
   list(APPEND CMAKE_PREFIX_PATH "${LLVM_HOMEBREW_PREFIX}")
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(
@@ -37,8 +37,6 @@ set(HEADERS_TRANSFORM src/transform/include)
 set(HEADERS_COMMON src/common/include)
 
 set(SOURCE_FILTER
-  src/filter/AddVerifiersConsumerFilter.cpp
-  src/filter/AddVerifiersVisitorFilter.cpp
   src/filter/CountingConsumer.cpp
   src/filter/CountingVisitor.cpp
   src/filter/FilterAction.cpp
@@ -50,37 +48,38 @@ set(SOURCE_FILTER
 )
 
 set(SOURCE_TRANSFORM
-  src/transform/AddMainVisitor.cpp
   src/transform/AddVerifiersConsumer.cpp
-  src/transform/AddVerifiersVisitor.cpp
-  src/transform/AllFunctionsToCallHandler.cpp
   src/transform/ArgsFrontendActionFactory.cpp
-  src/transform/IsThereMainConsumer.cpp
-  src/transform/IsThereMainHandler.cpp
   src/transform/GenerateCodeConsumer.cpp
+  src/transform/MainGenConsumer.cpp
   src/transform/RegenCode.cpp
-  src/transform/ReplaceDeadCallsVisitor.cpp
-  src/transform/ReplaceDeadCallsConsumer.cpp
+  src/transform/HavocCallsVisitor.cpp
+  src/transform/HavocCallsConsumer.cpp
   src/transform/TransformAction.cpp
   src/transform/Transformer.cpp
 )
 
-# filter_lib lets the test binary link the filter pipeline without pulling in main()
+# filter_lib / transform_lib let the test binaries link the pipelines without
+# pulling in main()
 add_library(filter_lib STATIC ${SOURCE_FILTER})
 target_include_directories(filter_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_FILTER} ${HEADERS_COMMON})
 target_link_libraries(filter_lib PRIVATE ${LLVM_LIBS})
 
+add_library(transform_lib STATIC ${SOURCE_TRANSFORM})
+target_include_directories(transform_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_COMMON})
+target_link_libraries(transform_lib PRIVATE ${LLVM_LIBS})
+
 add_executable(filter src/filter/main.cpp)
-add_executable(transform src/transform/main.cpp ${SOURCE_TRANSFORM})
-add_executable(full src/full/main.cpp ${SOURCE_TRANSFORM})
+add_executable(transform src/transform/main.cpp)
+add_executable(full src/full/main.cpp)
 
 target_include_directories(filter SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_FILTER} ${HEADERS_COMMON})
 target_include_directories(transform SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_COMMON})
 target_include_directories(full SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_FILTER} ${HEADERS_COMMON})
 
 target_link_libraries(filter PRIVATE filter_lib ${LLVM_LIBS})
-target_link_libraries(transform PRIVATE ${LLVM_LIBS})
-target_link_libraries(full PRIVATE filter_lib ${LLVM_LIBS})
+target_link_libraries(transform PRIVATE transform_lib ${LLVM_LIBS})
+target_link_libraries(full PRIVATE filter_lib transform_lib ${LLVM_LIBS})
 
 if(UNIX)
   set_property(TARGET filter PROPERTY LINKER_TYPE LLD)

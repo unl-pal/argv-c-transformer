@@ -4,6 +4,9 @@
 
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclBase.h>
+#include <llvm/Support/Casting.h>
 #include <map>
 #include <memory>
 #include <string>
@@ -33,23 +36,18 @@ public:
       std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,
       std::shared_ptr<std::vector<std::string>> toRemove, std::map<std::string, int> *config);
 
-  /**
-   * @brief Entry point called by Clang once the AST is fully parsed.
-   *
-   * Delegates entirely to {@code FilterFunctions()}.
-   *
-   * @param context  Unused; required by the {@code ASTConsumer} interface.
-   */
   void HandleTranslationUnit(clang::ASTContext &context) override;
 
   /**
-   * @brief Applies min/max thresholds to every function in {@code _ToFilter}.
+   * @brief Applies min/max thresholds and param-type checks to every function.
    *
-   * A function is added to {@code _ToRemove} on the first threshold violation
-   * found. Checks max bounds before min bounds; order within each group does
-   * not affect correctness since only one violation is needed for removal.
+   * A function is added to {@code _ToRemove} on the first violation found.
+   * After all threshold checks, any function whose parameters include a type
+   * with no {@code __VERIFIER_nondet_*} equivalent is also removed (body
+   * stripped so the declaration survives for return-type resolution in the
+   * transform step). The {@code else if} chain prevents duplicates.
    */
-  void FilterFunctions();
+  void FilterFunctions(clang::ASTContext &context);
 
 private:
   std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> _ToFilter;
