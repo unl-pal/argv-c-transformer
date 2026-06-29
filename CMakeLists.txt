@@ -48,6 +48,7 @@ set(SOURCE_FILTER
 )
 
 set(SOURCE_TRANSFORM
+  src/transform/AddStdIncludesConsumer.cpp
   src/transform/AddVerifiersConsumer.cpp
   src/transform/ArgsFrontendActionFactory.cpp
   src/transform/GenerateCodeConsumer.cpp

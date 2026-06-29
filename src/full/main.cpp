@@ -1,9 +1,11 @@
 #include "Filterer.hpp"
 #include "Transformer.hpp"
+#include "ClangToolUtils.hpp"
 #include <iostream>
 
 // TODO OVER HAUL THIS WHOLE THING TO MAKE SENSE AGAIN
 int main(int argc, char **argv) {
+  checkClangVersion();
   if (argc == 4) {
     Filterer filter(argv[1]);
     filter.run();

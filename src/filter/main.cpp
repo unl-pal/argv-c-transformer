@@ -1,8 +1,10 @@
 #include "include/Filterer.hpp"
+#include "ClangToolUtils.hpp"
 #include <iostream>
 
 // Target for calling the Filterer Individually
 int main(int argc, char **argv) {
+  checkClangVersion();
   if (argc == 2) {
     Filterer filter(argv[1]);
     filter.run();

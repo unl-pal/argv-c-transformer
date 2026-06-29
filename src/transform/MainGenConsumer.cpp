@@ -1,5 +1,6 @@
 #include "MainGenConsumer.hpp"
 
+#include "DebugLog.hpp"
 #include "VerifierNames.hpp"
 
 #include <clang/AST/Decl.h>
@@ -9,7 +10,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include <iostream>
 
 MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
                                  clang::Rewriter &rewriter)
@@ -42,9 +42,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     }
     if (func->isVariadic()) {
-      std::cout << "Warning: variadic functions unsupported\n" + func->getNameAsString() +
-                       " not harnessed"
-                << std::endl;
+      debugLog(2, "Warning: variadic functions unsupported; " + func->getNameAsString() +
+                      " not harnessed");
       continue;
     }
     std::string args;
@@ -64,9 +63,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     // A parameter without a nondet equivalent (pointer, struct, ...): skip
     // this function but keep harnessing the rest.
     if (!supported) {
-      std::cout << "Warning: only primitive symbolics supported\n" + func->getNameAsString() +
-                       " not harnessed (filter's param check did not strip it)"
-                << std::endl;
+      debugLog(2, "Warning: only primitive symbolics supported; " + func->getNameAsString() +
+                      " not harnessed (filter's param check did not strip it)");
       continue;
     }
     std::string name = func->isMain() ? "original_main" : func->getNameAsString();
