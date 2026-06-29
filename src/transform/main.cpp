@@ -1,8 +1,10 @@
 #include "include/Transformer.hpp"
+#include "ClangToolUtils.hpp"
 #include <iostream>
 
 /// Main function should be transfered to a driver for use via the full implementation
 int main(int argc, char **argv) {
+  checkClangVersion();
   if (argc == 2) {
     Transformer transformer(argv[1]);
     transformer.run();

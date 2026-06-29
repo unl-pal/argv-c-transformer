@@ -20,6 +20,8 @@ filtered-files/
 source-files/
 transformed-files/
 ARG-V_Survey_Report.html
+repos-filtered/
+repos-transformed/
 
 ## IDEs
 .idea/

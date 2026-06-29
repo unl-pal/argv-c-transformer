@@ -98,13 +98,27 @@ Turns filtered files into self-contained, intraprocedural SV-Comp benchmarks.
   __VERIFIER_nondet_<suffix>(void);` lines are inserted for every suffix used (skipping
   ones the Filter stage already injected). Helper definitions for `__havoc_block` and
   `__havoc_cstring` are emitted when those markers are present.
+- **Standard-header injection** (`AddStdIncludesConsumer`): include stripping (below)
+  also drops the project headers through which standard types like `size_t`, `bool`,
+  `FILE`, or `uint32_t` were transitively available. This consumer walks the AST for
+  used types, maps each to its standard header via
+  `src/common/include/StdHeaders.hpp` (a type→header registry with categories for
+  future logical-structure filtering), and re-injects any needed `#include <...>` not
+  already present.
 - **Post-processing** (`Transformer::transformFile`):
   - **Empty-harness discard**: if the generated `main` contains no function calls (every
     function was skipped), the output file is unconditionally deleted
   - **Compile check**: the output is compiled with `clang -fsyntax-only` alongside
     `verifier.c`; non-compiling benchmarks are deleted when `keepCompilesOnly` is set
+  - **Preprocessing**: surviving benchmarks are preprocessed into a `.i` file with
+    `gcc -E -P -std=gnu11` (the form SV-Comp consumes); on failure the `.c`/`.yml`/`.i`
+    are removed
 - Emits `.c` + `.yml` task files into `benchmarkDir`; `.set` files in
   `argc-benchmarks/` group `.yml` files into SV-Comp benchmark sets.
+- **Crash isolation** (`Transformer::transformFileIsolated`): each file's transform runs
+  in a forked child, so a segfault, OOM-kill, assertion, or hang on one pathological file
+  cannot halt the whole batch. The parent enforces a per-file `fileTimeoutSecs` budget
+  (default 60s), kills overruns, cleans up any partial output, and continues.
 
 ## Design Choices and Limitations
 
@@ -162,8 +176,10 @@ operations on the result stay in bounds. Function pointer returns are left as-is
 
 The Transform step removes all non-system `#include` directives. Functions declared in
 project-local headers are havocked anyway, so the includes only leave unresolvable
-references. Files that depend on types or macros from a local header will fail to compile
-after stripping and are caught by `keepCompilesOnly`.
+references. Standard types that were reaching the file transitively through a stripped
+project header are recovered by `AddStdIncludesConsumer` (see the Transform stage above).
+Files that depend on *project* types or macros from a local header will still fail to
+compile after stripping and are caught by `keepCompilesOnly`.
 
 ### Preprocessor-Gated Code
 
@@ -225,7 +241,8 @@ flowchart TB
         T1["HavocCallsConsumer<br/>havoc in-file calls, record suffixes"]
         T2["MainGenConsumer<br/>rename main, synthesize int main(void)"]
         T3["AddVerifiersConsumer<br/>insert extern nondet decls"]
-        T1 --> T2 --> T3
+        T4["AddStdIncludesConsumer<br/>re-inject needed standard headers"]
+        T1 --> T2 --> T3 --> T4
     end
 
     MUX --> filterC

@@ -30,6 +30,7 @@ struct transformConfigs {
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string benchmarkDir; ///< Output directory for transformed benchmark files.
   bool wipeOldBenchmarks;   ///< Not yet implemented; reserved for future use.
+  int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
 };
 
 /**
@@ -61,6 +62,35 @@ public:
    * @return false if the AST tool failed to run; otherwise true.
    */
   bool transformFile(std::filesystem::path path);
+
+  /**
+   * @brief Runs {@code transformFile} in a forked child for crash isolation.
+   *
+   * A segfault, OOM-kill, assertion, or hang on a single pathological file
+   * would otherwise take down the whole batch, since each file's ClangTool
+   * runs in-process. The child does the file I/O and reports success through
+   * its exit status; the parent enforces {@code fileTimeoutSecs} and cleans up
+   * any partial output left by a child that crashed or timed out.
+   *
+   * @param path Path to the filtered C source file to transform.
+   * @return 1 if a benchmark was produced, 0 otherwise.
+   */
+  int transformFileIsolated(std::filesystem::path path);
+
+  /**
+   * @brief Computes the flattened benchmarkDir output path for a filtered file.
+   *
+   * @param path Path to the filtered C source file.
+   * @return The {@code benchmarkDir/<flattened>.c} path the transform writes to.
+   */
+  std::filesystem::path flattenedOutputPath(std::filesystem::path path);
+
+  /**
+   * @brief Removes any .c/.yml/.i a crashed or timed-out child left behind.
+   *
+   * @param path Path to the filtered C source file whose output to clean up.
+   */
+  void cleanupPartialOutput(std::filesystem::path path);
 
   /**
    * @brief Recursively walks a directory tree, transforming every .c file found.
@@ -136,7 +166,20 @@ public:
    */
   void writeBenchmarkTask(std::filesystem::path cPath);
 
+  /**
+   * @brief Preprocesses a transformed .c file into a .i file.
+   *
+   * Runs {@code gcc -E -P -std=gnu11} on the source file, writing the
+   * preprocessed output alongside it with a {@code .i} extension.
+   *
+   * @param cPath Path to the transformed .c benchmark file.
+   * @return true if preprocessing succeeded, false otherwise.
+   */
+  bool preprocess(std::filesystem::path cPath);
+
 private:
   /// Path settings and flags loaded from the config file.
   struct transformConfigs configuration;
+  /// Count of .c files attempted across the run, for the end-of-run summary.
+  int _totalProcessed = 0;
 };

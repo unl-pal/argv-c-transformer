@@ -1,6 +1,7 @@
 #include "include/Transformer.hpp"
 #include "ArgsFrontendActionFactory.hpp"
 #include "ClangToolUtils.hpp"
+#include "DebugLog.hpp"
 
 #include <clang/Basic/Diagnostic.h>
 #include <clang/Basic/DiagnosticIDs.h>
@@ -29,6 +30,10 @@
 #include <string>
 #include <system_error>
 #include <vector>
+#include <csignal>
+#include <ctime>
+#include <sys/wait.h>
+#include <unistd.h>
 
 const int defaultDebugLevel = 0;
 const bool defaultKeepCompilesOnly = true;
@@ -36,6 +41,8 @@ const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultBenchmarkDir = "benchmarks";
 /// Not yet implemented in code - currently handled by scripts
 const bool defaultWipeOldBenchmarks = true;
+/// Per-file wall-clock budget for the isolated transform child, in seconds.
+const int defaultFileTimeoutSecs = 60;
 
 Transformer::Transformer(std::string configFile) : configuration() {
   // Apply defaults; parseConfig overrides any keys present in configFile
@@ -44,19 +51,17 @@ Transformer::Transformer(std::string configFile) : configuration() {
   configuration.filterDir = defaultFilterDir;
   configuration.benchmarkDir = defaultBenchmarkDir;
   configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
+  configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   parseConfig(configFile);
+  globalDebugLevel() = configuration.debugLevel;
 }
 
-bool Transformer::transformFile(std::filesystem::path path) {
-  std::cout << "Transforming: " << path.string() << std::endl;
-  if (!std::filesystem::exists(path))
-    return false;
-
-  // Flatten the filtered path into a single filename under benchmarkDir:
-  //   filtered-files/antirez/redis/src/endianconv.c
-  //   → transformed-files/antirez_redis_src_endianconv.c
-  // Strip the filterDir prefix (works for both relative and absolute paths),
-  // then join remaining components with underscores.
+// Flatten the filtered path into a single filename under benchmarkDir:
+//   filtered-files/antirez/redis/src/endianconv.c
+//   → transformed-files/antirez_redis_src_endianconv.c
+// Strip the filterDir prefix (works for both relative and absolute paths),
+// then join remaining components with underscores.
+std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path path) {
   std::filesystem::path relPath = std::filesystem::relative(path, configuration.filterDir);
   std::string flatName;
   for (const std::filesystem::path &component : relPath) {
@@ -67,8 +72,15 @@ bool Transformer::transformFile(std::filesystem::path path) {
       flatName += "_";
     flatName += part;
   }
-  std::filesystem::path srcPath =
-      std::filesystem::path(configuration.benchmarkDir) / flatName;
+  return std::filesystem::path(configuration.benchmarkDir) / flatName;
+}
+
+bool Transformer::transformFile(std::filesystem::path path) {
+  debugLog(1, "Transforming: " + path.string());
+  if (!std::filesystem::exists(path))
+    return false;
+
+  std::filesystem::path srcPath = flattenedOutputPath(path);
 
   // Tool setup: build the ClangTool from CLANG_RESOURCES and the source path
   static llvm::cl::OptionCategory myToolCategory("transformer");
@@ -122,7 +134,82 @@ bool Transformer::transformFile(std::filesystem::path path) {
     return 0;
   }
   writeBenchmarkTask(srcPath);
+  if (!preprocess(srcPath)) {
+    std::cerr << "Preprocessing failed, discarding: " << srcPath.string() << std::endl;
+    std::filesystem::path ymlPath = srcPath;
+    ymlPath.replace_extension(".yml");
+    std::filesystem::remove(srcPath);
+    std::filesystem::remove(ymlPath);
+    return 0;
+  }
   return 1;
+}
+
+// Runs transformFile in a forked child so a crash, OOM-kill, assertion, or
+// hang on a single pathological file cannot take down the whole batch. The
+// child does all the file I/O (rewritten .c, .yml, .i) and exits with 1 on a
+// produced benchmark, 0 otherwise; the parent enforces a wall-clock timeout
+// and reaps the child, translating its fate into the success count.
+int Transformer::transformFileIsolated(std::filesystem::path path) {
+  _totalProcessed++;
+  pid_t pid = fork();
+  if (pid < 0) {
+    std::cerr << "fork failed, transforming in-process: " << path.string() << std::endl;
+    return transformFile(path) ? 1 : 0;
+  }
+
+  if (pid == 0) {
+    // Child: do the work and report 1/0 through the exit status. _exit skips
+    // C++ stream flushing, so flush explicitly first (stdout may be fully
+    // buffered when redirected, e.g. under benchexec).
+    int produced = transformFile(path) ? 1 : 0;
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(produced);
+  }
+
+  // Parent: poll for completion, killing the child if it overruns the budget.
+  time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
+  int status = 0;
+  while (true) {
+    pid_t done = waitpid(pid, &status, WNOHANG);
+    if (done == pid)
+      break;
+    if (done < 0) {
+      std::cerr << "waitpid failed for " << path.string() << std::endl;
+      return 0;
+    }
+    if (time(nullptr) >= deadline) {
+      std::cerr << "Timeout, killing transform of: " << path.string() << std::endl;
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(path);
+      return 0;
+    }
+    struct timespec nap = {0, 20 * 1000 * 1000}; // 20ms
+    nanosleep(&nap, nullptr);
+  }
+
+  if (WIFEXITED(status))
+    return WEXITSTATUS(status) == 1 ? 1 : 0;
+  // WIFSIGNALED: segfault, OOM-kill, etc. The child may have left a partial
+  // .c/.yml behind; harnessIsEmpty/keepCompilesOnly never ran, so clean up.
+  std::cerr << "Transform crashed (signal " << WTERMSIG(status) << "), skipping: "
+            << path.string() << std::endl;
+  cleanupPartialOutput(path);
+  return 0;
+}
+
+// Remove any .c/.yml/.i a crashed or timed-out child left half-written, so
+// downstream steps never see a partial benchmark.
+void Transformer::cleanupPartialOutput(std::filesystem::path path) {
+  std::filesystem::path srcPath = flattenedOutputPath(path);
+  std::error_code ec;
+  for (const char *ext : {".c", ".yml", ".i"}) {
+    std::filesystem::path p = srcPath;
+    p.replace_extension(ext);
+    std::filesystem::remove(p, ec);
+  }
 }
 
 int Transformer::transformAll(std::filesystem::path path, int count) {
@@ -136,7 +223,7 @@ int Transformer::transformAll(std::filesystem::path path, int count) {
       return count + successes;
     } else if (std::filesystem::is_regular_file(path)) {
       if (path.has_extension() && path.extension() == ".c") {
-        return count + transformFile(path);
+        return count + transformFileIsolated(path);
       }
     }
   }
@@ -168,56 +255,24 @@ void reach_error(void) {}
 )";
 
 int Transformer::checkCompilable(std::filesystem::path path) {
-  static llvm::cl::OptionCategory myToolCategory("CheckCompiles");
-
   std::optional<std::string> resourceDir = getResourceDir();
-  if (!resourceDir) {
+  if (!resourceDir)
     return 0;
-  }
 
-  // Write embedded verifier stubs to a temp file next to the benchmark
   std::filesystem::path verifierPath = path.parent_path() / "__verifier_stubs.c";
   {
     std::ofstream out(verifierPath);
     out << kVerifierStubs;
   }
 
-  std::vector<std::string> args({
-      "clang",
-      "-extra-arg=-fsyntax-only",
-      "-extra-arg=-xc",
-      "-extra-arg=-resource-dir=" + *resourceDir,
-  });
+  std::string cmd = "clang -fsyntax-only -xc"
+                    " -resource-dir=" + *resourceDir;
   std::optional<std::string> sysroot = getSysroot();
-  if (sysroot) {
-    args.push_back("-extra-arg=-isysroot");
-    args.push_back("-extra-arg=" + *sysroot);
-  }
-  args.push_back(path.string());
-  args.push_back(verifierPath.string());
-  std::vector<const char *> argv = toArgv(args);
-  int argc = static_cast<int>(args.size());
+  if (sysroot)
+    cmd += " -isysroot " + *sysroot;
+  cmd += " " + path.string() + " " + verifierPath.string() + " 2>/dev/null";
 
-  llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
-      clang::tooling::CommonOptionsParser::create(argc, argv.data(), myToolCategory);
-
-  if (!expectedParser) {
-    llvm::errs() << expectedParser.takeError();
-    std::filesystem::remove(verifierPath);
-    return 0;
-  }
-
-  clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
-
-  clang::tooling::ClangTool tool(optionsParser.getCompilations(),
-                                 optionsParser.getSourcePathList());
-
-  clang::IgnoringDiagConsumer diagConsumer;
-  tool.setDiagnosticConsumer(&diagConsumer);
-
-  int result = tool.run(
-      clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
-
+  int result = std::system(cmd.c_str());
   std::filesystem::remove(verifierPath);
   return result == 0 ? 1 : 0;
 }
@@ -278,6 +333,15 @@ void Transformer::writeBenchmarkTask(std::filesystem::path cPath) {
       << "  data_model: LP64\n";
 }
 
+bool Transformer::preprocess(std::filesystem::path cPath) {
+  std::filesystem::path iPath = cPath;
+  iPath.replace_extension(".i");
+
+  std::string cmd = "gcc -E -P -std=gnu11 " +
+                    cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
+  return std::system(cmd.c_str()) == 0;
+}
+
 void Transformer::parseConfig(std::string configFile) {
   if (!std::filesystem::exists(configFile)) {
     std::cerr << "Config file not found: " << configFile << " — using defaults" << std::endl;
@@ -302,16 +366,27 @@ void Transformer::parseConfig(std::string configFile) {
       configuration.keepCompilesOnly = (value == "true" || value == "True");
     } else if (key == "wipeOldBenchmarks") {
       configuration.wipeOldBenchmarks = (value == "true" || value == "True");
+    } else if (key == "fileTimeoutSecs") {
+      try {
+        configuration.fileTimeoutSecs = std::stoi(value);
+      } catch (...) {
+        configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
+      }
     }
   }
 }
 
 int Transformer::run() {
   std::filesystem::path path(configuration.filterDir);
-  if (std::filesystem::exists(path)) {
-    int result = transformAll(path, 0);
-    std::cout << "Number of Compilable Benchmarks: " << result << std::endl;
-    return result;
+  if (!std::filesystem::exists(path)) {
+    std::cerr << "Filter directory not found: " << configuration.filterDir << std::endl;
+    return 0;
   }
-  return 0;
+  int result = transformAll(path, 0);
+  int discarded = _totalProcessed - result;
+  std::cout << "\n=== Transform summary ===\n"
+            << "  Files processed:        " << _totalProcessed << "\n"
+            << "  Benchmarks produced:    " << result << "\n"
+            << "  Discarded/failed:       " << discarded << std::endl;
+  return result;
 }
