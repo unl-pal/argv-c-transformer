@@ -111,7 +111,8 @@ private:
    * maxFileLoC). Defaults are 0 for minimums and 99999 for maximums, meaning
    * no filtering unless explicitly configured.
    */
-  std::map<std::string, int> config = {{"debugLevel", 0},
+  std::map<std::string, int> config = {{"Concurrency", 0},
+                                       {"debugLevel", 0},
                                        {"maxCallFunc", 99999},
                                        {"maxFileLoC", 99999},
                                        {"maxForLoops", 99999},

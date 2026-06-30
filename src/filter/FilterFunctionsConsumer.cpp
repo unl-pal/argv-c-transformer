@@ -36,6 +36,8 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
     CountingVisitor::attributes attr = func.second;
     if (key == "Program" || key == "main") {
       continue;
+    } else if (attr.Concurrency && _Config->at("Concurrency")) {
+      _ToRemove->push_back(key);
     } else if (attr.ForLoops > _Config->at("maxForLoops")) {
       _ToRemove->push_back(key);
     } else if (attr.WhileLoops > _Config->at("maxWhileLoops")) {
