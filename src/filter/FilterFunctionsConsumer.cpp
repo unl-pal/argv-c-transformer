@@ -34,7 +34,7 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
   for (const std::pair<const std::string, CountingVisitor::attributes> &func : *_ToFilter) {
     std::string key = func.first;
     CountingVisitor::attributes attr = func.second;
-    if (key == "Program" || key == "main") {
+    if (key == "Program") {
       continue;
     } else if (attr.Concurrency && _Config->at("Concurrency")) {
       _ToRemove->push_back(key);
@@ -102,8 +102,9 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
       // All threshold checks passed — now check whether every parameter has a
       // nondet equivalent. If any param type is unsupported (pointer, struct,
       // etc.), strip the body so HavocCallsVisitor can still use the return
-      // type from the remaining declaration.
-      if (declByName.contains(key)) {
+      // type from the remaining declaration. main is exempt here: its argc/argv
+      // params are handled specially by MainGenConsumer.
+      if (key != "main" && declByName.contains(key)) {
         for (auto parm : declByName.at(key)->parameters()) {
           if (!verifierSuffixForType(parm->getOriginalType())) {
             _ToRemove->push_back(key);

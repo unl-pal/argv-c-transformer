@@ -20,8 +20,6 @@
  * has already populated {@code toFilter} with per-function attribute counts. This
  * consumer just reads that map and applies the configured min/max thresholds, writing
  * any violating function names into {@code toRemove} for {@code RemoveConsumer} to act on.
- *
- * {@code "Program"} (file-scope counts) and {@code "main"} are always kept.
  */
 class FilterFunctionsConsumer : public clang::ASTConsumer {
 public:
@@ -45,7 +43,7 @@ public:
    * After all threshold checks, any function whose parameters include a type
    * with no {@code __VERIFIER_nondet_*} equivalent is also removed (body
    * stripped so the declaration survives for return-type resolution in the
-   * transform step). The {@code else if} chain prevents duplicates.
+   * transform step).
    */
   void FilterFunctions(clang::ASTContext &context);
 
