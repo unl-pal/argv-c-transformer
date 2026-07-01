@@ -337,8 +337,15 @@ bool Transformer::preprocess(std::filesystem::path cPath) {
   std::filesystem::path iPath = cPath;
   iPath.replace_extension(".i");
 
-  std::string cmd = "gcc -E -P -std=gnu11 " +
-                    cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
+  std::optional<std::string> resourceDir = getResourceDir();
+  if (!resourceDir)
+    return false;
+
+  std::string cmd = "clang -E -P -std=gnu11 -resource-dir=" + *resourceDir;
+  std::optional<std::string> sysroot = getSysroot();
+  if (sysroot)
+    cmd += " -isysroot " + *sysroot;
+  cmd += " " + cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
   return std::system(cmd.c_str()) == 0;
 }
 
