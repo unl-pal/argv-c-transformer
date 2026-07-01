@@ -3,16 +3,9 @@
 #include "ClangToolUtils.hpp"
 #include <iostream>
 
-// TODO OVER HAUL THIS WHOLE THING TO MAKE SENSE AGAIN
 int main(int argc, char **argv) {
   checkClangVersion();
-  if (argc == 4) {
-    Filterer filter(argv[1]);
-    filter.run();
-
-    Transformer transformer(argv[1]);
-    transformer.run();
-  } else if (argc > 1) {
+  if (argc == 2) {
     Filterer filter(argv[1]);
     filter.run();
 
@@ -21,7 +14,7 @@ int main(int argc, char **argv) {
   } else {
     std::cout << "Incorrect Number of Args" << std::endl;
     std::cout << "Please Give the Location of the Configuration File\n"
-                 "    Example: `<filter-directory> <config-file> <Resource-Dir>`"
+                 "    Example: `./build/full <config-file>`"
               << std::endl;
     return 1;
   }

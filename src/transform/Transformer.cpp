@@ -254,6 +254,9 @@ void __VERIFIER_nondet_memory(void *mem, size_t size) {
 void reach_error(void) {}
 )";
 
+// NOTE: cmd is passed to std::system (shell-interpreted), and path/verifierPath
+// are not escaped. path originates from a cloned/downloaded repository, so a
+// pathological filename containing shell metacharacters could inject commands
 int Transformer::checkCompilable(std::filesystem::path path) {
   std::optional<std::string> resourceDir = getResourceDir();
   if (!resourceDir)
@@ -333,6 +336,7 @@ void Transformer::writeBenchmarkTask(std::filesystem::path cPath) {
       << "  data_model: LP64\n";
 }
 
+// NOTE: same std::system/unescaped-path caveat as checkCompilable above.
 bool Transformer::preprocess(std::filesystem::path cPath) {
   std::filesystem::path iPath = cPath;
   iPath.replace_extension(".i");
