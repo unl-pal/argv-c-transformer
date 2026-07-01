@@ -47,7 +47,8 @@ Populates `databaseDir` with candidate C code from GitHub.
   and stops after `projectCount` repos.
 - Checks each repo URL is still reachable, then shallow-clones (`--depth=1`) into
   `downloadDir`.
-- Not part of the CMake build; invoked by `liveRun.sh` or run manually.
+- Not part of the CMake build; invoked directly (`python3 src/download/Downloader.py
+  properties.config`) or from the commented-out step in `run.sh`.
 
 ### 2. Filter (`src/filter/`, driver: `Filterer.cpp`)
 
@@ -108,8 +109,8 @@ Turns filtered files into self-contained, intraprocedural SV-Comp benchmarks.
 - **Post-processing** (`Transformer::transformFile`):
   - **Empty-harness discard**: if the generated `main` contains no function calls (every
     function was skipped), the output file is unconditionally deleted
-  - **Compile check**: the output is compiled with `clang -fsyntax-only` alongside
-    `verifier.c`; non-compiling benchmarks are deleted when `keepCompilesOnly` is set
+  - **Compile check**: the output is compiled with `clang -fsyntax-only`;
+    non-compiling benchmarks are deleted when `keepCompilesOnly` is set
   - **Preprocessing**: surviving benchmarks are preprocessed into a `.i` file with
     `gcc -E -P -std=gnu11` (the form SV-Comp consumes); on failure the `.c`/`.yml`/`.i`
     are removed
@@ -264,4 +265,3 @@ Verifier nondet naming and suffix→C-type mappings live in
 | `filter`    | `src/filter/`    | Filter stage only                                 |
 | `transform` | `src/transform/` | Transform stage only                              |
 | `full`      | `src/full/`      | Filter then Transform in one run                  |
-| `example`   | `src/example/`   | Prototype/scratchpad for new Clang patterns       |
