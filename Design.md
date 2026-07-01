@@ -210,6 +210,11 @@ main `int main(void) {\n  return 0;\n}`.
   handled; only the first two parameters (`argc`, `argv`) are synthesized
 - **Macro-expanded calls**: calls inside macro expansions have no rewritable source range
   and are skipped by the havoc pass
+- **K&R-style (old-style) declarations**: the pipeline assumes ANSI-prototyped function
+  declarations throughout (parameter typing, the filter's parameter-type gate, and
+  `HavocCallsVisitor`'s callee resolution all read from `FunctionDecl::parameters()`).
+  Old-style `int f(a, b) int a, b; { ... }` definitions are not explicitly detected or
+  special-cased, and their behavior through the pipeline is untested
 - **Typedef'd types**: a typedef to a supported builtin (e.g. `typedef int myint`) resolves
   correctly via `getAs<BuiltinType>()`, but a typedef to an unsupported type (e.g.
   `typedef struct foo bar`) is treated as unsupported
