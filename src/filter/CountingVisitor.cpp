@@ -5,7 +5,7 @@
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/ParentMapContext.h>
 #include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/AST/TypeBase.h>
+#include <clang/AST/Type.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Basic/TypeTraits.h>
 
