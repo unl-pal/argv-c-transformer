@@ -190,9 +190,7 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
       return 0;
     }
   } else if (std::filesystem::is_directory(pathObject)) {
-    // pathObject may come from an untrusted cloned repo, so a broken symlink
-    // or a permissions error partway through the scan is expected, not
-    // exceptional. Don't let it abort the whole batch — log and move on with
+    // Don't let filepath issues break loop, log and move on with
     // whatever files were already queued.
     try {
       for (const std::filesystem::directory_entry &entry :
