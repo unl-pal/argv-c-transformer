@@ -26,9 +26,8 @@ struct CountResult {
       std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
 };
 
-// Parse `code` as C and run CountingVisitor with the given type filter.
-// Pass an empty `types` vector to count all types (the _allTypes fast-path).
-static CountResult runCounter(const std::string &code, std::vector<unsigned int> types = {}) {
+// Parse `code` as C and run CountingVisitor over it.
+static CountResult runCounter(const std::string &code) {
   CountResult r;
 
   // "-xc" tells clang to treat the string as a C file rather than C++.
@@ -38,7 +37,7 @@ static CountResult runCounter(const std::string &code, std::vector<unsigned int>
   if (!r.ast)
     return r;
 
-  CountingVisitor visitor(&r.ast->getASTContext(), types, r.funcs);
+  CountingVisitor visitor(&r.ast->getASTContext(), r.funcs);
   visitor.TraverseTranslationUnitDecl(r.ast->getASTContext().getTranslationUnitDecl());
 
   return r;
@@ -64,7 +63,7 @@ static CountResult runCounter(const std::string &code, std::vector<unsigned int>
 TEST(CountingVisitor, ForLoopInFunction) {
   auto r = runCounter("void foo() { for(int i=0;i<10;i++){} }");
   ASSERT_TRUE(r.funcs->count("foo")) << "function 'foo' not registered";
-  EXPECT_EQ(r.funcs->at("foo").ForLoops, 1);
+  EXPECT_EQ(r.funcs->at("foo").Complexity.ForLoops, 1);
 }
 
 TEST(CountingVisitor, MultipleForLoops) {
@@ -75,13 +74,13 @@ TEST(CountingVisitor, MultipleForLoops) {
     }
   )");
   ASSERT_TRUE(r.funcs->count("foo"));
-  EXPECT_EQ(r.funcs->at("foo").ForLoops, 2);
+  EXPECT_EQ(r.funcs->at("foo").Complexity.ForLoops, 2);
 }
 
 TEST(CountingVisitor, WhileLoopInFunction) {
   auto r = runCounter("void foo() { int x=0; while(x<10){x++;} }");
   ASSERT_TRUE(r.funcs->count("foo"));
-  EXPECT_EQ(r.funcs->at("foo").WhileLoops, 1);
+  EXPECT_EQ(r.funcs->at("foo").Complexity.WhileLoops, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,16 +90,7 @@ TEST(CountingVisitor, WhileLoopInFunction) {
 TEST(CountingVisitor, IfStmt) {
   auto r = runCounter("void foo(int x) { if(x>0){} }");
   ASSERT_TRUE(r.funcs->count("foo"));
-  EXPECT_EQ(r.funcs->at("foo").IfStmt, 1);
-}
-
-TEST(CountingVisitor, TypeIfStmtIntCondition) {
-  // TypeIfStmt counts ifs whose condition is of a requested type.
-  // We ask for int (BuiltinType::Int = 17).
-  auto r = runCounter("void foo(int x) { if(x>0){} }", {clang::BuiltinType::Int});
-  ASSERT_TRUE(r.funcs->count("foo"));
-  EXPECT_EQ(r.funcs->at("foo").IfStmt, 1);
-  EXPECT_EQ(r.funcs->at("foo").TypeIfStmt, 1);
+  EXPECT_EQ(r.funcs->at("foo").Complexity.IfStmt, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,13 +102,21 @@ TEST(CountingVisitor, FunctionCountInProgram) {
   // Each unique function declaration increments Program.Functions.
   auto r = runCounter("void foo(){} void bar(){}");
   ASSERT_TRUE(r.funcs->count("Program"));
-  EXPECT_EQ(r.funcs->at("Program").Functions, 2);
+  EXPECT_EQ(r.funcs->at("Program").Complexity.Functions, 2);
 }
 
 TEST(CountingVisitor, EachFunctionGetsItsOwnEntry) {
   auto r = runCounter("void foo(){} void bar(){}");
   EXPECT_TRUE(r.funcs->count("foo"));
   EXPECT_TRUE(r.funcs->count("bar"));
+}
+
+TEST(CountingVisitor, ParamCountPerFunction) {
+  auto r = runCounter("void foo(int a, int b, int c){} void bar(void){}");
+  ASSERT_TRUE(r.funcs->count("foo"));
+  ASSERT_TRUE(r.funcs->count("bar"));
+  EXPECT_EQ(r.funcs->at("foo").Complexity.Param, 3);
+  EXPECT_EQ(r.funcs->at("bar").Complexity.Param, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,25 +129,7 @@ TEST(CountingVisitor, CallFuncCount) {
     void foo() { helper(); helper(); }
   )");
   ASSERT_TRUE(r.funcs->count("foo"));
-  EXPECT_EQ(r.funcs->at("foo").CallFunc, 2);
-}
-
-// ---------------------------------------------------------------------------
-// Variable counting (type-filtered)
-// ---------------------------------------------------------------------------
-
-TEST(CountingVisitor, TypeVariablesCountsOnlyMatchingType) {
-  // Only int variables should be counted when we filter for int.
-  auto r = runCounter("void foo() { int x; float y; int z; }", {clang::BuiltinType::Int});
-  ASSERT_TRUE(r.funcs->count("foo"));
-  EXPECT_EQ(r.funcs->at("foo").TypeVariables, 2); // x and z
-}
-
-TEST(CountingVisitor, TypeVariablesAllTypesWhenFilterEmpty) {
-  // Empty types vector → _allTypes = true → count every variable
-  auto r = runCounter("void foo() { int x; float y; }");
-  ASSERT_TRUE(r.funcs->count("foo"));
-  EXPECT_EQ(r.funcs->at("foo").TypeVariables, 2);
+  EXPECT_EQ(r.funcs->at("foo").Complexity.CallFunc, 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,18 +143,8 @@ TEST(CountingVisitor, CountsAreIsolatedPerFunction) {
   )");
   ASSERT_TRUE(r.funcs->count("foo"));
   ASSERT_TRUE(r.funcs->count("bar"));
-  EXPECT_EQ(r.funcs->at("foo").ForLoops, 1);
-  EXPECT_EQ(r.funcs->at("bar").ForLoops, 0);
-}
-
-// ---------------------------------------------------------------------------
-// Binary operators
-// ---------------------------------------------------------------------------
-
-TEST(CountingVisitor, ComparisonOperatorCounted) {
-  auto r = runCounter("void foo(int x) { int y = x > 0; }", {clang::BuiltinType::Int});
-  ASSERT_TRUE(r.funcs->count("foo"));
-  EXPECT_EQ(r.funcs->at("foo").TypeCompareOperation, 1);
+  EXPECT_EQ(r.funcs->at("foo").Complexity.ForLoops, 1);
+  EXPECT_EQ(r.funcs->at("bar").Complexity.ForLoops, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +177,7 @@ TEST(CountingVisitor, ConcurrencyFlaggedForLocalPthreadVariable) {
     }
   )");
   ASSERT_TRUE(r.funcs->count("worker"));
-  EXPECT_TRUE(r.funcs->at("worker").Concurrency);
+  EXPECT_TRUE(r.funcs->at("worker").Features.Concurrency);
 }
 
 TEST(CountingVisitor, ConcurrencyFlaggedByCallArgumentAlone) {
@@ -221,7 +191,7 @@ TEST(CountingVisitor, ConcurrencyFlaggedByCallArgumentAlone) {
     }
   )");
   ASSERT_TRUE(r.funcs->count("worker"));
-  EXPECT_TRUE(r.funcs->at("worker").Concurrency);
+  EXPECT_TRUE(r.funcs->at("worker").Features.Concurrency);
 }
 
 TEST(CountingVisitor, ConcurrencyFlaggedForPointerTypedLocal) {
@@ -233,7 +203,7 @@ TEST(CountingVisitor, ConcurrencyFlaggedForPointerTypedLocal) {
     }
   )");
   ASSERT_TRUE(r.funcs->count("worker"));
-  EXPECT_TRUE(r.funcs->at("worker").Concurrency);
+  EXPECT_TRUE(r.funcs->at("worker").Features.Concurrency);
 }
 
 TEST(CountingVisitor, ConcurrencyNotSetForCleanFunction) {
@@ -244,7 +214,7 @@ TEST(CountingVisitor, ConcurrencyNotSetForCleanFunction) {
     }
   )");
   ASSERT_TRUE(r.funcs->count("clean"));
-  EXPECT_FALSE(r.funcs->at("clean").Concurrency);
+  EXPECT_FALSE(r.funcs->at("clean").Features.Concurrency);
 }
 
 TEST(CountingVisitor, ConcurrencyIsolatedPerFunction) {
@@ -259,6 +229,45 @@ TEST(CountingVisitor, ConcurrencyIsolatedPerFunction) {
   )");
   ASSERT_TRUE(r.funcs->count("worker"));
   ASSERT_TRUE(r.funcs->count("clean"));
-  EXPECT_TRUE(r.funcs->at("worker").Concurrency);
-  EXPECT_FALSE(r.funcs->at("clean").Concurrency);
+  EXPECT_TRUE(r.funcs->at("worker").Features.Concurrency);
+  EXPECT_FALSE(r.funcs->at("clean").Features.Concurrency);
+}
+
+// ---------------------------------------------------------------------------
+// Floating-point detection — tracked but not yet enforced by the filter.
+// ---------------------------------------------------------------------------
+
+TEST(CountingVisitor, FloatingPointFlaggedForLocalFloatVariable) {
+  auto r = runCounter("void foo() { float x = 1.0f; }");
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_TRUE(r.funcs->at("foo").Features.FloatingPoint);
+}
+
+TEST(CountingVisitor, FloatingPointFlaggedForDoubleParam) {
+  auto r = runCounter("void foo(double x) {}");
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_TRUE(r.funcs->at("foo").Features.FloatingPoint);
+}
+
+TEST(CountingVisitor, FloatingPointFlaggedForFloatReturnType) {
+  auto r = runCounter("float foo(int x) { return x; }");
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_TRUE(r.funcs->at("foo").Features.FloatingPoint);
+}
+
+TEST(CountingVisitor, FloatingPointNotSetForIntOnlyFunction) {
+  auto r = runCounter("int foo(int x) { int y = x + 1; return y; }");
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_FALSE(r.funcs->at("foo").Features.FloatingPoint);
+}
+
+TEST(CountingVisitor, FloatingPointIsolatedPerFunction) {
+  auto r = runCounter(R"(
+    void withFloat() { float x = 1.0f; }
+    int clean(int x) { return x + 1; }
+  )");
+  ASSERT_TRUE(r.funcs->count("withFloat"));
+  ASSERT_TRUE(r.funcs->count("clean"));
+  EXPECT_TRUE(r.funcs->at("withFloat").Features.FloatingPoint);
+  EXPECT_FALSE(r.funcs->at("clean").Features.FloatingPoint);
 }

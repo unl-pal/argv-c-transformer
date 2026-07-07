@@ -13,6 +13,12 @@
 #include <vector>
 
 /**
+ * @brief Three-state gate for a feature flag: whether the config requires a
+ * function to have the feature present, forbids it, or doesn't care.
+ */
+enum class FeatureGate { Ignore, Require, Forbid };
+
+/**
  * @brief Recursively walks the AST and counts per-function properties.
  *
  * Uses CRTP ({@code RecursiveASTVisitor<CountingVisitor>}) so the base class
@@ -28,43 +34,36 @@
  */
 class CountingVisitor : public clang::RecursiveASTVisitor<CountingVisitor> {
 public:
-  /**
-   * @brief Per-function AST property counts.
-   *
-   * Fields prefixed {@code Type*} are gated on the requested builtin types
-   * (e.g. only count {@code TypeVariables} if the variable's type matches one
-   * of the configured types). Un-prefixed fields (e.g. {@code ForLoops}) count
-   * all occurrences regardless of type.
-   */
-  struct attributes {
+  /** @brief Per-function structural complexity counts — the "how much" axis. */
+  struct ComplexityCounts {
     int CallFunc = 0;
     int ForLoops = 0;
     int Functions = 0;
     int IfStmt = 0;
     int Param = 0;
-    int TypeArithmeticOperation = 0;
-    int TypeCompareOperation = 0;
-    int TypeIfStmt = 0;
-    int TypeParameters = 0;
-    int TypePostfix = 0;
-    int TypePrefix = 0;
-    int TypeUnaryOperation = 0;
-    int TypeVariableReference = 0;
-    int TypeVariables = 0;
     int WhileLoops = 0;
-    int Concurrency = 0;
+  };
+
+  /** @brief Per-function feature presence flags — the "what kind" axis. */
+  struct FeatureFlags {
+    bool Concurrency = false;
+    bool FloatingPoint = false;
+  };
+
+  /** @brief Per-function AST property counts, split across the two axes. */
+  struct attributes {
+    ComplexityCounts Complexity;
+    FeatureFlags Features;
   };
 
   /**
    * @brief Constructs the visitor and seeds the map with the "Program" entry.
    *
    * @param C             AST context, used for parent-map lookups.
-   * @param T             Clang BuiltinType values to count; empty means count
-   * all.
    * @param allFunctions  Output map shared with downstream consumers.
    */
   CountingVisitor(
-      clang::ASTContext *C, const std::vector<unsigned int> &T,
+      clang::ASTContext *C,
       std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> allFunctions);
 
   /**
@@ -101,28 +100,19 @@ public:
    * visitor. */
   bool VisitDecl(clang::Decl *D);
 
-  /** @brief Counts type-matched variable declarations per function. */
+  /** @brief Counts variable declarations per function; flags floating-point
+   * and concurrency types. */
   bool VisitVarDecl(clang::VarDecl *VD);
 
-  /** @brief Registers each function in {@code _allFunctions} and increments the
-   * file-level function count. */
+  /** @brief Registers each function in {@code _allFunctions}, increments the
+   * file-level function count, and flags a floating-point return type. */
   bool VisitFunctionDecl(clang::FunctionDecl *FD);
-
-  /**
-   * @brief Counts type-matched variable references per function.
-   *
-   * {@code DeclRefExpr} is the AST node for any use of a named variable —
-   * it is an expression, not a declaration, so it appears under {@code Stmt}
-   * in the hierarchy.
-   */
-  bool VisitDeclRefExpr(clang::DeclRefExpr *D);
 
   /** @brief Catch-all for statement nodes; counts function calls ({@code
    * CallFunc}). */
   bool VisitStmt(clang::Stmt *S);
 
-  /** @brief Counts all if-statements and type-matched if-statement conditions.
-   */
+  /** @brief Counts all if-statements per function. */
   bool VisitIfStmt(clang::IfStmt *If);
 
   /** @brief Counts for-loop occurrences per function. */
@@ -130,44 +120,6 @@ public:
 
   /** @brief Counts while-loop occurrences per function. */
   bool VisitWhileStmt(clang::WhileStmt *W);
-
-  /**
-   * @brief Counts type-matched unary operations, distinguishing arithmetic,
-   * prefix, and postfix.
-   *
-   * Note: {@code VisitStmt} does not double-count these — the {@code
-   * UnaryOperatorClass} branch was removed from {@code VisitStmt} to avoid
-   * that.
-   */
-  bool VisitUnaryOperator(clang::UnaryOperator *O);
-
-  /** @brief Counts type-matched additive and comparison binary operations per
-   * function. */
-  bool VisitBinaryOperator(clang::BinaryOperator *O);
-
-  /** @brief Counts type-matched ternary ({@code x ? y : z}) operations per
-   * function. */
-  bool VisitConditionalOperator(clang::ConditionalOperator *O);
-
-  /**
-   * @brief Stub for GNU ({@code x ?: y}) — not currently counted.
-   *
-   * The standard ternary is handled by {@code VisitConditionalOperator};
-   * this form rarely appears in the filtered source files.
-   */
-  bool VisitBinaryConditionalOperator(clang::BinaryConditionalOperator *O);
-
-  /** @brief Counts type-matched implicit parameters (e.g. {@code self} in ObjC
-   * methods). */
-  bool VisitImplicitParamDecl(clang::ImplicitParamDecl *D);
-
-  /**
-   * @brief Returns true if {@code QT} should be counted given the type filter.
-   *
-   * When {@code _T} is empty (count-all mode), always returns true without
-   * iterating. Otherwise checks each requested builtin type.
-   */
-  bool matchesType(clang::QualType QT) const;
 
 private:
   /**
@@ -190,6 +142,4 @@ private:
   clang::ASTContext *_C;
   clang::SourceManager *_mgr;
   std::shared_ptr<std::unordered_map<std::string, attributes>> _allFunctions;
-  const std::vector<unsigned int> &_T;
-  bool _allTypes; ///< True when _T is empty — count all types
 };

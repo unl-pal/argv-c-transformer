@@ -1,15 +1,19 @@
 #pragma once
 
+#include "CountingVisitor.hpp"
+
 #include <filesystem>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 /**
  * @brief Runtime configuration loaded from the INI-style config file.
  *
- * Holds the path settings and flags that live outside the numeric threshold
- * map — i.e. things that are not per-function min/max counts.
+ * Holds the path settings and flags that live outside the per-function
+ * config maps — i.e. things that are not per-function complexity ranges or
+ * feature gates.
  */
 struct filterConfigs {
   std::string databaseDir; ///< Directory containing the source repos to filter
@@ -35,11 +39,15 @@ public:
   Filterer(std::string configFile);
 
   /**
-   * @brief Parses the config file, populating the threshold map and type lists.
+   * @brief Parses the config file, populating the two per-function config
+   * maps and the file-level settings.
    *
-   * Numeric thresholds go into {@code config}. The special {@code type} key
-   * populates {@code typesRequested} and {@code typeNames}. Path settings go
-   * into {@code configuration}. Unknown keys are reported to stdout.
+   * Complexity metric keys (e.g. {@code ForLoops}) are parsed as a
+   * {@code min,max} pair into {@code complexityConfig}. Feature keys (e.g.
+   * {@code Concurrency}) are parsed as {@code ignore|require|forbid} into
+   * {@code featureConfig}. File-level settings (e.g. {@code minFileLoC},
+   * {@code useNonStdHeaders}) go into {@code config}. Path settings go into
+   * {@code configuration}. Unknown keys are reported to stdout.
    *
    * @param configFile Path to the INI-style properties file.
    */
@@ -98,55 +106,36 @@ private:
       "stdnoreturn.h", "string.h",   "tgmath.h", "threads.h",   "time.h",   "uchar.h",
       "wchar.h",       "wctype.h",   "string"};
 
-  /// Clang BuiltinType enum values for each type requested via the config's {@code type} key.
-  std::vector<unsigned int> typesRequested;
-
-  /// Human-readable names parallel to typesRequested (same index = same type).
-  std::vector<std::string> typeNames;
+  /**
+   * @brief Per-function complexity thresholds loaded from the config.
+   *
+   * Keys are complexity metric names (e.g. {@code ForLoops}); values are
+   * {@code [min, max]} pairs. Defaults are {@code {0, 99999}}, meaning no
+   * filtering unless explicitly configured.
+   */
+  std::map<std::string, std::pair<int, int>> complexityConfig = {
+      {"CallFunc", {0, 99999}}, {"ForLoops", {0, 99999}},  {"Functions", {0, 99999}},
+      {"IfStmt", {0, 99999}},   {"Param", {0, 99999}},     {"WhileLoops", {0, 99999}},
+  };
 
   /**
-   * @brief Per-function and per-file numeric thresholds loaded from the config.
+   * @brief Per-function feature gates loaded from the config.
    *
-   * Keys follow the pattern min/max + metric name (e.g. minForLoops,
-   * maxFileLoC). Defaults are 0 for minimums and 99999 for maximums, meaning
-   * no filtering unless explicitly configured.
+   * Keys are feature names (e.g. {@code Concurrency}); values say whether a
+   * function must have the feature present, must not have it, or the
+   * feature is ignored for filtering. Defaults to {@code Ignore}.
    */
-  std::map<std::string, int> config = {{"Concurrency", 0},
-                                       {"debugLevel", 0},
-                                       {"maxCallFunc", 99999},
-                                       {"maxFileLoC", 99999},
-                                       {"maxForLoops", 99999},
-                                       {"maxFunctions", 99999},
-                                       {"maxIfStmt", 99999},
-                                       {"maxParam", 99999},
-                                       {"maxTypeArithmeticOperation", 99999},
-                                       {"maxTypeCompareOperation", 99999},
-                                       {"maxTypeIfStmt", 99999},
-                                       {"maxTypeParameters", 99999},
-                                       {"maxTypePostfix", 99999},
-                                       {"maxTypePrefix", 99999},
-                                       {"maxTypeUnaryOperation", 99999},
-                                       {"maxTypeVariableReference", 99999},
-                                       {"maxTypeVariables", 99999},
-                                       {"maxWhileLoops", 99999},
-                                       {"minCallFunc", 0},
-                                       {"minFileLoC", 0},
-                                       {"minForLoops", 0},
-                                       {"minFunctions", 0},
-                                       {"minIfStmt", 0},
-                                       {"minParam", 0},
-                                       {"minTypeArithmeticOperation", 0},
-                                       {"minTypeCompareOperation", 0},
-                                       {"minTypeIfStmt", 0},
-                                       {"minTypeParameters", 0},
-                                       {"minTypePostfix", 0},
-                                       {"minTypePrefix", 0},
-                                       {"minTypeUnaryOperation", 0},
-                                       {"minTypeVariableReference", 0},
-                                       {"minTypeVariables", 0},
-                                       {"minWhileLoops", 0},
-                                       {"useNonStdHeaders", 0}};
+  std::map<std::string, FeatureGate> featureConfig = {
+      {"Concurrency", FeatureGate::Ignore},
+      {"FloatingPoint", FeatureGate::Ignore},
+  };
 
-  /// Path settings and flags that don't fit the numeric threshold map.
+  /**
+   * @brief File-level settings that aren't per-function (e.g. LoC bounds).
+   */
+  std::map<std::string, int> config = {
+      {"debugLevel", 0}, {"maxFileLoC", 99999}, {"minFileLoC", 0}, {"useNonStdHeaders", 0}};
+
+  /// Path settings and flags that don't fit either config map.
   struct filterConfigs configuration;
 };

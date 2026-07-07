@@ -15,9 +15,11 @@
 #include <unordered_map>
 #include <vector>
 
-FilterAction::FilterAction(std::map<std::string, int> *config,
-                           const std::vector<unsigned int> &types, llvm::raw_fd_ostream &output)
-    : _Config(config), _Types(types), _Rewriter(), _Output(output) {}
+FilterAction::FilterAction(std::map<std::string, std::pair<int, int>> *complexityConfig,
+                           std::map<std::string, FeatureGate> *featureConfig,
+                           llvm::raw_fd_ostream &output)
+    : _ComplexityConfig(complexityConfig), _FeatureConfig(featureConfig), _Rewriter(),
+      _Output(output) {}
 
 std::unique_ptr<clang::ASTConsumer>
 FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef /*filename*/) {
@@ -29,8 +31,9 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringR
   // unique_ptr can't be copied, so the vector must be moved into MultiplexConsumer.
   // Building a named local makes that std::move explicit and unambiguous.
   std::vector<std::unique_ptr<clang::ASTConsumer>> consumers;
-  consumers.emplace_back(std::make_unique<CountingConsumer>(_Types, toFilter));
-  consumers.emplace_back(std::make_unique<FilterFunctionsConsumer>(toFilter, toRemove, _Config));
+  consumers.emplace_back(std::make_unique<CountingConsumer>(toFilter));
+  consumers.emplace_back(std::make_unique<FilterFunctionsConsumer>(
+      toFilter, toRemove, _ComplexityConfig, _FeatureConfig));
   consumers.emplace_back(std::make_unique<RemoveConsumer>(_Rewriter, toRemove));
 
   return std::make_unique<clang::MultiplexConsumer>(std::move(consumers));

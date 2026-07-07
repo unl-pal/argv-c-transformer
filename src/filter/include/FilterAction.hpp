@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CountingVisitor.hpp"
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
@@ -9,7 +11,7 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <vector>
+#include <utility>
 
 /**
  * @brief ASTFrontendAction that runs the full filter consumer chain.
@@ -23,12 +25,13 @@ public:
   /**
    * @brief Constructs the action with the shared pipeline state.
    *
-   * @param config  Threshold map owned by {@code Filterer}.
-   * @param types   Clang BuiltinType values for the requested verifier types.
-   * @param output  Destination file stream for the filtered output.
+   * @param complexityConfig  Per-metric [min, max] ranges owned by {@code Filterer}.
+   * @param featureConfig     Per-feature require/forbid/ignore gates owned by
+   *                          {@code Filterer}.
+   * @param output            Destination file stream for the filtered output.
    */
-  FilterAction(std::map<std::string, int> *config, const std::vector<unsigned int> &types,
-               llvm::raw_fd_ostream &output);
+  FilterAction(std::map<std::string, std::pair<int, int>> *complexityConfig,
+               std::map<std::string, FeatureGate> *featureConfig, llvm::raw_fd_ostream &output);
 
   /**
    * @brief Builds a {@code MultiplexConsumer} containing all three filter passes.
@@ -66,8 +69,8 @@ public:
   void EndSourceFileAction() override;
 
 private:
-  std::map<std::string, int> *_Config;
-  const std::vector<unsigned int> &_Types;
+  std::map<std::string, std::pair<int, int>> *_ComplexityConfig;
+  std::map<std::string, FeatureGate> *_FeatureConfig;
   clang::Rewriter _Rewriter;
   llvm::raw_fd_ostream &_Output;
 };

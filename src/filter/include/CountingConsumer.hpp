@@ -7,7 +7,6 @@
 #include <clang/AST/Type.h>
 #include <memory>
 #include <unordered_map>
-#include <vector>
 
 /**
  * @brief ASTConsumer that drives the counting pass over the AST.
@@ -22,11 +21,9 @@ public:
   /**
    * @brief Constructs the consumer with the shared pipeline state.
    *
-   * @param types     Clang BuiltinType values for the requested verifier types.
    * @param toFilter  Output map; visitor writes function name → attribute counts.
    */
-  CountingConsumer(
-      const std::vector<unsigned int> &types,
+  explicit CountingConsumer(
       std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter);
 
   /**
@@ -40,6 +37,5 @@ public:
   void HandleTranslationUnit(clang::ASTContext &context) override;
 
 private:
-  const std::vector<unsigned int> &_Types;
   std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> _ToFilter;
 };
