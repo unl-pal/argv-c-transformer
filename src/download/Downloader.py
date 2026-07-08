@@ -13,6 +13,11 @@ downloadSettings = {
     "minRepoLoC": "100",
     "projectCount": "5",
     "minNumStars": "1",
+    # Optional: a single "owner/name" repo to download, bypassing the CSV
+    # index entirely (and the language/size/stars criteria, since a
+    # directly-named repo is already a deliberate choice). Leave unset to
+    # use the CSV-driven flow.
+    "repo": "",
 }
 
 fileSettings = {
@@ -111,6 +116,20 @@ if os.path.exists(configFile):
 print(f"Settings:\n\t{downloadSettings}\n\t{fileSettings}")
 
 headers = get_auth_headers()
+
+if downloadSettings["repo"]:
+    repo = downloadSettings["repo"]
+    location = os.path.join(fileSettings["downloadDir"], repo)
+    if os.path.exists(location):
+        print(f"{location} already exists")
+    else:
+        print(f"Downloading .c/.h from {repo}...")
+        count = download_c_files(repo, fileSettings["downloadDir"], headers)
+        if count > 0:
+            print(f"  Extracted {count} file(s)")
+        else:
+            print(f"  No .c/.h files found or download failed")
+    sys.exit(0)
 
 if os.path.exists(fileSettings["csv"]):
     with open(fileSettings["csv"], newline="") as csv_file:
