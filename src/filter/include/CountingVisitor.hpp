@@ -14,7 +14,6 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 /**
  * @brief Three-state gate for a feature flag: whether the config requires a
@@ -94,15 +93,10 @@ public:
    */
   std::string getDeclParentFuncName(const clang::Decl &D);
 
-  /** @brief Checks calls for chacaracteristics (just concurrency for now)
-   * by looking at param types and marking parent/enclosing function as using
-   * concurrency
-   */
+  /** @brief Counts function calls ({@code CallFunc}) and checks call
+   * arguments for characteristics (just concurrency for now), marking the
+   * enclosing function accordingly. */
   bool VisitCallExpr(clang::CallExpr *CE);
-
-  /** @brief Catch-all for declaration nodes not handled by a more specific
-   * visitor. */
-  bool VisitDecl(clang::Decl *D);
 
   /** @brief Counts variable declarations per function; flags floating-point
    * and concurrency types. */
@@ -111,10 +105,6 @@ public:
   /** @brief Registers each function in {@code _allFunctions}, increments the
    * file-level function count, and flags a floating-point return type. */
   bool VisitFunctionDecl(clang::FunctionDecl *FD);
-
-  /** @brief Catch-all for statement nodes; counts function calls ({@code
-   * CallFunc}). */
-  bool VisitStmt(clang::Stmt *S);
 
   /** @brief Counts all if-statements per function. */
   bool VisitIfStmt(clang::IfStmt *If);

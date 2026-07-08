@@ -6,37 +6,21 @@
 #include "ClangToolUtils.hpp"
 #include "DebugLog.hpp"
 
-#include <clang/Basic/Diagnostic.h>
-#include <clang/Basic/DiagnosticIDs.h>
-#include <clang/Basic/DiagnosticOptions.h>
-#include <clang/Basic/FileManager.h>
-#include <clang/Basic/FileSystemOptions.h>
-#include <clang/Basic/SourceManager.h>
-#include <clang/Frontend/ASTUnit.h>
-#include <clang/Frontend/CompilerInvocation.h>
-#include <clang/Frontend/FrontendAction.h>
-#include <clang/Frontend/FrontendActions.h>
-#include <clang/Lex/Preprocessor.h>
-#include <clang/Serialization/PCHContainerOperations.h>
-#include <clang/Tooling/CommonOptionsParser.h>
-#include <clang/Tooling/Tooling.h>
+#include <csignal>
+#include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
-#include <sstream>
-#include <llvm/ADT/IntrusiveRefCntPtr.h>
-#include <llvm/ADT/StringRef.h>
 #include <iostream>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/VirtualFileSystem.h>
+#include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
-#include <memory>
+#include <optional>
+#include <sstream>
 #include <string>
 #include <system_error>
-#include <vector>
-#include <csignal>
-#include <ctime>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
 
 const int defaultDebugLevel = 0;
 const bool defaultKeepCompilesOnly = true;
@@ -85,48 +69,21 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   std::filesystem::path srcPath = flattenedOutputPath(path);
 
-  // Tool setup: build the ClangTool from CLANG_RESOURCES and the source path
-  static llvm::cl::OptionCategory myToolCategory("transformer");
-  clang::IgnoringDiagConsumer diagConsumer;
-
-  std::optional<std::string> resourceDir = getResourceDir();
-  if (!resourceDir) {
-    std::cerr << "Could not determine clang resource directory (set CLANG_RESOURCES to override)"
-              << std::endl;
-    return false;
-  }
-
-  std::vector<std::string> args = buildClangArgs(path.string(), *resourceDir);
-  std::vector<const char *> argv = toArgv(args);
-  int argc = static_cast<int>(args.size());
-
-  llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
-      clang::tooling::CommonOptionsParser::create(argc, argv.data(), myToolCategory);
-  if (!expectedParser) {
-    llvm::errs() << expectedParser.takeError();
-    return false;
-  }
-  clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
-
-  clang::tooling::ClangTool tool(optionsParser.getCompilations(),
-                                 optionsParser.getSourcePathList());
-  tool.setDiagnosticConsumer(&diagConsumer);
-
-  // Invoking: run TransformAction, writing the rewritten source to srcPath
+  // Run TransformAction, writing the rewritten source to srcPath
   std::error_code ec;
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
 
   ArgsFrontendFactory factory(output);
-  if (tool.run(&factory)) {
-    std::cerr << "Clang tool reported errors while transforming: " << path.string() << std::endl;
-  }
+  bool ran = runToolOnFile(path.string(), factory);
   output.close();
+  if (!ran)
+    return false;
 
   // harness may be empty due to unsupported transforming
   if (harnessIsEmpty(srcPath)) {
     std::filesystem::remove(srcPath);
-    return 0;
+    return false;
   }
 
   // Result: drop the output if it doesn't compile and we're keeping compiles only
@@ -134,7 +91,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
     if (configuration.keepCompilesOnly) {
       std::filesystem::remove(srcPath);
     }
-    return 0;
+    return false;
   }
   writeBenchmarkTask(srcPath);
   if (!preprocess(srcPath)) {
@@ -143,9 +100,9 @@ bool Transformer::transformFile(std::filesystem::path path) {
     ymlPath.replace_extension(".yml");
     std::filesystem::remove(srcPath);
     std::filesystem::remove(ymlPath);
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
 // Runs transformFile in a forked child so a crash, OOM-kill, assertion, or
@@ -215,22 +172,20 @@ void Transformer::cleanupPartialOutput(std::filesystem::path path) {
   }
 }
 
-int Transformer::transformAll(std::filesystem::path path, int count) {
-  if (std::filesystem::exists(path)) {
-    if (std::filesystem::is_directory(path)) {
-      int successes = 0;
-      for (const std::filesystem::directory_entry &entry :
-           std::filesystem::directory_iterator(path)) {
-        successes += transformAll(entry.path(), count);
-      }
-      return count + successes;
-    } else if (std::filesystem::is_regular_file(path)) {
-      if (path.has_extension() && path.extension() == ".c") {
-        return count + transformFileIsolated(path);
-      }
+int Transformer::transformAll(std::filesystem::path path) {
+  if (!std::filesystem::exists(path))
+    return 0;
+  if (std::filesystem::is_directory(path)) {
+    int successes = 0;
+    for (const std::filesystem::directory_entry &entry :
+         std::filesystem::directory_iterator(path)) {
+      successes += transformAll(entry.path());
     }
+    return successes;
   }
-  return count;
+  if (std::filesystem::is_regular_file(path) && path.extension() == ".c")
+    return transformFileIsolated(path);
+  return 0;
 }
 
 static constexpr const char *kVerifierStubs = R"(
@@ -257,13 +212,29 @@ void __VERIFIER_nondet_memory(void *mem, size_t size) {
 void reach_error(void) {}
 )";
 
+namespace {
+
+// Builds "clang <flags> -resource-dir=<dir> [-isysroot <sdk>]", or nullopt if
+// the resource directory can't be determined.
+std::optional<std::string> clangCommand(const std::string &flags) {
+  std::optional<std::string> resourceDir = getResourceDir();
+  if (!resourceDir)
+    return std::nullopt;
+  std::string cmd = "clang " + flags + " -resource-dir=" + *resourceDir;
+  if (std::optional<std::string> sysroot = getSysroot())
+    cmd += " -isysroot " + *sysroot;
+  return cmd;
+}
+
+} // namespace
+
 // NOTE: cmd is passed to std::system (shell-interpreted), and path/verifierPath
 // are not escaped. path originates from a cloned/downloaded repository, so a
 // pathological filename containing shell metacharacters could inject commands
-int Transformer::checkCompilable(std::filesystem::path path) {
-  std::optional<std::string> resourceDir = getResourceDir();
-  if (!resourceDir)
-    return 0;
+bool Transformer::checkCompilable(std::filesystem::path path) {
+  std::optional<std::string> cmd = clangCommand("-fsyntax-only -xc");
+  if (!cmd)
+    return false;
 
   std::filesystem::path verifierPath = path.parent_path() / "__verifier_stubs.c";
   {
@@ -271,16 +242,10 @@ int Transformer::checkCompilable(std::filesystem::path path) {
     out << kVerifierStubs;
   }
 
-  std::string cmd = "clang -fsyntax-only -xc"
-                    " -resource-dir=" + *resourceDir;
-  std::optional<std::string> sysroot = getSysroot();
-  if (sysroot)
-    cmd += " -isysroot " + *sysroot;
-  cmd += " " + path.string() + " " + verifierPath.string() + " 2>/dev/null";
-
-  int result = std::system(cmd.c_str());
+  *cmd += " " + path.string() + " " + verifierPath.string() + " 2>/dev/null";
+  int result = std::system(cmd->c_str());
   std::filesystem::remove(verifierPath);
-  return result == 0 ? 1 : 0;
+  return result == 0;
 }
 
 bool Transformer::harnessIsEmpty(std::filesystem::path path) {
@@ -341,16 +306,11 @@ bool Transformer::preprocess(std::filesystem::path cPath) {
   std::filesystem::path iPath = cPath;
   iPath.replace_extension(".i");
 
-  std::optional<std::string> resourceDir = getResourceDir();
-  if (!resourceDir)
+  std::optional<std::string> cmd = clangCommand("-E -P -std=gnu11");
+  if (!cmd)
     return false;
-
-  std::string cmd = "clang -E -P -std=gnu11 -resource-dir=" + *resourceDir;
-  std::optional<std::string> sysroot = getSysroot();
-  if (sysroot)
-    cmd += " -isysroot " + *sysroot;
-  cmd += " " + cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
-  return std::system(cmd.c_str()) == 0;
+  *cmd += " " + cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
+  return std::system(cmd->c_str()) == 0;
 }
 
 void Transformer::parseConfig(std::string configFile) {
@@ -374,9 +334,9 @@ void Transformer::parseConfig(std::string configFile) {
         configuration.debugLevel = 0;
       }
     } else if (key == "keepCompilesOnly") {
-      configuration.keepCompilesOnly = (value == "true" || value == "True");
+      configuration.keepCompilesOnly = parseConfigBool(value);
     } else if (key == "wipeOldBenchmarks") {
-      configuration.wipeOldBenchmarks = (value == "true" || value == "True");
+      configuration.wipeOldBenchmarks = parseConfigBool(value);
     } else if (key == "fileTimeoutSecs") {
       try {
         configuration.fileTimeoutSecs = std::stoi(value);
@@ -393,7 +353,7 @@ int Transformer::run() {
     std::cerr << "Filter directory not found: " << configuration.filterDir << std::endl;
     return 0;
   }
-  int result = transformAll(path, 0);
+  int result = transformAll(path);
   int discarded = _totalProcessed - result;
   std::cout << "\n=== Transform summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"

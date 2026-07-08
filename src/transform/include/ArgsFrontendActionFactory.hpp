@@ -35,22 +35,6 @@ public:
    */
   std::unique_ptr<clang::FrontendAction> create() override;
 
-  /**
-   * @brief Runs the invocation, logging before delegating to the base implementation.
-   *
-   * @param Invocation     The compiler invocation used to build the AST.
-   * @param Files          File manager for the files included in the AST.
-   * @param PCHContainerOps Precompiled header options, if needed.
-   * @param DiagConsumer   Destination for diagnostic messages. Used to keep
-   *                        user output free of compiler errors from the code
-   *                        being transformed; error counts are still tracked.
-   * @return true if the invocation succeeded.
-   */
-  bool runInvocation(std::shared_ptr<clang::CompilerInvocation> Invocation,
-                     clang::FileManager *Files,
-                     std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps,
-                     clang::DiagnosticConsumer *DiagConsumer) override;
-
 private:
   llvm::raw_ostream &_Output;
 };

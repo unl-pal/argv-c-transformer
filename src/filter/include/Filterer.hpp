@@ -50,8 +50,8 @@ public:
    * {@code min,max} pair into {@code complexityConfig}. Feature keys (e.g.
    * {@code Concurrency}) are parsed as {@code ignore|require|forbid} into
    * {@code featureConfig}. File-level settings (e.g. {@code minFileLoC},
-   * {@code useNonStdHeaders}) go into {@code config}. Path settings go into
-   * {@code configuration}. Unknown keys are reported to stdout.
+   * {@code useNonStdHeaders}) go into {@code fileSettings}. Path settings go
+   * into {@code configuration}. Unknown keys are reported to stderr.
    *
    * @param configFile Path to the INI-style properties file.
    */
@@ -83,18 +83,11 @@ public:
                    int numFiles = 0);
 
   /**
-   * @brief Prints a debug message if debug mode is enabled.
-   *
-   * @param info Message to print.
-   */
-  void debugInfo(std::string info);
-
-  /**
    * @brief Main entry point — collects files, pre-filters, and runs the AST pipeline.
    *
    * For each .c file that passes {@code checkPotentialFile}, builds a Clang
    * tool invocation and runs the full filter consumer chain (count → filter →
-   * remove → inject verifiers), writing the result to filterDir.
+   * remove), writing the result to filterDir.
    *
    * @return 0 on success.
    */
@@ -137,7 +130,7 @@ private:
   /**
    * @brief File-level settings that aren't per-function (e.g. LoC bounds).
    */
-  std::map<std::string, int> config = {
+  std::map<std::string, int> fileSettings = {
       {"debugLevel", 0}, {"maxFileLoC", 99999}, {"minFileLoC", 0}, {"useNonStdHeaders", 0}};
 
   /// Path settings and flags that don't fit either config map.

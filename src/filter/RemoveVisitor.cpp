@@ -11,25 +11,19 @@ RemoveVisitor::RemoveVisitor(clang::Rewriter &rewriter,
     : _Mgr(rewriter.getSourceMgr()), _Rewriter(rewriter), _ToRemove(toRemove) {}
 
 bool RemoveVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
-  if (!D)
-    return false;
-  if (_Mgr.isInMainFile(D->getLocation())) {
-    // Macro-expanded locations are not writable by the Rewriter
-    if (D->getLocation().isMacroID())
-      return clang::RecursiveASTVisitor<RemoveVisitor>::VisitFunctionDecl(D);
+  // Macro-expanded locations are not writable by the Rewriter
+  if (!_Mgr.isInMainFile(D->getLocation()) || D->getLocation().isMacroID())
+    return true;
 
-    if (D->doesThisDeclarationHaveABody()) {
-      for (const std::string &name : *_ToRemove) {
-        if (name == D->getNameAsString()) {
-          clang::SourceRange bodyRange = D->getBody()->getSourceRange();
-          if (bodyRange.isValid())
-            _Rewriter.ReplaceText(bodyRange, ";");
-          break;
-        }
+  if (D->doesThisDeclarationHaveABody()) {
+    for (const std::string &name : *_ToRemove) {
+      if (name == D->getNameAsString()) {
+        clang::SourceRange bodyRange = D->getBody()->getSourceRange();
+        if (bodyRange.isValid())
+          _Rewriter.ReplaceText(bodyRange, ";");
+        break;
       }
     }
   }
-  return clang::RecursiveASTVisitor<RemoveVisitor>::VisitFunctionDecl(D);
+  return true;
 }
-
-bool RemoveVisitor::shouldTraversePostOrder() { return false; }

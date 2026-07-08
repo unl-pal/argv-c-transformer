@@ -41,9 +41,6 @@ public:
    */
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 
-  /** @brief Uses pre-order traversal (default); post-order left as future option. */
-  bool shouldTraversePostOrder();
-
 private:
   clang::SourceManager &_Mgr;
   clang::Rewriter &_Rewriter;

@@ -17,12 +17,27 @@
 
 namespace {
 
+// Returns the VarDecl behind an expression if it's a plain variable
+// reference, else null.
+const clang::VarDecl *referencedVar(const clang::Expr *E) {
+  if (!E)
+    return nullptr;
+  if (const auto *DRE = clang::dyn_cast<clang::DeclRefExpr>(E->IgnoreParenCasts()))
+    return clang::dyn_cast<clang::VarDecl>(DRE->getDecl());
+  return nullptr;
+}
+
 // Conservative purity check used to decide whether an `if` condition can be
 // dropped along with its (now no-op) branches. Anything not explicitly
 // recognized here — calls, overloaded operators, volatile accesses, etc. —
 // is treated as side-effecting, so we only ever prune conditionals we can
 // prove are safe to remove.
-bool isSideEffectFree(const clang::Expr *E) {
+//
+// `mutableVars` lists variables whose mutation is unobservable (a for-loop's
+// init-declared variables, which die with the loop): increments/decrements
+// and assignments targeting them are allowed. Everywhere else it's empty.
+bool isSideEffectFree(const clang::Expr *E,
+                      const std::set<const clang::VarDecl *> &mutableVars = {}) {
   if (!E)
     return true;
   E = E->IgnoreParenCasts();
@@ -38,29 +53,47 @@ bool isSideEffectFree(const clang::Expr *E) {
   case clang::Stmt::UnaryOperatorClass: {
     const auto *UO = clang::cast<clang::UnaryOperator>(E);
     if (UO->isIncrementDecrementOp())
-      return false;
-    return isSideEffectFree(UO->getSubExpr());
+      return mutableVars.count(referencedVar(UO->getSubExpr())) != 0;
+    return isSideEffectFree(UO->getSubExpr(), mutableVars);
   }
   case clang::Stmt::BinaryOperatorClass: {
     const auto *BO = clang::cast<clang::BinaryOperator>(E);
     if (BO->isAssignmentOp())
-      return false;
-    return isSideEffectFree(BO->getLHS()) && isSideEffectFree(BO->getRHS());
+      return mutableVars.count(referencedVar(BO->getLHS())) != 0 &&
+             isSideEffectFree(BO->getRHS(), mutableVars);
+    return isSideEffectFree(BO->getLHS(), mutableVars) &&
+           isSideEffectFree(BO->getRHS(), mutableVars);
   }
   case clang::Stmt::ConditionalOperatorClass: {
     const auto *CO = clang::cast<clang::ConditionalOperator>(E);
-    return isSideEffectFree(CO->getCond()) && isSideEffectFree(CO->getTrueExpr()) &&
-           isSideEffectFree(CO->getFalseExpr());
+    return isSideEffectFree(CO->getCond(), mutableVars) &&
+           isSideEffectFree(CO->getTrueExpr(), mutableVars) &&
+           isSideEffectFree(CO->getFalseExpr(), mutableVars);
   }
   case clang::Stmt::MemberExprClass:
-    return isSideEffectFree(clang::cast<clang::MemberExpr>(E)->getBase());
+    return isSideEffectFree(clang::cast<clang::MemberExpr>(E)->getBase(), mutableVars);
   case clang::Stmt::ArraySubscriptExprClass: {
     const auto *AS = clang::cast<clang::ArraySubscriptExpr>(E);
-    return isSideEffectFree(AS->getBase()) && isSideEffectFree(AS->getIdx());
+    return isSideEffectFree(AS->getBase(), mutableVars) &&
+           isSideEffectFree(AS->getIdx(), mutableVars);
   }
   default:
     return false;
   }
+}
+
+// Variables declared in a for-loop's init clause are scoped to the loop and
+// die with it, so mutating them (e.g. the classic `i++` increment) is not an
+// observable side effect.
+std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
+  std::set<const clang::VarDecl *> vars;
+  if (const auto *declStmt = clang::dyn_cast_or_null<clang::DeclStmt>(init)) {
+    for (const clang::Decl *D : declStmt->decls()) {
+      if (const auto *VD = clang::dyn_cast<clang::VarDecl>(D))
+        vars.insert(VD);
+    }
+  }
+  return vars;
 }
 
 // A `for` loop's init clause is a statement, not an expression: either a
@@ -89,14 +122,6 @@ HavocCallsVisitor::HavocCallsVisitor(clang::ASTContext *C,
                                      clang::Rewriter &rewriter)
     : _C(C), _NeededSuffixes(neededSuffixes), _Rewriter(rewriter) {};
 
-bool HavocCallsVisitor::VisitTranslationUnit(clang::TranslationUnitDecl *D) {
-  return clang::RecursiveASTVisitor<HavocCallsVisitor>::TraverseDecl(D);
-}
-
-bool HavocCallsVisitor::VisitDecl(clang::Decl *D) {
-  return clang::RecursiveASTVisitor<HavocCallsVisitor>::VisitDecl(D);
-}
-
 // Havoc every call to a function from this file so each function body is
 // self-contained (intraprocedural): the call's value is replaced by a fresh
 // nondet of its return type. Library calls (callee declared in a header,
@@ -107,20 +132,20 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   // Only rewrite calls spelled out in the file being transformed; a macro
   // expansion has no rewritable source range of its own
   if (!mgr.isInMainFile(loc) || loc.isMacroID())
-    return clang::RecursiveASTVisitor<HavocCallsVisitor>::VisitCallExpr(E);
+    return true;
 
   if (const clang::FunctionDecl *callee = E->getDirectCallee()) {
     // Keep nondet calls already injected by the filter step
     if (callee->getIdentifier() && callee->getName().starts_with("__VERIFIER_"))
-      return clang::RecursiveASTVisitor<HavocCallsVisitor>::VisitCallExpr(E);
+      return true;
     if (!callee->isImplicit() && !mgr.isInMainFile(callee->getLocation()) &&
         mgr.isInSystemHeader(callee->getLocation()))
-      return clang::RecursiveASTVisitor<HavocCallsVisitor>::VisitCallExpr(E);
+      return true;
   }
 
   clang::QualType returnType = E->getCallReturnType(*_C);
   if (returnType.isNull() || returnType.getTypePtrOrNull() == nullptr)
-    return clang::RecursiveASTVisitor<HavocCallsVisitor>::VisitCallExpr(E);
+    return true;
   if (returnType->isVoidType()) {
     // A void call yields no value to havoc; drop it (the statement's
     // semicolon stays behind, leaving an empty statement). Mark it a no-op so
@@ -146,7 +171,7 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   }
   // Aggregate returns (structs, unions) have no expression-position nondet
   // equivalent; those calls are left as-is
-  return clang::RecursiveASTVisitor<HavocCallsVisitor>::VisitCallExpr(E);
+  return true;
 }
 
 bool HavocCallsVisitor::isNoOp(const clang::Stmt *S) const {
@@ -179,7 +204,9 @@ bool HavocCallsVisitor::VisitCompoundStmt(clang::CompoundStmt *S) {
 // here — such loops are havoc artifacts, not meaningful termination-
 // benchmark content. A condition/increment with a real side effect (e.g.
 // `while (x-- > 0);`) is kept regardless, since `x` may be observed after
-// the loop.
+// the loop — except mutations of variables declared in the for-loop's own
+// init clause (`for (int i = 0; i < n; i++)`), which die with the loop and
+// are therefore unobservable.
 bool HavocCallsVisitor::pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc,
                                     std::initializer_list<const clang::Stmt *> branches,
                                     const clang::Expr *cond, const clang::Stmt *init,
@@ -191,7 +218,9 @@ bool HavocCallsVisitor::pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc
     if (!isNoOp(branch))
       return false;
   }
-  if (!isSideEffectFree(cond) || !isInitSideEffectFree(init) || !isSideEffectFree(inc))
+  std::set<const clang::VarDecl *> mutableVars = loopLocalVars(init);
+  if (!isSideEffectFree(cond, mutableVars) || !isInitSideEffectFree(init) ||
+      !isSideEffectFree(inc, mutableVars))
     return false;
   _Rewriter.ReplaceText(S->getSourceRange(), "");
   _NoOpStmts.insert(S);
