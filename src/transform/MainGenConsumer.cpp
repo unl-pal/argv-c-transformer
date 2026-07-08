@@ -12,8 +12,9 @@
 #include <vector>
 
 MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
+                                 std::shared_ptr<std::set<std::string>> noOpFunctions,
                                  clang::Rewriter &rewriter)
-    : _NeededSuffixes(neededSuffixes), _Rewriter(rewriter) {}
+    : _NeededSuffixes(neededSuffixes), _NoOpFunctions(noOpFunctions), _Rewriter(rewriter) {}
 
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &mgr = Context.getSourceManager();
@@ -35,8 +36,13 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
+    if (_NoOpFunctions->count(func->getNameAsString())) {
+      debugLog(2, "Info: " + func->getNameAsString() + " body collapsed to no-ops; not harnessed");
+      continue;
+    }
     // main has a known pointer contract (argc/argv), so synthesize a real
     // call instead of skipping it like an arbitrary unsupported-param function
+    // (note no-op supercedes this)
     if (func->isMain()) {
       harness += genMainHarness(func);
       continue;

@@ -50,10 +50,15 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
   // Verifier suffixes needed by call havocking and the generated main;
   // AddVerifiersConsumer runs last and emits the extern declarations
   auto neededSuffixes = std::make_shared<std::set<std::string>>();
+  // Functions HavocCallsConsumer found to have collapsed entirely to no-ops;
+  // MainGenConsumer skips harnessing them
+  auto noOpFunctions = std::make_shared<std::set<std::string>>();
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
-  tempVector.emplace_back(std::make_unique<HavocCallsConsumer>(neededSuffixes, _Rewriter));
-  tempVector.emplace_back(std::make_unique<MainGenConsumer>(neededSuffixes, _Rewriter));
+  tempVector.emplace_back(
+      std::make_unique<HavocCallsConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
+  tempVector.emplace_back(
+      std::make_unique<MainGenConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
   tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(neededSuffixes, _Rewriter));
   tempVector.emplace_back(std::make_unique<AddStdIncludesConsumer>(existingIncludes, _Rewriter));
 
