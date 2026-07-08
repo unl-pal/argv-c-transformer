@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # ArgV C Transformer — Design
 
 ArgV converts real-world C source files into [SV-Comp](https://sv-comp.sosy-lab.org/)-style

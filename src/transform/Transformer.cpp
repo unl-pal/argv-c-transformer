@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+// SPDX-License-Identifier: Apache-2.0
+
 #include "include/Transformer.hpp"
 #include "ArgsFrontendActionFactory.hpp"
 #include "ClangToolUtils.hpp"
@@ -318,10 +321,7 @@ void Transformer::writeBenchmarkTask(std::filesystem::path cPath) {
     return;
   }
 
-  out << "# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project\n"
-      << "# SPDX-License-Identifier: Apache-2.0\n"
-      << "\n"
-      << "format_version: '2.0'\n"
+  out << "format_version: '2.0'\n"
       << "\n"
       << "input_files: '" << inputFile << "'\n"
       << "\n"

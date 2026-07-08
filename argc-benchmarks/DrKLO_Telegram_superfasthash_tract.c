@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: Copyright (c) 2010, Paul Hsieh
-// SPDX-License-Identifier: Custom
+// SPDX-License-Identifier: BSD-3-Clause
 // SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*

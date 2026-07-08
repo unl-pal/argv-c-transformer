@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+#
+# SPDX-License-Identifier: Apache-2.0
+
 CC.Arch := 64
 # Newer clang warns about -c being redundant with -fsyntax-only (SYNTAX_ONLY=1 default)
 # getdelim benchmark defensively checks stream/lineptr/n for NULL; clang flags these as

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: Copyright (c) 1997-2010 The PHP Group
-// SPDX-License-Identifier: PHPv3.01
+// SPDX-License-Identifier: PHP-3.01
 // SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*

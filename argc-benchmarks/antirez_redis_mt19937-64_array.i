@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: Copyright (C) 2004, Makoto Matsumoto and Takuji Nishimura
-// SPDX-License-Identifier: Custom
+// SPDX-License-Identifier: BSD-3-Clause
 // SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 extern unsigned long long __VERIFIER_nondet_ulonglong(void);

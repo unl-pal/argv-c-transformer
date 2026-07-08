@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: Copyright (C) 1996, 1999 Free Software Foundation, Inc.
-// SPDX-License-Identifier: LGPLv2.1 or later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 // SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*

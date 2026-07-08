@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # Post-havoc reparse filter: exploration (not adopted)
 
 ## The problem this explored

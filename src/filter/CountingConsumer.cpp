@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #include "CountingConsumer.hpp"
 
 #include <llvm/Support/raw_ostream.h>
