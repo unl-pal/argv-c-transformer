@@ -1,6 +1,0 @@
-repository,language,architecture,community,continuous_integration,documentation,history,issues,license,size,unit_test,stars,scorebased_org,randomforest_org,scorebased_utl,randomforest_utl
-DrKLO/Telegram,C,0.810573,1,0,0.220572,17.647058,57.529411,1,345079,0.56274,4396,1,1,1,1
-antirez/redis,C,0.856187,2,0,0.166095,112.430557,34.652779,1,119632,0.165989,16713,1,1,1,1
-plexinc/plex-home-theater-public,C,0.852308,3,0,0.160882,13.917808,0.356164,1,2854947,0.099804,341,1,1,1,1
-visit-vis/VisIt,C,0.949644,0,0,0.345599,0,0,1,2132264,0.108429,0,0,0,1,0
-natsteven/sorts,C,1,1,0,0.007143,0,0,0,140,0,0,0,0,0,0
