@@ -51,9 +51,13 @@ public:
   /**
    * @brief Constructs a Transformer and immediately parses the config file.
    *
-   * @param configFile Path to the INI-style properties file.
+   * @param configFile Path to the INI-style properties file ("" = defaults only).
+   * @param inputPath  Optional directory (or single .c file) of filtered files
+   *                   to transform. When given, it overrides filterDir, and
+   *                   benchmarkDir defaults to "<name>-benchmarks" (a
+   *                   benchmarkDir set in the config still wins).
    */
-  Transformer(std::string configFile);
+  Transformer(std::string configFile, std::string inputPath = "");
 
   /**
    * @brief Runs the full Clang AST pipeline on a single C file.

@@ -5,6 +5,7 @@
 #include "include/Filterer.hpp"
 #include "FrontendFactoryWithArgs.hpp"
 #include "ClangToolUtils.hpp"
+#include "CliArgs.hpp"
 #include "DebugLog.hpp"
 
 #include <algorithm>
@@ -18,6 +19,7 @@
 #include <iostream>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
+#include <optional>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -26,12 +28,44 @@ const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultDatabaseDir = "database";
 /// Not yet implemented in code - currently handled by scripts
 const bool defaultWipeOldBenchmarks = true;
+/// Upper bound used when a complexity key gives only a minimum.
+const int defaultComplexityMax = 99999;
 
-Filterer::Filterer(std::string configFile) {
-  configuration.filterDir = defaultFilterDir;
+/**
+ * @brief Parses a complexity threshold value into a {min, max} pair.
+ *
+ * Accepts either a "min,max" range (e.g. "1,10") or a bare value that is
+ * treated as a minimum with no upper bound (e.g. "2" == "2,99999").
+ *
+ * @param value Raw config value, already matched as key=value.
+ * @return The parsed pair, or std::nullopt if the value is malformed.
+ */
+static std::optional<std::pair<int, int>> parseComplexityValue(const std::string &value) {
+  // TODO(nat): implement.
+  //   - "min,max"  → {min, max}                    (existing behavior)
+  //   - "min"      → {min, defaultComplexityMax}   (new single-value form)
+  //   - anything unparsable → std::nullopt (caller warns and keeps defaults)
+  // Open choices that are yours to make:
+  //   - "5,"  — min with trailing comma: treat as min-only, or malformed?
+  //   - ",10" — max-only shorthand: worth supporting, or malformed?
+  // trim() from ClangToolUtils.hpp and std::stoi (throws on garbage) are
+  // available; the old min,max logic this replaces is in git history.
+  (void)value;
+  return std::nullopt;
+}
+
+Filterer::Filterer(std::string configFile, std::string inputPath) {
+  // When an input path is given on the command line, derived directories act
+  // as defaults (a config file can still override filterDir), but the input
+  // itself always wins over any databaseDir in the config.
+  configuration.filterDir =
+      inputPath.empty() ? defaultFilterDir : inputBaseName(inputPath) + "-filtered";
   configuration.databaseDir = defaultDatabaseDir;
   configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
-  parseConfigFile(configFile);
+  if (!configFile.empty())
+    parseConfigFile(configFile);
+  if (!inputPath.empty())
+    configuration.databaseDir = inputPath;
 };
 
 void Filterer::parseConfigFile(std::string configFile) {
@@ -41,19 +75,13 @@ void Filterer::parseConfigFile(std::string configFile) {
   }
   for (auto [key, value] : parseIniFile(configFile)) {
     if (complexityConfig.count(key)) {
-      size_t comma = value.find(',');
-      if (comma == std::string::npos) {
+      std::optional<std::pair<int, int>> range = parseComplexityValue(value);
+      if (range) {
+        complexityConfig.at(key) = *range;
+      } else {
         std::cerr << "Warning: complexity key '" << key
-                  << "' expects 'min,max' — ignoring value '" << value << "'" << std::endl;
-        continue;
-      }
-      try {
-        int min = std::stoi(trim(value.substr(0, comma)));
-        int max = std::stoi(trim(value.substr(comma + 1)));
-        complexityConfig.at(key) = {min, max};
-      } catch (...) {
-        std::cerr << "Warning: could not parse complexity range for '" << key << "': '" << value
-                  << "'" << std::endl;
+                  << "' expects 'min,max' or a bare minimum — ignoring value '" << value << "'"
+                  << std::endl;
       }
     } else if (featureConfig.count(key)) {
       std::string v = trim(value);
@@ -214,8 +242,9 @@ int Filterer::run() {
     std::filesystem::path oldPath(fileName);
     // Mirror the input's path under filterDir by stripping the databaseDir
     // prefix; relative() handles absolute and relative inputs uniformly.
+    // relative() yields "." when the input path IS the file (single-file mode).
     std::filesystem::path relPath = std::filesystem::relative(oldPath, configuration.databaseDir);
-    if (relPath.empty() || *relPath.begin() == "..")
+    if (relPath.empty() || *relPath.begin() == ".." || relPath == ".")
       relPath = oldPath.filename();
     std::filesystem::path newPath = std::filesystem::path(configuration.filterDir) / relPath;
 
@@ -228,6 +257,11 @@ int Filterer::run() {
     std::filesystem::create_directories(newPath.parent_path());
     std::error_code ec;
     llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
+    if (ec) {
+      std::cerr << "Cannot open output file " << newPath.string() << ": " << ec.message()
+                << std::endl;
+      continue;
+    }
 
     FrontendFactoryWithArgs factory(&complexityConfig, &featureConfig, output);
     bool ran = runToolOnFile(oldPath.string(), factory);

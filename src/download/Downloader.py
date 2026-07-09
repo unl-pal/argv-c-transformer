@@ -16,11 +16,9 @@ downloadSettings = {
     "language": "C",
     "minRepoLoC": "100",
     "projectCount": "5",
-    "minNumStars": "1",
+    "minNumStars": "0",
     # Optional: a single "owner/name" repo to download, bypassing the CSV
-    # index entirely (and the language/size/stars criteria, since a
-    # directly-named repo is already a deliberate choice). Leave unset to
-    # use the CSV-driven flow.
+    # index entirely (and the language/size/stars criteria)
     "repo": "",
 }
 

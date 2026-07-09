@@ -38,9 +38,13 @@ public:
   /**
    * @brief Constructs a Filterer and immediately parses the config file.
    *
-   * @param configFile Path to the INI-style properties file.
+   * @param configFile Path to the INI-style properties file ("" = defaults only).
+   * @param inputPath  Optional directory or .c file to filter. When given, it
+   *                   overrides databaseDir, and filterDir defaults to
+   *                   "<name>-filtered" (a filterDir set in the config still
+   *                   wins over the derived name).
    */
-  Filterer(std::string configFile);
+  Filterer(std::string configFile, std::string inputPath = "");
 
   /**
    * @brief Parses the config file, populating the two per-function config
@@ -92,6 +96,14 @@ public:
    * @return 0 on success.
    */
   int run();
+
+  /**
+   * @brief Returns the resolved output directory the filter writes to.
+   *
+   * Lets the full pipeline point the transform step at the filter's actual
+   * output, whichever of default / config / derived-from-input won.
+   */
+  const std::string &getFilterDir() const { return configuration.filterDir; }
 
 private:
   /// C standard library header names used to distinguish std from non-std includes.

@@ -4,6 +4,7 @@
 #include "include/Transformer.hpp"
 #include "ArgsFrontendActionFactory.hpp"
 #include "ClangToolUtils.hpp"
+#include "CliArgs.hpp"
 #include "DebugLog.hpp"
 
 #include <csignal>
@@ -31,15 +32,22 @@ const bool defaultWipeOldBenchmarks = true;
 /// Per-file wall-clock budget for the isolated transform child, in seconds.
 const int defaultFileTimeoutSecs = 60;
 
-Transformer::Transformer(std::string configFile) : configuration() {
-  // Apply defaults; parseConfig overrides any keys present in configFile
+Transformer::Transformer(std::string configFile, std::string inputPath) : configuration() {
+  // Apply defaults; parseConfig overrides any keys present in configFile.
+  // When an input path is given on the command line, the derived benchmarkDir
+  // acts as a default (a config file can still override it), but the input
+  // itself always wins over any filterDir in the config.
   configuration.debugLevel = defaultDebugLevel;
   configuration.keepCompilesOnly = defaultKeepCompilesOnly;
   configuration.filterDir = defaultFilterDir;
-  configuration.benchmarkDir = defaultBenchmarkDir;
+  configuration.benchmarkDir =
+      inputPath.empty() ? defaultBenchmarkDir : inputBaseName(inputPath) + "-benchmarks";
   configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
-  parseConfig(configFile);
+  if (!configFile.empty())
+    parseConfig(configFile);
+  if (!inputPath.empty())
+    configuration.filterDir = inputPath;
   globalDebugLevel() = configuration.debugLevel;
 }
 
