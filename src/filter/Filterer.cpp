@@ -169,9 +169,16 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
       return 0;
     }
   } else if (std::filesystem::is_directory(pathObject)) {
-    for (const std::filesystem::directory_entry &entry :
-         std::filesystem::directory_iterator(pathObject)) {
-      numFiles += getAllCFiles(entry.path(), filesToFilter);
+    // Don't let filepath issues break loop, log and move on with
+    // whatever files were already queued.
+    try {
+      for (const std::filesystem::directory_entry &entry :
+           std::filesystem::directory_iterator(pathObject)) {
+        numFiles += getAllCFiles(entry.path(), filesToFilter);
+      }
+    } catch (const std::filesystem::filesystem_error &e) {
+      debugLog(1, "[filter] skipping unreadable directory " + pathObject.string() +
+                      ": " + e.what());
     }
     return numFiles;
   } else {
