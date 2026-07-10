@@ -9,7 +9,7 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(filter_tests filter/CountingVisitorTest.cpp)
+add_executable(filter_tests filter/CountingVisitorTest.cpp filter/FilterFunctionsConsumerTest.cpp)
 
 target_include_directories(filter_tests SYSTEM PRIVATE
   ${LLVM_INCLUDE_DIRS}
@@ -17,6 +17,7 @@ target_include_directories(filter_tests SYSTEM PRIVATE
 target_include_directories(filter_tests PRIVATE
   ${CMAKE_SOURCE_DIR}/src/filter/include
   ${CMAKE_SOURCE_DIR}/src/filter
+  ${CMAKE_SOURCE_DIR}/src/common/include
 )
 
 target_link_libraries(filter_tests PRIVATE

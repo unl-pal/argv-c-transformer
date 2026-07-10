@@ -15,7 +15,7 @@ static char *__havoc_cstring(unsigned long size) {
 }
 
 int run(int n) {
-  char *s = __havoc_cstring(128);
+  char *s = (char *)__havoc_cstring(128);
   return __VERIFIER_nondet_int() + s[0];
 }
 

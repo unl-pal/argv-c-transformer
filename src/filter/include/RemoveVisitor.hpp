@@ -32,8 +32,8 @@ public:
   /**
    * @brief Replaces the body of each function in {@code _ToRemove} with {@code ;}.
    *
-   * Skips macro-expanded locations (not writable by the Rewriter), {@code main},
-   * and declarations with no body (already bare prototypes).
+   * Skips macro-expanded locations (not writable by the Rewriter) and
+   * declarations with no body (already bare prototypes).
    */
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 

@@ -52,6 +52,7 @@ public:
     int TypeVariableReference = 0;
     int TypeVariables = 0;
     int WhileLoops = 0;
+    int Concurrency = 0;
   };
 
   /**
@@ -89,6 +90,12 @@ public:
    * @return   Function name, or {@code "Program"} if at file scope.
    */
   std::string getDeclParentFuncName(const clang::Decl &D);
+
+  /** @brief Checks calls for chacaracteristics (just concurrency for now)
+   * by looking at param types and marking parent/enclosing function as using
+   * concurrency
+   */
+  bool VisitCallExpr(clang::CallExpr *CE);
 
   /** @brief Catch-all for declaration nodes not handled by a more specific
    * visitor. */

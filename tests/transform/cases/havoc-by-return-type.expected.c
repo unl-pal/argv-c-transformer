@@ -22,8 +22,8 @@ float fval(void);
 int compute(int n) {
   int a = __VERIFIER_nondet_int();
   ;
-  char *s = __havoc_cstring(128);
-  int *b = __havoc_block(128);
+  char *s = (char *)__havoc_cstring(128);
+  int *b = (int *)__havoc_block(128);
   float f = __VERIFIER_nondet_float();
   return a + s[0] + b[0] + (int)f;
 }

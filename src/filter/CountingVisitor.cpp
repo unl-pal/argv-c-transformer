@@ -1,8 +1,11 @@
 #include "include/CountingVisitor.hpp"
+#include "StdHeaders.hpp"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
 #include <clang/AST/ParentMapContext.h>
+#include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/Type.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Basic/TypeTraits.h>
 
@@ -59,6 +62,23 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
   return "Program";
 }
 
+bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
+  if (!CE || !_mgr->isInMainFile(CE->getBeginLoc()))
+    return clang::RecursiveASTVisitor<CountingVisitor>::VisitCallExpr(CE);
+  // assumes all thread/concurrency calls will have types from concurrency related headers
+  for (const clang::Expr *arg : CE->arguments()) {
+    clang::QualType argType = arg->getType();
+    if (argType->isPointerType())
+      argType = argType->getPointeeType();
+    auto info = stdHeaderForType(argType.getUnqualifiedType().getAsString());
+    if (info && info->category == HeaderCategory::Concurrency) {
+      entryFor(getStmtParentFuncName(*CE)).Concurrency = 1;
+      break;
+    }
+  }
+  return clang::RecursiveASTVisitor<CountingVisitor>::VisitCallExpr(CE);
+}
+
 bool CountingVisitor::VisitDecl(clang::Decl *D) {
   if (!D)
     return false;
@@ -69,8 +89,15 @@ bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
   if (!VD)
     return false;
   if (_mgr->isInMainFile(VD->getLocation())) {
-    if (matchesType(VD->getType()))
+    clang::QualType varType = VD->getType();
+    if (matchesType(varType))
       entryFor(getDeclParentFuncName(*VD)).TypeVariables++;
+    // check for concurrency
+    if (varType->isPointerType())
+      varType = varType->getPointeeType();
+    auto info = stdHeaderForType(varType.getUnqualifiedType().getAsString());
+    if (info && info->category == HeaderCategory::Concurrency)
+      entryFor(getDeclParentFuncName(*VD)).Concurrency = 1;
   }
   return clang::RecursiveASTVisitor<CountingVisitor>::VisitVarDecl(VD);
 }

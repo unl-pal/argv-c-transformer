@@ -176,3 +176,89 @@ TEST(CountingVisitor, ComparisonOperatorCounted) {
   ASSERT_TRUE(r.funcs->count("foo"));
   EXPECT_EQ(r.funcs->at("foo").TypeCompareOperation, 1);
 }
+
+// ---------------------------------------------------------------------------
+// Concurrency detection (pthread_* types)
+//
+// These tests deliberately typedef pthread_mutex_t/pthread_t locally instead
+// of #include <pthread.h>: detection is keyed purely on the type's spelled
+// name (via StdHeaders.hpp's kStdTypeHeaders), not on which header it came
+// from, so a hermetic typedef exercises the same code path as the real
+// system header without depending on it being present at test time.
+// ---------------------------------------------------------------------------
+
+namespace {
+const char *kPthreadStubs = R"(
+  typedef struct { int dummy; } pthread_mutex_t;
+  typedef unsigned long pthread_t;
+  int pthread_mutex_lock(pthread_mutex_t *m);
+  int pthread_mutex_unlock(pthread_mutex_t *m);
+)";
+}
+
+TEST(CountingVisitor, ConcurrencyFlaggedForLocalPthreadVariable) {
+  // A pthread_mutex_t declared and locked entirely inside the function should
+  // flag it via the VisitVarDecl path.
+  auto r = runCounter(std::string(kPthreadStubs) + R"(
+    void worker() {
+      pthread_mutex_t m;
+      pthread_mutex_lock(&m);
+      pthread_mutex_unlock(&m);
+    }
+  )");
+  ASSERT_TRUE(r.funcs->count("worker"));
+  EXPECT_TRUE(r.funcs->at("worker").Concurrency);
+}
+
+TEST(CountingVisitor, ConcurrencyFlaggedByCallArgumentAlone) {
+  // The pthread_mutex_t lives at file scope ("Program"), never as a VarDecl
+  // inside the function — only the call argument's type can catch this, so
+  // this isolates the VisitCallExpr path from the VisitVarDecl path.
+  auto r = runCounter(std::string(kPthreadStubs) + R"(
+    pthread_mutex_t global_lock;
+    void worker() {
+      pthread_mutex_lock(&global_lock);
+    }
+  )");
+  ASSERT_TRUE(r.funcs->count("worker"));
+  EXPECT_TRUE(r.funcs->at("worker").Concurrency);
+}
+
+TEST(CountingVisitor, ConcurrencyFlaggedForPointerTypedLocal) {
+  // A pointer-typed local (pthread_mutex_t *) with no call at all should
+  // still be flagged — VisitVarDecl strips the pointer before the lookup.
+  auto r = runCounter(std::string(kPthreadStubs) + R"(
+    void worker(pthread_mutex_t *m) {
+      pthread_mutex_t *alias = m;
+    }
+  )");
+  ASSERT_TRUE(r.funcs->count("worker"));
+  EXPECT_TRUE(r.funcs->at("worker").Concurrency);
+}
+
+TEST(CountingVisitor, ConcurrencyNotSetForCleanFunction) {
+  auto r = runCounter(std::string(kPthreadStubs) + R"(
+    int clean(int x) {
+      for (int i = 0; i < x; i++) {}
+      return x;
+    }
+  )");
+  ASSERT_TRUE(r.funcs->count("clean"));
+  EXPECT_FALSE(r.funcs->at("clean").Concurrency);
+}
+
+TEST(CountingVisitor, ConcurrencyIsolatedPerFunction) {
+  // Only the function that actually touches a pthread type should be
+  // flagged — a sibling function must not pick it up.
+  auto r = runCounter(std::string(kPthreadStubs) + R"(
+    void worker() {
+      pthread_mutex_t m;
+      pthread_mutex_lock(&m);
+    }
+    int clean(int x) { return x + 1; }
+  )");
+  ASSERT_TRUE(r.funcs->count("worker"));
+  ASSERT_TRUE(r.funcs->count("clean"));
+  EXPECT_TRUE(r.funcs->at("worker").Concurrency);
+  EXPECT_FALSE(r.funcs->at("clean").Concurrency);
+}

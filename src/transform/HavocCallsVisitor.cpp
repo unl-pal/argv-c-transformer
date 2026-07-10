@@ -38,11 +38,6 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     // Keep nondet calls already injected by the filter step
     if (callee->getIdentifier() && callee->getName().starts_with("__VERIFIER_"))
       return clang::RecursiveASTVisitor<HavocCallsVisitor>::VisitCallExpr(E);
-    // Keep calls into system headers (the C standard library and other
-    // platform headers). Everything else is project code and gets havocked:
-    // functions from this file, extern declarations written here, functions
-    // declared in repo-local headers, and implicit declarations (calls with
-    // no prototype in scope).
     if (!callee->isImplicit() && !mgr.isInMainFile(callee->getLocation()) &&
         mgr.isInSystemHeader(callee->getLocation()))
       return clang::RecursiveASTVisitor<HavocCallsVisitor>::VisitCallExpr(E);
@@ -59,15 +54,17 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     _Rewriter.ReplaceText(E->getSourceRange(), "__VERIFIER_nondet_" + *suffix + "()");
     _NeededSuffixes->emplace(*suffix);
   } else if (returnType->isAnyPointerType() && !returnType->isFunctionPointerType()) {
-    // Pointer returns get a havocked-but-valid block (SV-COMP
-    // __VERIFIER_nondet_memory semantics: dereferencing an arbitrary nondet
-    // pointer value is undefined, so the pointer itself must be real).
+    // Pointer returns get a havocked-but-valid block (SV-COMP __VERIFIER_nondet_memory).
     // Block size is a fixed guess for now; char pointers are
     // null-terminated so string ops stay in bounds. AddVerifiersConsumer
     // emits the helper definitions when it sees these markers.
     bool isCharPtr = returnType->getPointeeType()->isAnyCharacterType();
     std::string helper = isCharPtr ? "__havoc_cstring" : "__havoc_block";
-    _Rewriter.ReplaceText(E->getSourceRange(), helper + "(128)");
+    // The helpers return char* / void*; cast back to the call's actual
+    // return type so e.g. unsigned char* or a struct pointer doesn't end up
+    // assigned from an incompatible pointer type.
+    _Rewriter.ReplaceText(E->getSourceRange(),
+                           "(" + returnType.getAsString() + ")" + helper + "(128)");
     _NeededSuffixes->emplace(helper);
   }
   // Aggregate returns (structs, unions) have no expression-position nondet
