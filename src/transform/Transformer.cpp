@@ -55,6 +55,9 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
 // then join remaining components with underscores.
 std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path path) {
   std::filesystem::path relPath = std::filesystem::relative(path, configuration.filterDir);
+  // relative() yields "." when the input path IS the file (single-file mode).
+  if (relPath.empty() || *relPath.begin() == ".." || relPath == ".")
+    relPath = path.filename();
   std::string flatName;
   for (const std::filesystem::path &component : relPath) {
     std::string part = component.string();
@@ -78,6 +81,11 @@ bool Transformer::transformFile(std::filesystem::path path) {
   std::error_code ec;
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
+  if (ec) {
+    std::cerr << "Cannot open output file " << srcPath.string() << ": " << ec.message()
+              << std::endl;
+    return false;
+  }
 
   ArgsFrontendFactory factory(output);
   bool ran = runToolOnFile(path.string(), factory);
