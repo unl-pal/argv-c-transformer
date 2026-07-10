@@ -145,7 +145,7 @@ Key sections:
 
 - `[File Locations]` — `databaseDir`, `filterDir`, `benchmarkDir`
 - `[Function Requirements]` — per-function thresholds (`minForLoops`, `minTypeIfStmt`, etc.)
-- `[File Requirements and Settings]` — `type`, `minFileLoC`, `useNonStdHeaders`, `keepCompilesOnly`, `fileTimeoutSecs`
+- `[File Requirements and Settings]` — `minFileLoC`, `maxFileLoC`, `fileTimeoutSecs`
 - `[Debugging Flags]` — `debug`, `debugLevel` (0–3)
 
 The transform stage preprocesses each surviving benchmark into a `.i` file with

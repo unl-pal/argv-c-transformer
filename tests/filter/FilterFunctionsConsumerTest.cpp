@@ -29,12 +29,12 @@
 namespace {
 
 // Mirrors Filterer's default config: every complexity range is permissive
-// ([0, 99999]) and every feature gate is Ignore, so a test only needs to
+// ([0, 9999]) and every feature gate is Ignore, so a test only needs to
 // override the one or two keys it cares about.
 std::map<std::string, std::pair<int, int>> permissiveComplexityConfig() {
   return {
-      {"CallFunc", {0, 99999}}, {"ForLoops", {0, 99999}},  {"Functions", {0, 99999}},
-      {"IfStmt", {0, 99999}},   {"Param", {0, 99999}},     {"WhileLoops", {0, 99999}},
+      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}},  {"Functions", {0, 9999}},
+      {"IfStmt", {0, 9999}},   {"Param", {0, 9999}},     {"WhileLoops", {0, 9999}},
   };
 }
 

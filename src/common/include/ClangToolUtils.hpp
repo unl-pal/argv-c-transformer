@@ -182,13 +182,6 @@ inline bool runToolOnFile(const std::string &filePath,
 }
 
 /**
- * @brief Parses a config bool: "true"/"True" is true, anything else false.
- */
-inline bool parseConfigBool(const std::string &value) {
-  return value == "true" || value == "True";
-}
-
-/**
  * @brief Strips leading and trailing spaces/tabs.
  */
 inline std::string trim(const std::string &s) {

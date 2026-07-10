@@ -20,38 +20,36 @@
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <optional>
-#include <regex>
 #include <sstream>
 #include <string>
 
 const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultDatabaseDir = "database";
-/// Not yet implemented in code - currently handled by scripts
-const bool defaultWipeOldBenchmarks = true;
-/// Upper bound used when a complexity key gives only a minimum.
-const int defaultComplexityMax = 99999;
 
 /**
  * @brief Parses a complexity threshold value into a {min, max} pair.
  *
- * Accepts either a "min,max" range (e.g. "1,10") or a bare value that is
- * treated as a minimum with no upper bound (e.g. "2" == "2,99999").
+ * Accepts a "min,max" range (e.g. "1,10"), a bare value treated as a minimum
+ * with no upper bound (e.g. "2" == "2,9999"), or a "," followed by just a max
+ * (e.g. ",10" == "0,10").
  *
  * @param value Raw config value, already matched as key=value.
  * @return The parsed pair, or std::nullopt if the value is malformed.
  */
 static std::optional<std::pair<int, int>> parseComplexityValue(const std::string &value) {
-  // TODO(nat): implement.
-  //   - "min,max"  → {min, max}                    (existing behavior)
-  //   - "min"      → {min, defaultComplexityMax}   (new single-value form)
-  //   - anything unparsable → std::nullopt (caller warns and keeps defaults)
-  // Open choices that are yours to make:
-  //   - "5,"  — min with trailing comma: treat as min-only, or malformed?
-  //   - ",10" — max-only shorthand: worth supporting, or malformed?
-  // trim() from ClangToolUtils.hpp and std::stoi (throws on garbage) are
-  // available; the old min,max logic this replaces is in git history.
-  (void)value;
-  return std::nullopt;
+  std::string trimmed = trim(value);
+  size_t comma = trimmed.find(',');
+  std::string minStr = trim(trimmed.substr(0, comma));
+  std::string maxStr = comma == std::string::npos ? "9999" : trim(trimmed.substr(comma + 1));
+
+  // Note: this will allow and parse "5abc" as 5
+  try {
+    int min = minStr.empty() ? 0 : std::stoi(minStr);
+    int max = maxStr.empty() ? 9999 : std::stoi(maxStr);
+    return std::make_pair(min, max);
+  } catch (...) {
+    return std::nullopt;
+  }
 }
 
 Filterer::Filterer(std::string configFile, std::string inputPath) {
@@ -61,7 +59,6 @@ Filterer::Filterer(std::string configFile, std::string inputPath) {
   configuration.filterDir =
       inputPath.empty() ? defaultFilterDir : inputBaseName(inputPath) + "-filtered";
   configuration.databaseDir = defaultDatabaseDir;
-  configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
   if (!configFile.empty())
     parseConfigFile(configFile);
   if (!inputPath.empty())
@@ -80,7 +77,7 @@ void Filterer::parseConfigFile(std::string configFile) {
         complexityConfig.at(key) = *range;
       } else {
         std::cerr << "Warning: complexity key '" << key
-                  << "' expects 'min,max' or a bare minimum — ignoring value '" << value << "'"
+                  << "' expects 'min,max', 'min', or ',max' — ignoring value '" << value << "'"
                   << std::endl;
       }
     } else if (featureConfig.count(key)) {
@@ -114,12 +111,12 @@ void Filterer::parseConfigFile(std::string configFile) {
       configuration.filterDir = value;
       if (!std::filesystem::exists(value))
         std::filesystem::create_directory(value);
-    } else if (key == "wipeOldBenchmarks") {
-      configuration.wipeOldBenchmarks = parseConfigBool(value);
     } else if (key == "benchmarkDir" || key == "keepCompilesOnly" || key == "csv" ||
                key == "downloadDir" || key == "language" || key == "projectCount" ||
                key == "minNumStars" || key == "minRepoLoc") {
       // consumed by the transform step or Downloader.py; not a filter key
+    } else if (key == "wipeOldBenchmarks" || key == "useNonStdHeaders") {
+      std::cerr << "Config key '" << key << "' has been removed — ignoring" << std::endl;
     } else if (key == "debug") {
       // silently ignored: replaced by debugLevel
     } else {
@@ -151,21 +148,9 @@ bool Filterer::checkPotentialFile(std::string fileName) {
     return false;
   }
 
-  std::regex allowedHeadersPattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
   std::string line;
-  std::smatch match;
   int count = 0;
   while (std::getline(file, line)) {
-    if (std::regex_search(line, match, allowedHeadersPattern)) {
-      bool isStdLib =
-          std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) != stdLibNames.end();
-      if (!isStdLib && !fileSettings.at("useNonStdHeaders")) {
-        debugLog(1, "[filter] skipped (non-std header '" + match[2].str() +
-                        "', useNonStdHeaders=" +
-                        std::to_string(fileSettings.at("useNonStdHeaders")) + "): " + fileName);
-        return false;
-      }
-    }
     if (!line.empty())
       count++;
   }

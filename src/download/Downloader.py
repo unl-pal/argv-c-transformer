@@ -13,12 +13,9 @@ import configparser
 
 # Defaults used when a setting is missing from the config file
 downloadSettings = {
-    "language": "C",
-    "minRepoLoC": "100",
     "projectCount": "5",
-    "minNumStars": "0",
     # Optional: a single "owner/name" repo to download, bypassing the CSV
-    # index entirely (and the language/size/stars criteria)
+    # index and all [Filters] criteria entirely
     "repo": "",
 }
 
@@ -29,6 +26,30 @@ fileSettings = {
 }
 
 C_EXTENSIONS = {".c", ".h"}
+
+
+def row_matches_filters(row, filters):
+    """
+    Check whether a CSV row satisfies every (column, value) pair in `filters`.
+
+    For each filter:
+      - If it's numeric treat filter as min
+      - Otherwise treat the filter as a selection
+
+    row: dict (column name -> string value)
+    filters: dict of column name -> configured filter value
+    Returns True if the row passes every filter, False otherwise.
+    """
+    for col, val in filters.items():
+        this_value = row.get(col)
+        try:
+            if float(this_value) < float(val):
+                return False
+        except ValueError:
+            options = val.split(",")
+            if this_value not in options:
+                return False
+    return True
 
 
 def get_auth_headers():
@@ -114,8 +135,11 @@ if os.path.exists(configFile):
             fileSettings[setting] = config["File Locations"][setting]
         except KeyError as e:
             print(f"KeyError: {e} On Setting {setting}")
+    filters = dict(config["Filters"]) if config.has_section("Filters") else {}
+else:
+    filters = {}
 
-print(f"Settings:\n\t{downloadSettings}\n\t{fileSettings}")
+print(f"Settings:\n\t{downloadSettings}\n\t{fileSettings}\n\tFilters: {filters}")
 
 headers = get_auth_headers()
 
@@ -136,6 +160,15 @@ if downloadSettings["repo"]:
 if os.path.exists(fileSettings["csv"]):
     with open(fileSettings["csv"], newline="") as csv_file:
         reader = csv.DictReader(csv_file)
+
+        unknown_keys = [k for k in filters if k not in (reader.fieldnames or [])]
+        if unknown_keys:
+            print(
+                f"Filter key(s) {unknown_keys} not found in CSV columns "
+                f"{reader.fieldnames}.\nAborting Download"
+            )
+            sys.exit(1)
+
         i = 0
         total_files = 0
         start = time.time()
@@ -143,12 +176,8 @@ if os.path.exists(fileSettings["csv"]):
             # Stop once we've downloaded the requested number of repos
             if i >= int(downloadSettings["projectCount"]):
                 break
-            # Skip rows that don't match the language/size/stars filters
-            if not (
-                row["language"] == downloadSettings["language"]
-                and int(row["size"]) >= int(downloadSettings["minRepoLoC"])
-                and int(row["stars"]) >= int(downloadSettings["minNumStars"])
-            ):
+            # Skip rows that don't match the configured [Filters] criteria
+            if not row_matches_filters(row, filters):
                 print(f"Skipping {row['repository']} - Does Not Meet Criteria")
                 continue
 

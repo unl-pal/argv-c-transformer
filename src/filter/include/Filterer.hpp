@@ -22,7 +22,6 @@
 struct filterConfigs {
   std::string databaseDir; ///< Directory containing the source repos to filter
   std::string filterDir;   ///< Output directory for files that pass the filter
-  bool wipeOldBenchmarks;  ///< Not yet implemented; reserved for future use
 };
 
 /**
@@ -53,9 +52,9 @@ public:
    * Complexity metric keys (e.g. {@code ForLoops}) are parsed as a
    * {@code min,max} pair into {@code complexityConfig}. Feature keys (e.g.
    * {@code Concurrency}) are parsed as {@code ignore|require|forbid} into
-   * {@code featureConfig}. File-level settings (e.g. {@code minFileLoC},
-   * {@code useNonStdHeaders}) go into {@code fileSettings}. Path settings go
-   * into {@code configuration}. Unknown keys are reported to stderr.
+   * {@code featureConfig}. File-level settings (e.g. {@code minFileLoC}) go
+   * into {@code fileSettings}. Path settings go into {@code configuration}.
+   * Unknown keys are reported to stderr.
    *
    * @param configFile Path to the INI-style properties file.
    */
@@ -64,8 +63,8 @@ public:
   /**
    * @brief Quick pre-filter check run before the full Clang AST pass.
    *
-   * Rejects files that include non-standard headers (when useNonStdHeaders is
-   * 0) or whose non-empty line count falls outside [minFileLoC, maxFileLoC].
+   * Rejects files whose non-empty line count falls outside
+   * [minFileLoC, maxFileLoC].
    *
    * @param fileName Path to the C source file to check.
    * @return {@code true} if the file should proceed to the AST pass.
@@ -106,25 +105,16 @@ public:
   const std::string &getFilterDir() const { return configuration.filterDir; }
 
 private:
-  /// C standard library header names used to distinguish std from non-std includes.
-  const std::vector<std::string> stdLibNames = {
-      "assert.h",      "complex.h",  "ctype.h",  "errno.h",     "fenv.h",   "float.h",
-      "inttypes.h",    "iso646.h",   "limits.h", "locale.h",    "math.h",   "setjmp.h",
-      "signal.h",      "stdalign.h", "stdarg.h", "stdatomic.h", "stdbit.h", "stdbool.h",
-      "stdckdint.h",   "stddef.h",   "stdint.h", "stdio.h",     "stdlib.h", "stdmchar.h",
-      "stdnoreturn.h", "string.h",   "tgmath.h", "threads.h",   "time.h",   "uchar.h",
-      "wchar.h",       "wctype.h",   "string"};
-
   /**
    * @brief Per-function complexity thresholds loaded from the config.
    *
    * Keys are complexity metric names (e.g. {@code ForLoops}); values are
-   * {@code [min, max]} pairs. Defaults are {@code {0, 99999}}, meaning no
+   * {@code [min, max]} pairs. Defaults are {@code {0, 9999}}, meaning no
    * filtering unless explicitly configured.
    */
   std::map<std::string, std::pair<int, int>> complexityConfig = {
-      {"CallFunc", {0, 99999}}, {"ForLoops", {0, 99999}},  {"Functions", {0, 99999}},
-      {"IfStmt", {0, 99999}},   {"Param", {0, 99999}},     {"WhileLoops", {0, 99999}},
+      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}},  {"Functions", {0, 9999}},
+      {"IfStmt", {0, 9999}},   {"Param", {0, 9999}},     {"WhileLoops", {0, 9999}},
   };
 
   /**
@@ -143,7 +133,7 @@ private:
    * @brief File-level settings that aren't per-function (e.g. LoC bounds).
    */
   std::map<std::string, int> fileSettings = {
-      {"debugLevel", 0}, {"maxFileLoC", 99999}, {"minFileLoC", 0}, {"useNonStdHeaders", 0}};
+      {"debugLevel", 0}, {"maxFileLoC", 9999}, {"minFileLoC", 0}};
 
   /// Path settings and flags that don't fit either config map.
   struct filterConfigs configuration;

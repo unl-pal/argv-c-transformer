@@ -27,8 +27,6 @@ const int defaultDebugLevel = 0;
 const bool defaultKeepCompilesOnly = true;
 const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultBenchmarkDir = "benchmarks";
-/// Not yet implemented in code - currently handled by scripts
-const bool defaultWipeOldBenchmarks = true;
 /// Per-file wall-clock budget for the isolated transform child, in seconds.
 const int defaultFileTimeoutSecs = 60;
 
@@ -42,7 +40,6 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
   configuration.filterDir = defaultFilterDir;
   configuration.benchmarkDir =
       inputPath.empty() ? defaultBenchmarkDir : inputBaseName(inputPath) + "-benchmarks";
-  configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   if (!configFile.empty())
     parseConfig(configFile);
@@ -342,9 +339,7 @@ void Transformer::parseConfig(std::string configFile) {
         configuration.debugLevel = 0;
       }
     } else if (key == "keepCompilesOnly") {
-      configuration.keepCompilesOnly = parseConfigBool(value);
-    } else if (key == "wipeOldBenchmarks") {
-      configuration.wipeOldBenchmarks = parseConfigBool(value);
+      configuration.keepCompilesOnly = (value == "true" || value == "True");
     } else if (key == "fileTimeoutSecs") {
       try {
         configuration.fileTimeoutSecs = std::stoi(value);

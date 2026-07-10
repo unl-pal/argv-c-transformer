@@ -33,7 +33,6 @@ struct transformConfigs {
   bool keepCompilesOnly;    ///< If true, delete output files that fail checkCompilable.
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string benchmarkDir; ///< Output directory for transformed benchmark files.
-  bool wipeOldBenchmarks;   ///< Not yet implemented; reserved for future use.
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
 };
 
@@ -74,9 +73,7 @@ public:
   /**
    * @brief Runs {@code transformFile} in a forked child for crash isolation.
    *
-   * A segfault, OOM-kill, assertion, or hang on a single pathological file
-   * would otherwise take down the whole batch, since each file's ClangTool
-   * runs in-process. The child does the file I/O and reports success through
+   * The child does the file I/O and reports success through
    * its exit status; the parent enforces {@code fileTimeoutSecs} and cleans up
    * any partial output left by a child that crashed or timed out.
    *
@@ -122,11 +119,9 @@ public:
   /**
    * @brief Detects a trivial benchmark whose generated main calls nothing.
    *
-   * When every function in a file is skipped by the harness (all params are
-   * pointers/structs, etc.), MainGenConsumer emits an empty `main` whose body
-   * is just `return 0;`. Such a benchmark exercises no code and should be
-   * discarded. This is a post-write text check, coupled to MainGenConsumer's
-   * generated-main format.
+   * When every function in a file is skipped by the harness
+   * MainGenConsumer emits an empty `main` whose body
+   * is just `return 0;` and is discarded
    *
    * @param path Path to the transformed C file to inspect.
    * @return true if the generated main contains no calls.
@@ -137,7 +132,7 @@ public:
    * @brief Parses the config file, populating {@code configuration}.
    *
    * Recognised keys: benchmarkDir, filterDir, debugLevel, keepCompilesOnly,
-   * wipeOldBenchmarks. Unrecognised keys are ignored.
+   * fileTimeoutSecs. Unrecognised keys are ignored.
    *
    * @param configFile Path to the INI-style properties file.
    */
