@@ -1,5 +1,9 @@
 # ArgV C Transformer
 
+[![Build and Test](https://github.com/unl-pal/argv-c-transformer/actions/workflows/ci.yaml/badge.svg)](https://github.com/unl-pal/argv-c-transformer/actions/workflows/ci.yaml)
+[![License](https://img.shields.io/github/license/unl-pal/argv-c-transformer)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/unl-pal/argv-c-transformer)](https://github.com/unl-pal/argv-c-transformer/releases)
+
 ArgV C Transformer takes C source files or directories and converts them into
 [SV-Comp](https://sv-comp.sosy-lab.org/) style verification benchmarks. It uses
 Clang/LLVM's C++ APIs to parse and rewrite C ASTs according to user-defined
