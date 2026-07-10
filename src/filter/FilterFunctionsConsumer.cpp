@@ -23,8 +23,6 @@ int complexityField(const CountingVisitor::ComplexityCounts &c, const std::strin
     return c.CallFunc;
   if (name == "ForLoops")
     return c.ForLoops;
-  if (name == "Functions")
-    return c.Functions;
   if (name == "IfStmt")
     return c.IfStmt;
   if (name == "Param")

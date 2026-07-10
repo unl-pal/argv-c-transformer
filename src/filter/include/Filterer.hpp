@@ -113,8 +113,8 @@ private:
    * filtering unless explicitly configured.
    */
   std::map<std::string, std::pair<int, int>> complexityConfig = {
-      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}},  {"Functions", {0, 9999}},
-      {"IfStmt", {0, 9999}},   {"Param", {0, 9999}},     {"WhileLoops", {0, 9999}},
+      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}}, {"IfStmt", {0, 9999}},
+      {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}},
   };
 
   /**

@@ -73,7 +73,11 @@ void Filterer::parseConfigFile(std::string configFile) {
   for (auto [key, value] : parseIniFile(configFile)) {
     if (complexityConfig.count(key)) {
       std::optional<std::pair<int, int>> range = parseComplexityValue(value);
-      if (range) {
+      if (range && range->first > range->second) {
+        std::cerr << "Warning: complexity key '" << key << "' has min (" << range->first
+                  << ") greater than max (" << range->second << ") — ignoring value '" << value
+                  << "'" << std::endl;
+      } else if (range) {
         complexityConfig.at(key) = *range;
       } else {
         std::cerr << "Warning: complexity key '" << key
