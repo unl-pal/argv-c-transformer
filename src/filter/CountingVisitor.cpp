@@ -20,13 +20,6 @@ CountingVisitor::CountingVisitor(
   _allFunctions->try_emplace("Program");
 }
 
-CountingVisitor::attributes &CountingVisitor::entryFor(const std::string &name) {
-  auto it = _allFunctions->find(name);
-  if (it == _allFunctions->end())
-    it = _allFunctions->find("Program"); // always present (emplaced in ctor)
-  return it->second;
-}
-
 std::string CountingVisitor::getDeclParentFuncName(const clang::Decl &D) {
   if (const clang::DeclContext *parentFuncContext = D.getParentFunctionOrMethod()) {
     if (parentFuncContext->isFunctionOrMethod()) {
@@ -61,7 +54,7 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
   if (!_mgr->isInMainFile(CE->getBeginLoc()))
     return true;
   if (CE->getStmtClass() == clang::Stmt::CallExprClass)
-    entryFor(getStmtParentFuncName(*CE)).Complexity.CallFunc++;
+    _allFunctions->at(getStmtParentFuncName(*CE)).Complexity.CallFunc++;
   // assumes all thread/concurrency calls will have types from concurrency related headers
   for (const clang::Expr *arg : CE->arguments()) {
     clang::QualType argType = arg->getType();
@@ -69,7 +62,7 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
       argType = argType->getPointeeType();
     auto info = stdHeaderForType(argType.getUnqualifiedType().getAsString());
     if (info && info->category == HeaderCategory::Concurrency) {
-      entryFor(getStmtParentFuncName(*CE)).Features.Concurrency = true;
+      _allFunctions->at(getStmtParentFuncName(*CE)).Features.Concurrency = true;
       break;
     }
   }
@@ -82,11 +75,11 @@ bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
     if (varType->isPointerType())
       varType = varType->getPointeeType();
     if (varType->isFloatingType())
-      entryFor(getDeclParentFuncName(*VD)).Features.FloatingPoint = true;
+      _allFunctions->at(getDeclParentFuncName(*VD)).Features.FloatingPoint = true;
     // check for concurrency
     auto info = stdHeaderForType(varType.getUnqualifiedType().getAsString());
     if (info && info->category == HeaderCategory::Concurrency)
-      entryFor(getDeclParentFuncName(*VD)).Features.Concurrency = true;
+      _allFunctions->at(getDeclParentFuncName(*VD)).Features.Concurrency = true;
   }
   return true;
 }
@@ -97,7 +90,7 @@ bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
       _allFunctions->try_emplace(FD->getNameAsString());
       _allFunctions->at("Program").Complexity.Functions++;
     }
-    attributes &entry = entryFor(FD->getNameAsString());
+    attributes &entry = _allFunctions->at(FD->getNameAsString());
     entry.Complexity.Param = FD->getNumParams();
     if (FD->getReturnType()->isFloatingType())
       entry.Features.FloatingPoint = true;
@@ -107,18 +100,18 @@ bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
 
 bool CountingVisitor::VisitIfStmt(clang::IfStmt *If) {
   if (_mgr->isInMainFile(If->getIfLoc()))
-    entryFor(getStmtParentFuncName(*If)).Complexity.IfStmt++;
+    _allFunctions->at(getStmtParentFuncName(*If)).Complexity.IfStmt++;
   return true;
 }
 
 bool CountingVisitor::VisitForStmt(clang::ForStmt *F) {
   if (_mgr->isInMainFile(F->getForLoc()))
-    entryFor(getStmtParentFuncName(*F)).Complexity.ForLoops++;
+    _allFunctions->at(getStmtParentFuncName(*F)).Complexity.ForLoops++;
   return true;
 }
 
 bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
   if (_mgr->isInMainFile(W->getWhileLoc()))
-    entryFor(getStmtParentFuncName(*W)).Complexity.WhileLoops++;
+    _allFunctions->at(getStmtParentFuncName(*W)).Complexity.WhileLoops++;
   return true;
 }
