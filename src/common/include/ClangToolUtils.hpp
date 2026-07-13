@@ -92,7 +92,11 @@ inline std::optional<std::string> getResourceDir() {
  * Returns owned {@code std::string} values rather than {@code const char*} so
  * the caller controls storage lifetime. Pass the result to
  * {@code CommonOptionsParser::create} via a {@code vector<const char*>} view.
- *
+ * The compile flags are placed after a literal {@code --}, which makes
+ * {@code CommonOptionsParser} build a {@code FixedCompilationDatabase}
+ * directly instead of searching {@code filePath}'s ancestor directories for a
+ * {@code compile_commands.json}.
+ * 
  * @param filePath    Path to the C source file to process.
  * @param resourceDir Value of {@code CLANG_RESOURCES} (from {@code getResourceDir}).
  * @return Argument vector suitable for passing to {@code CommonOptionsParser::create}.
@@ -101,16 +105,17 @@ inline std::vector<std::string> buildClangArgs(const std::string &filePath,
                                                const std::string &resourceDir) {
   std::vector<std::string> args = {
       "clang",
-      "-extra-arg=-xc",
-      "-extra-arg=-resource-dir=" + resourceDir,
-      "-extra-arg=-fparse-all-comments",
+      filePath,
+      "--",
+      "-xc",
+      "-resource-dir=" + resourceDir,
+      "-fparse-all-comments",
   };
   std::optional<std::string> sysroot = getSysroot();
   if (sysroot) {
-    args.push_back("-extra-arg=-isysroot");
-    args.push_back("-extra-arg=" + *sysroot);
+    args.push_back("-isysroot");
+    args.push_back(*sysroot);
   }
-  args.push_back(filePath);
   return args;
 }
 

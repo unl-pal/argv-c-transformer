@@ -16,9 +16,9 @@
 
 // Strip non-system includes: their functions are havocked by
 // HavocCallsConsumer, so the directives only leave unresolvable references
-// in the output. Unresolved includes also classify as C_User and get
-// dropped. Files that needed a local header's types or macros stop
-// compiling and are weeded out by keepCompilesOnly.
+// in the output. A quoted include is always project-local by convention and
+// gets stripped outright. Files that needed a local header's
+// types or macros stop compiling and are weeded out by keepCompilesOnly.
 void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &,
                                        llvm::StringRef FileName, bool IsAngled,
                                        clang::CharSourceRange FilenameRange,
@@ -27,12 +27,11 @@ void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc, const clan
                                        clang::SrcMgr::CharacteristicKind FileType) {
   if (!_Mgr.isInMainFile(HashLoc))
     return;
-  if (FileType == clang::SrcMgr::C_User) {
+  if (!IsAngled || FileType == clang::SrcMgr::C_User) {
     _Rewriter.RemoveText(clang::CharSourceRange::getCharRange(HashLoc, FilenameRange.getEnd()));
     return;
   }
-  if (IsAngled)
-    _ExistingIncludes->insert(FileName.str());
+  _ExistingIncludes->insert(FileName.str());
 }
 
 IncludeFinder::IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter,
