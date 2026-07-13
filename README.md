@@ -52,6 +52,31 @@ When invoking CMake, point it at the versioned compiler:
 CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja
 ```
 
+## `clang` on `PATH` must match the build
+
+Beyond the build itself, `filter`/`transform` shell out to a bare `clang`
+command at runtime (see `ClangToolUtils.hpp` / `Transformer.cpp`) to
+preprocess and compile-check each candidate benchmark — this is separate
+from, and not guaranteed to match, the LLVM 20 libraries the tools are
+linked against. Neither platform puts the versioned LLVM install on `PATH`
+by default:
+
+- **Linux**: installing `clang-20` via apt does not repoint the unversioned
+  `clang` — that may already point at a different preinstalled version.
+  Put the versioned install first on `PATH`:
+  ```sh
+  export PATH="/usr/lib/llvm-20/bin:$PATH"
+  ```
+- **macOS**: Homebrew's `llvm@20` is keg-only, so it's never on `PATH`
+  automatically:
+  ```sh
+  export PATH="$(brew --prefix llvm@20)/bin:$PATH"
+  ```
+
+Run `clang --version` after exporting to confirm it resolves to LLVM 20
+before running `filter`/`transform` — a mismatched `clang` here can silently
+produce different benchmark output than the one the project was built and
+tested with. CI sets this explicitly for the same reason.
 
 # Build
 
@@ -149,4 +174,6 @@ Key sections:
 - `[Debugging Flags]` — `debug`, `debugLevel` (0–3)
 
 The transform stage preprocesses each surviving benchmark into a `.i` file with
-`gcc -E -P -std=gnu11`, requiring `gcc` on `PATH`.
+`clang -E -P -std=gnu11`, requiring `clang` on `PATH` (see
+["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build)
+above).
