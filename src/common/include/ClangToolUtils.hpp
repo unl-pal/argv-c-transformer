@@ -10,10 +10,13 @@
 #include <clang/Tooling/Tooling.h>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -204,4 +207,29 @@ inline bool runToolOnFile(const std::string &filePath,
     return false;
   }
   return true;
+}
+
+/**
+ * @brief Detects a trivial benchmark whose generated main calls nothing.
+ *
+ * MainGenConsumer builds the entry point as
+ *   "\nint main(void) {\n" + harness + "  return 0;\n}\n"
+ * so when no function could be harnessed -- whether because MainGenConsumer
+ * skipped every candidate, or the verify stage's HarnessRepairConsumer later
+ * erased every harness call it had generated -- this exact block appears
+ * verbatim. Coupled to that format string in MainGenConsumer, and to
+ * HarnessRepairConsumer erasing whole lines (not just call expressions) so a
+ * fully-repaired harness collapses to the same text.
+ *
+ * @param path Path to the generated C file to inspect.
+ * @return true if the generated main contains no calls.
+ */
+inline bool harnessIsEmpty(std::filesystem::path path) {
+  std::ifstream in(path);
+  if (!in)
+    return false;
+  std::stringstream buffer;
+  buffer << in.rdbuf();
+  std::string content = buffer.str();
+  return content.find("int main(void) {\n  return 0;\n}") != std::string::npos;
 }

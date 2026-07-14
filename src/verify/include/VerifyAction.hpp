@@ -6,7 +6,6 @@
 
 #include "ConfigParser.hpp"
 #include "CountingVisitor.hpp"
-#include "VerifyResult.hpp"
 
 #include <clang/AST/ASTConsumer.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -25,25 +24,23 @@
  * @brief ASTFrontendAction for the verify stage's re-check of a transformed
  * file.
  *
- * Reparses the generated source from scratch (Rewriter edits made during
- * transform are text-only, so only a fresh parse sees the post-transform
- * shape) and runs: CountingConsumer (fresh counts) →
- * VerifyFunctionsConsumer (re-apply thresholds, exempting generated
- * artifacts) → RemoveConsumer (strip rejected bodies) →
- * HarnessRepairConsumer (drop their calls from the generated main, count
- * what's left). The repaired buffer is written to {@code output}.
+ * Reparses the generated source from scratch
+ * runs: CountingConsumer (fresh counts),
+ * VerifyFunctionsConsumer (re-apply thresholds),
+ * RemoveConsumer (strip rejected bodies),
+ * HarnessRepairConsumer (drop dropped calls).
+ * The repaired buffer is written to {@code output}.
  *
- * The counts map, removal list, and result are owned by the Verifier driver
- * so it can read them back after the tool run (e.g. for property selection
- * and the empty-harness discard).
+ * The counts map and removal list are owned by the Verifier driver so it can
+ * read them back after the tool run (e.g. for property selection); the
+ * empty-harness discard is decided separately, from the written output file.
  */
 class VerifyAction : public clang::ASTFrontendAction {
 public:
   VerifyAction(std::map<std::string, std::pair<int, int>> *complexityConfig,
                std::map<std::string, FeatureGate> *featureConfig,
                std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> counts,
-               std::shared_ptr<std::vector<std::string>> toRemove,
-               std::shared_ptr<VerifyResult> result, llvm::raw_fd_ostream &output);
+               std::shared_ptr<std::vector<std::string>> toRemove, llvm::raw_fd_ostream &output);
 
   std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance &compiler,
                                                         llvm::StringRef filename) override;
@@ -58,7 +55,6 @@ private:
   std::map<std::string, FeatureGate> *_FeatureConfig;
   std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> _Counts;
   std::shared_ptr<std::vector<std::string>> _ToRemove;
-  std::shared_ptr<VerifyResult> _Result;
   clang::Rewriter _Rewriter;
   llvm::raw_fd_ostream &_Output;
 };
@@ -73,8 +69,7 @@ public:
       std::map<std::string, std::pair<int, int>> *complexityConfig,
       std::map<std::string, FeatureGate> *featureConfig,
       std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> counts,
-      std::shared_ptr<std::vector<std::string>> toRemove, std::shared_ptr<VerifyResult> result,
-      llvm::raw_fd_ostream &output);
+      std::shared_ptr<std::vector<std::string>> toRemove, llvm::raw_fd_ostream &output);
 
   std::unique_ptr<clang::FrontendAction> create() override;
 
@@ -83,6 +78,5 @@ private:
   std::map<std::string, FeatureGate> *_FeatureConfig;
   std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> _Counts;
   std::shared_ptr<std::vector<std::string>> _ToRemove;
-  std::shared_ptr<VerifyResult> _Result;
   llvm::raw_fd_ostream &_Output;
 };

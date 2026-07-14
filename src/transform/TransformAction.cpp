@@ -77,3 +77,9 @@ void TransformAction::EndSourceFileAction() {
   // Retrieve the edited buffer and write to the new output location
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }
+
+ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_ostream &output) : _Output(output) {}
+
+std::unique_ptr<clang::FrontendAction> ArgsFrontendFactory::create() {
+  return std::make_unique<TransformAction>(_Output);
+}

@@ -18,10 +18,9 @@ VerifyAction::VerifyAction(
     std::map<std::string, std::pair<int, int>> *complexityConfig,
     std::map<std::string, FeatureGate> *featureConfig,
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> counts,
-    std::shared_ptr<std::vector<std::string>> toRemove, std::shared_ptr<VerifyResult> result,
-    llvm::raw_fd_ostream &output)
+    std::shared_ptr<std::vector<std::string>> toRemove, llvm::raw_fd_ostream &output)
     : _ComplexityConfig(complexityConfig), _FeatureConfig(featureConfig), _Counts(counts),
-      _ToRemove(toRemove), _Result(result), _Rewriter(), _Output(output) {}
+      _ToRemove(toRemove), _Rewriter(), _Output(output) {}
 
 std::unique_ptr<clang::ASTConsumer>
 VerifyAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef /*filename*/) {
@@ -33,7 +32,7 @@ VerifyAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringR
                                                                    _ComplexityConfig,
                                                                    _FeatureConfig));
   consumers.emplace_back(std::make_unique<RemoveConsumer>(_Rewriter, _ToRemove));
-  consumers.emplace_back(std::make_unique<HarnessRepairConsumer>(_Rewriter, _ToRemove, _Result));
+  consumers.emplace_back(std::make_unique<HarnessRepairConsumer>(_Rewriter, _ToRemove));
 
   return std::make_unique<clang::MultiplexConsumer>(std::move(consumers));
 }
@@ -51,12 +50,11 @@ VerifyActionFactory::VerifyActionFactory(
     std::map<std::string, std::pair<int, int>> *complexityConfig,
     std::map<std::string, FeatureGate> *featureConfig,
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> counts,
-    std::shared_ptr<std::vector<std::string>> toRemove, std::shared_ptr<VerifyResult> result,
-    llvm::raw_fd_ostream &output)
+    std::shared_ptr<std::vector<std::string>> toRemove, llvm::raw_fd_ostream &output)
     : _ComplexityConfig(complexityConfig), _FeatureConfig(featureConfig), _Counts(counts),
-      _ToRemove(toRemove), _Result(result), _Output(output) {}
+      _ToRemove(toRemove), _Output(output) {}
 
 std::unique_ptr<clang::FrontendAction> VerifyActionFactory::create() {
   return std::make_unique<VerifyAction>(_ComplexityConfig, _FeatureConfig, _Counts, _ToRemove,
-                                        _Result, _Output);
+                                        _Output);
 }

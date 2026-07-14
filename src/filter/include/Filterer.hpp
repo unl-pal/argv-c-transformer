@@ -37,9 +37,9 @@ public:
    *
    * @param configFile Path to the INI-style properties file ("" = defaults only).
    * @param inputPath  Optional directory or .c file to filter. When given, it
-   *                   overrides databaseDir, and filterDir defaults to
-   *                   "<name>-filtered" (a filterDir set in the config still
-   *                   wins over the derived name).
+   *                   overrides databaseDir and sets filterDir to
+   *                   "<name>-filtered", both taking precedence over
+   *                   whatever the config file sets for those keys.
    */
   Filterer(std::string configFile, std::string inputPath = "");
 

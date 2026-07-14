@@ -40,9 +40,10 @@ public:
    *
    * @param configFile Path to the INI-style properties file ("" = defaults only).
    * @param inputPath  Optional directory (or single .c file) of filtered files
-   *                   to transform. When given, it overrides filterDir, and
-   *                   transformDir defaults to "<name>-transformed" (a
-   *                   transformDir set in the config still wins).
+   *                   to transform. When given, it overrides filterDir and
+   *                   sets transformDir to "<name>-transformed", both taking
+   *                   precedence over whatever the config file sets for those
+   *                   keys.
    */
   Transformer(std::string configFile, std::string inputPath = "");
 
@@ -92,18 +93,6 @@ public:
    * @return Total count of transformed files produced.
    */
   int transformAll(std::filesystem::path path);
-
-  /**
-   * @brief Detects a trivial benchmark whose generated main calls nothing.
-   *
-   * When every function in a file is skipped by the harness
-   * MainGenConsumer emits an empty `main` whose body
-   * is just `return 0;` and is discarded
-   *
-   * @param path Path to the transformed C file to inspect.
-   * @return true if the generated main contains no calls.
-   */
-  bool harnessIsEmpty(std::filesystem::path path);
 
   /**
    * @brief Parses the config file via the shared {@code parsePipelineConfig},

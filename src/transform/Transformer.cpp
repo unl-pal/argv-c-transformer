@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "include/Transformer.hpp"
-#include "ArgsFrontendActionFactory.hpp"
+#include "TransformAction.hpp"
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
 #include "ConfigParser.hpp"
@@ -11,11 +11,9 @@
 #include <csignal>
 #include <ctime>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
-#include <sstream>
 #include <string>
 #include <system_error>
 #include <sys/wait.h>
@@ -28,19 +26,18 @@ const std::string defaultTransformDir = "transformedFiles";
 const int defaultFileTimeoutSecs = 60;
 
 Transformer::Transformer(std::string configFile, std::string inputPath) : configuration() {
-  // Apply defaults; parseConfig overrides any keys present in configFile.
-  // When an input path is given on the command line, the derived transformDir
-  // acts as a default (a config file can still override it), but the input
-  // itself always wins over any filterDir in the config.
+  // Apply defaults, then let the config file override them. A command-line
+  // input path always wins over both filterDir and transformDir from the file
   configuration.debugLevel = defaultDebugLevel;
   configuration.filterDir = defaultFilterDir;
-  configuration.transformDir =
-      inputPath.empty() ? defaultTransformDir : inputBaseName(inputPath) + "-transformed";
+  configuration.transformDir = defaultTransformDir;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   if (!configFile.empty())
     parseConfig(configFile);
-  if (!inputPath.empty())
+  if (!inputPath.empty()) {
     configuration.filterDir = inputPath;
+    configuration.transformDir = inputBaseName(inputPath) + "-transformed";
+  }
   globalDebugLevel() = configuration.debugLevel;
 }
 
@@ -173,21 +170,6 @@ int Transformer::transformAll(std::filesystem::path path) {
   if (std::filesystem::is_regular_file(path) && path.extension() == ".c")
     return transformFileIsolated(path);
   return 0;
-}
-
-bool Transformer::harnessIsEmpty(std::filesystem::path path) {
-  std::ifstream in(path);
-  if (!in)
-    return false;
-  std::stringstream buffer;
-  buffer << in.rdbuf();
-  std::string content = buffer.str();
-
-  // MainGenConsumer builds the entry point as
-  //   "\nint main(void) {\n" + harness + "  return 0;\n}\n"
-  // so when no function could be harnessed (harness is empty), this exact
-  // block appears verbatim. Coupled to that format string in MainGenConsumer.
-  return content.find("int main(void) {\n  return 0;\n}") != std::string::npos;
 }
 
 void Transformer::parseConfig(std::string configFile) {

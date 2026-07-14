@@ -24,23 +24,23 @@ const std::string defaultTransformDir = "transformedFiles";
 const std::string defaultBenchmarkDir = "benchmarks";
 
 Verifier::Verifier(std::string configFile, std::string inputPath) : configuration() {
-  // Apply defaults; the config file overrides any keys it sets. When an
-  // input path is given on the command line, the derived benchmarkDir acts
-  // as a default (a config file can still override it), but the input itself
-  // always wins over any transformDir in the config.
+  // Apply defaults, then let the config file override them. A command-line
+  // input path always wins over config's transformDir and benchmarkDir
+  // (the transformDir-named guard below just avoids deriving
+  // "transformedFiles-benchmarks" when the input is literally that default
+  // directory name).
   config = parsePipelineConfig(configFile);
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
-  if (!config.benchmarkDir.empty())
-    configuration.benchmarkDir = config.benchmarkDir;
-  else if (!inputPath.empty() && inputBaseName(inputPath) != defaultTransformDir)
-    configuration.benchmarkDir = inputBaseName(inputPath) + "-benchmarks";
-  else
-    configuration.benchmarkDir = defaultBenchmarkDir;
-  if (!inputPath.empty())
+  configuration.benchmarkDir =
+      config.benchmarkDir.empty() ? defaultBenchmarkDir : config.benchmarkDir;
+  if (!inputPath.empty()) {
     configuration.transformDir = inputPath;
+    if (inputBaseName(inputPath) != defaultTransformDir)
+      configuration.benchmarkDir = inputBaseName(inputPath) + "-benchmarks";
+  }
   globalDebugLevel() = configuration.debugLevel;
 }
 
@@ -63,24 +63,19 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   }
 
   // Shared state the driver reads back after the tool run: fresh counts (for
-  // property selection), the rejected names, and the harness census.
+  // property selection) and the rejected names.
   auto counts = std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
   auto toRemove = std::make_shared<std::vector<std::string>>();
-  auto result = std::make_shared<VerifyResult>();
 
-  VerifyActionFactory factory(&config.complexity, &config.features, counts, toRemove, result,
-                              output);
+  VerifyActionFactory factory(&config.complexity, &config.features, counts, toRemove, output);
   bool ran = runToolOnFile(path.string(), factory);
   output.close();
   if (!ran) {
     std::filesystem::remove(outPath);
     return false;
   }
-  _functionsUnharnessed += result->removedCalls;
 
-  // Nothing left worth verifying: every harnessed function was repaired away
-  // (or the harness was empty to begin with).
-  if (result->harnessCalls == 0) {
+  if (harnessIsEmpty(outPath)) {
     debugLog(1, "[verify] discarded (harness empty after re-check): " + outPath.string());
     std::filesystem::remove(outPath);
     return false;
@@ -172,7 +167,7 @@ bool Verifier::checkCompilable(std::filesystem::path path) {
 
 std::vector<BenchmarkProperty> Verifier::selectProperties(
     const std::unordered_map<std::string, CountingVisitor::attributes> &counts) {
-  // TODO(you): use the per-function counts/features to conditionally include
+  // TODO: use the per-function counts/features to conditionally include
   // properties (loops → termination, int arithmetic → no-overflow, etc.).
   // For now, every benchmark gets both.
   (void)counts;
@@ -235,7 +230,6 @@ int Verifier::run() {
   std::cout << "\n=== Verify summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"
             << "  Benchmarks produced:    " << result << "\n"
-            << "  Discarded/failed:       " << discarded << "\n"
-            << "  Functions unharnessed:  " << _functionsUnharnessed << std::endl;
+            << "  Discarded/failed:       " << discarded << std::endl;
   return result;
 }

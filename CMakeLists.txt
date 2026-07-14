@@ -47,7 +47,6 @@ set(SOURCE_FILTER
   src/filter/FilterAction.cpp
   src/filter/Filterer.cpp
   src/filter/FilterFunctionsConsumer.cpp
-  src/filter/FrontendFactoryWithArgs.cpp
   src/filter/RemoveConsumer.cpp
   src/filter/RemoveVisitor.cpp
 )
@@ -55,7 +54,6 @@ set(SOURCE_FILTER
 set(SOURCE_TRANSFORM
   src/transform/AddStdIncludesConsumer.cpp
   src/transform/AddVerifiersConsumer.cpp
-  src/transform/ArgsFrontendActionFactory.cpp
   src/transform/MainGenConsumer.cpp
   src/transform/HavocCallsVisitor.cpp
   src/transform/HavocCallsConsumer.cpp

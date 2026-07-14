@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "include/Filterer.hpp"
-#include "FrontendFactoryWithArgs.hpp"
+#include "FilterAction.hpp"
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
@@ -25,16 +25,17 @@ const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultDatabaseDir = "database";
 
 Filterer::Filterer(std::string configFile, std::string inputPath) {
-  // When an input path is given on the command line, derived directories act
-  // as defaults (a config file can still override filterDir), but the input
-  // itself always wins over any databaseDir in the config.
-  configuration.filterDir =
-      inputPath.empty() ? defaultFilterDir : inputBaseName(inputPath) + "-filtered";
+  // Config file settings apply first; a command-line input path always wins
+  // over both databaseDir and filterDir from the config, since it is a more
+  // specific, explicit instruction than a static file.
+  configuration.filterDir = defaultFilterDir;
   configuration.databaseDir = defaultDatabaseDir;
   if (!configFile.empty())
     parseConfigFile(configFile);
-  if (!inputPath.empty())
+  if (!inputPath.empty()) {
     configuration.databaseDir = inputPath;
+    configuration.filterDir = inputBaseName(inputPath) + "-filtered";
+  }
 };
 
 void Filterer::parseConfigFile(std::string configFile) {
