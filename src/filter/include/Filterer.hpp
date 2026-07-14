@@ -4,12 +4,10 @@
 
 #pragma once
 
-#include "CountingVisitor.hpp"
+#include "ConfigParser.hpp"
 
 #include <filesystem>
-#include <map>
 #include <string>
-#include <utility>
 #include <vector>
 
 /**
@@ -46,15 +44,9 @@ public:
   Filterer(std::string configFile, std::string inputPath = "");
 
   /**
-   * @brief Parses the config file, populating the two per-function config
-   * maps and the file-level settings.
-   *
-   * Complexity metric keys (e.g. {@code ForLoops}) are parsed as a
-   * {@code min,max} pair into {@code complexityConfig}. Feature keys (e.g.
-   * {@code Concurrency}) are parsed as {@code ignore|require|forbid} into
-   * {@code featureConfig}. File-level settings (e.g. {@code minFileLoC}) go
-   * into {@code fileSettings}. Path settings go into {@code configuration}.
-   * Unknown keys are reported to stderr.
+   * @brief Parses the config file via the shared {@code parsePipelineConfig},
+   * then applies the filter-specific path handling (existence checks,
+   * filterDir creation) and debug-level plumbing.
    *
    * @param configFile Path to the INI-style properties file.
    */
@@ -105,35 +97,9 @@ public:
   const std::string &getFilterDir() const { return configuration.filterDir; }
 
 private:
-  /**
-   * @brief Per-function complexity thresholds loaded from the config.
-   *
-   * Keys are complexity metric names (e.g. {@code ForLoops}); values are
-   * {@code [min, max]} pairs. Defaults are {@code {0, 9999}}, meaning no
-   * filtering unless explicitly configured.
-   */
-  std::map<std::string, std::pair<int, int>> complexityConfig = {
-      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}}, {"IfStmt", {0, 9999}},
-      {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}},
-  };
-
-  /**
-   * @brief Per-function feature gates loaded from the config.
-   *
-   * Keys are feature names (e.g. {@code Concurrency}); values say whether a
-   * function must have the feature present, must not have it, or the
-   * feature is ignored for filtering. Defaults to {@code Ignore}.
-   */
-  std::map<std::string, FeatureGate> featureConfig = {
-      {"Concurrency", FeatureGate::Ignore},
-      {"FloatingPoint", FeatureGate::Ignore},
-  };
-
-  /**
-   * @brief File-level settings that aren't per-function (e.g. LoC bounds).
-   */
-  std::map<std::string, int> fileSettings = {
-      {"debugLevel", 0}, {"maxFileLoC", 9999}, {"minFileLoC", 0}};
+  /// Thresholds, feature gates, and file settings from the shared config
+  /// parser; the same structure the verify stage re-applies post-transform.
+  PipelineConfig config;
 
   /// Path settings and flags that don't fit either config map.
   struct filterConfigs configuration;

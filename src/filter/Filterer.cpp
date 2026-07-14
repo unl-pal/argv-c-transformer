@@ -8,7 +8,6 @@
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
 
-#include <algorithm>
 #include <clang/AST/Type.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
@@ -19,38 +18,11 @@
 #include <iostream>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
-#include <optional>
 #include <sstream>
 #include <string>
 
 const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultDatabaseDir = "database";
-
-/**
- * @brief Parses a complexity threshold value into a {min, max} pair.
- *
- * Accepts a "min,max" range (e.g. "1,10"), a bare value treated as a minimum
- * with no upper bound (e.g. "2" == "2,9999"), or a "," followed by just a max
- * (e.g. ",10" == "0,10").
- *
- * @param value Raw config value, already matched as key=value.
- * @return The parsed pair, or std::nullopt if the value is malformed.
- */
-static std::optional<std::pair<int, int>> parseComplexityValue(const std::string &value) {
-  std::string trimmed = trim(value);
-  size_t comma = trimmed.find(',');
-  std::string minStr = trim(trimmed.substr(0, comma));
-  std::string maxStr = comma == std::string::npos ? "9999" : trim(trimmed.substr(comma + 1));
-
-  // Note: this will allow and parse "5abc" as 5
-  try {
-    int min = minStr.empty() ? 0 : std::stoi(minStr);
-    int max = maxStr.empty() ? 9999 : std::stoi(maxStr);
-    return std::make_pair(min, max);
-  } catch (...) {
-    return std::nullopt;
-  }
-}
 
 Filterer::Filterer(std::string configFile, std::string inputPath) {
   // When an input path is given on the command line, derived directories act
@@ -66,77 +38,28 @@ Filterer::Filterer(std::string configFile, std::string inputPath) {
 };
 
 void Filterer::parseConfigFile(std::string configFile) {
-  if (!std::filesystem::exists(configFile)) {
-    std::cerr << "Config file not found: " << configFile << " — using defaults" << std::endl;
-    return;
+  config = parsePipelineConfig(configFile);
+
+  if (!config.databaseDir.empty()) {
+    configuration.databaseDir = config.databaseDir;
+    if (!std::filesystem::exists(config.databaseDir))
+      std::cerr << "Database directory not found: " << config.databaseDir << std::endl;
   }
-  for (auto [key, value] : parseIniFile(configFile)) {
-    if (complexityConfig.count(key)) {
-      std::optional<std::pair<int, int>> range = parseComplexityValue(value);
-      if (range && range->first > range->second) {
-        std::cerr << "Warning: complexity key '" << key << "' has min (" << range->first
-                  << ") greater than max (" << range->second << ") — ignoring value '" << value
-                  << "'" << std::endl;
-      } else if (range) {
-        complexityConfig.at(key) = *range;
-      } else {
-        std::cerr << "Warning: complexity key '" << key
-                  << "' expects 'min,max', 'min', or ',max' — ignoring value '" << value << "'"
-                  << std::endl;
-      }
-    } else if (featureConfig.count(key)) {
-      std::string v = trim(value);
-      std::transform(v.begin(), v.end(), v.begin(), ::tolower);
-      if (v == "require") {
-        featureConfig.at(key) = FeatureGate::Require;
-      } else if (v == "forbid") {
-        featureConfig.at(key) = FeatureGate::Forbid;
-      } else if (v == "ignore" || v.empty()) {
-        featureConfig.at(key) = FeatureGate::Ignore;
-      } else {
-        std::cerr << "Warning: unrecognised gate '" << value << "' for feature '" << key
-                  << "' — ignoring" << std::endl;
-      }
-    } else if (fileSettings.count(key)) {
-      try {
-        fileSettings.at(key) = std::stoi(value);
-      } catch (...) {
-      }
-      if (value == "false" || value == "False") {
-        fileSettings.at(key) = 0;
-      } else if (value == "true" || value == "True") {
-        fileSettings.at(key) = 1;
-      }
-    } else if (key == "databaseDir") {
-      configuration.databaseDir = value;
-      if (!std::filesystem::exists(value))
-        std::cerr << "Database directory not found: " << value << std::endl;
-    } else if (key == "filterDir") {
-      configuration.filterDir = value;
-      if (!std::filesystem::exists(value))
-        std::filesystem::create_directory(value);
-    } else if (key == "benchmarkDir" || key == "keepCompilesOnly" || key == "csv" ||
-               key == "downloadDir" || key == "language" || key == "projectCount" ||
-               key == "minNumStars" || key == "minRepoLoc") {
-      // consumed by the transform step or Downloader.py; not a filter key
-    } else if (key == "wipeOldBenchmarks" || key == "useNonStdHeaders") {
-      std::cerr << "Config key '" << key << "' has been removed — ignoring" << std::endl;
-    } else if (key == "debug") {
-      // silently ignored: replaced by debugLevel
-    } else {
-      std::cerr << "Unknown config key: " << key << std::endl;
-    }
+  if (!config.filterDir.empty()) {
+    configuration.filterDir = config.filterDir;
+    if (!std::filesystem::exists(config.filterDir))
+      std::filesystem::create_directory(config.filterDir);
   }
 
-  globalDebugLevel() = fileSettings.at("debugLevel");
+  globalDebugLevel() = config.fileSettings.at("debugLevel");
 
   if (globalDebugLevel() >= 1) {
     std::string dump = "[filter] loaded config: " + configFile;
-    for (const auto &[k, v] : fileSettings)
+    for (const auto &[k, v] : config.fileSettings)
       dump += "\n  " + k + " = " + std::to_string(v);
-    for (const auto &[k, range] : complexityConfig)
+    for (const auto &[k, range] : config.complexity)
       dump += "\n  " + k + " = " + std::to_string(range.first) + "," + std::to_string(range.second);
-    for (const auto &[k, gate] : featureConfig)
+    for (const auto &[k, gate] : config.features)
       dump += "\n  " + k + " = " +
               (gate == FeatureGate::Require   ? "require"
                : gate == FeatureGate::Forbid ? "forbid"
@@ -159,14 +82,14 @@ bool Filterer::checkPotentialFile(std::string fileName) {
       count++;
   }
 
-  if (count < fileSettings.at("minFileLoC")) {
+  if (count < config.fileSettings.at("minFileLoC")) {
     debugLog(1, "[filter] skipped (LoC " + std::to_string(count) + " < minFileLoC " +
-                    std::to_string(fileSettings.at("minFileLoC")) + "): " + fileName);
+                    std::to_string(config.fileSettings.at("minFileLoC")) + "): " + fileName);
     return false;
   }
-  if (count > fileSettings.at("maxFileLoC")) {
+  if (count > config.fileSettings.at("maxFileLoC")) {
     debugLog(1, "[filter] skipped (LoC " + std::to_string(count) + " > maxFileLoC " +
-                    std::to_string(fileSettings.at("maxFileLoC")) + "): " + fileName);
+                    std::to_string(config.fileSettings.at("maxFileLoC")) + "): " + fileName);
     return false;
   }
   return true;
@@ -252,7 +175,7 @@ int Filterer::run() {
       continue;
     }
 
-    FrontendFactoryWithArgs factory(&complexityConfig, &featureConfig, output);
+    FrontendFactoryWithArgs factory(&config.complexity, &config.features, output);
     bool ran = runToolOnFile(oldPath.string(), factory);
     output.close();
     if (!ran)

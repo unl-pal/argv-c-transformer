@@ -7,8 +7,10 @@ SPDX-License-Identifier: Apache-2.0
 # ArgV C Transformer — Design
 
 ArgV converts real-world C source files into [SV-Comp](https://sv-comp.sosy-lab.org/)-style
-verification benchmarks. The pipeline has three stages — **Download**, **Filter**, and
-**Transform** — each driven by the same INI config file (e.g. `properties.config`).
+verification benchmarks. The pipeline has four stages — **Download**, **Filter**,
+**Transform**, and **Verify** — each driven by the same INI config file (e.g.
+`properties.config`), parsed once by the shared `parsePipelineConfig`
+(`src/common/include/ConfigParser.hpp`) so every stage sees identical thresholds.
 
 ## Pipeline Overview
 
@@ -22,25 +24,32 @@ flowchart LR
     DL["Download<br/><code>src/download/Downloader.py</code>"]
     FI["Filter<br/><code>build/filter</code>"]
     TR["Transform<br/><code>build/transform</code>"]
+    VF["Verify<br/><code>build/verify</code>"]
 
     DB[("databaseDir<br/>cloned repos / raw .c files")]
     FD[("filterDir<br/>filtered .c files")]
-    BM[("benchmarkDir<br/>.c + .yml task files")]
+    TD[("transformDir<br/>transformed .c files")]
+    BM[("benchmarkDir<br/>.c + .yml + .i benchmarks")]
 
     CSV --> DL
     DL --> DB
     DB --> FI
     FI --> FD
     FD --> TR
-    TR --> BM
+    TR --> TD
+    TD --> VF
+    VF --> BM
 
     CFG -.-> DL
     CFG -.-> FI
     CFG -.-> TR
+    CFG -.-> VF
 ```
 
-The `full` binary runs Filter then Transform in one invocation. All three binaries take the
-config file path as their sole argument
+The `full` binary runs Filter, Transform, then Verify in one invocation. All four C++
+binaries take up to two positional arguments — an input (directory or single `.c` file)
+and/or a config file, in either order; a `-filtered`/`-transformed` suffix on the input
+name is stripped when deriving default output names.
 
 ## Stage Responsibilities
 
@@ -73,15 +82,16 @@ Transform step can still resolve its return type.
   body-stripped. This prevents vestigial functions from appearing in the final benchmark —
   they would have bodies but never be called. `main` **is** exempt from this gate — its
   `argc`/`argv` params are handled specially by `MainGenConsumer` in the Transform stage.
-- Applies `[File Requirements and Settings]` (e.g. `minFileLoC`, `useNonStdHeaders`,
-  `keepCompilesOnly`).
+- Applies `[File Requirements and Settings]` (e.g. `minFileLoC`, `useNonStdHeaders`).
 - Injects `extern __VERIFIER_nondet_*` declarations for the types that removed
   functions leave behind.
 - Writes the surviving, rewritten files to `filterDir`.
 
 ### 3. Transform (`src/transform/`, driver: `Transformer.cpp`)
 
-Turns filtered files into self-contained, intraprocedural SV-Comp benchmarks.
+Turns filtered files into self-contained, intraprocedural benchmark sources. This stage
+is purely source→source: it writes rewritten `.c` files to `transformDir` and leaves all
+finalization (compile check, `.yml`, `.i`) to the Verify stage.
 
 - **Havoc calls** (`HavocCallsVisitor`): every call to a function declared *in this file*
   is replaced based on return type:
@@ -115,20 +125,58 @@ Turns filtered files into self-contained, intraprocedural SV-Comp benchmarks.
   `src/common/include/StdHeaders.hpp` (a type→header registry with categories for
   future logical-structure filtering), and re-injects any needed `#include <...>` not
   already present.
-- **Post-processing** (`Transformer::transformFile`):
-  - **Empty-harness discard**: if the generated `main` contains no function calls (every
-    function was skipped), the output file is unconditionally deleted
-  - **Compile check**: the output is compiled with `clang -fsyntax-only`;
-    non-compiling benchmarks are deleted when `keepCompilesOnly` is set
-  - **Preprocessing**: surviving benchmarks are preprocessed into a `.i` file with
-    `gcc -E -P -std=gnu11` (the form SV-Comp consumes); on failure the `.c`/`.yml`/`.i`
-    are removed
-- Emits `.c` + `.yml` task files into `benchmarkDir`; `.set` files in
-  `argc-benchmarks/` group `.yml` files into SV-Comp benchmark sets.
+- **Empty-harness discard** (`Transformer::transformFile`): if the generated `main`
+  contains no function calls (every function was skipped), the output file is
+  unconditionally deleted. This is an early string-match against `MainGenConsumer`'s
+  verbatim empty-main format; the Verify stage repeats the check structurally after
+  harness repair.
+- Emits `.c` files into `transformDir`.
 - **Crash isolation** (`Transformer::transformFileIsolated`): each file's transform runs
   in a forked child, so a segfault, OOM-kill, assertion, or hang on one pathological file
   cannot halt the whole batch. The parent enforces a per-file `fileTimeoutSecs` budget
-  (default 60s), kills overruns, cleans up any partial output, and continues.
+  (default 60s), kills overruns, cleans up any partial output, and continues. (Verify
+  does not fork — its input is the pipeline's own generated code.)
+
+### 4. Verify (`src/verify/`, driver: `Verifier.cpp`)
+
+Re-checks each transformed file against the *same* config thresholds the Filter applied,
+repairs or discards degraded benchmarks, and finalizes survivors into `benchmarkDir`.
+
+The stage exists because Transform's rewrites are text-only Rewriter edits — the AST the
+Transform stage holds still reflects the *pre*-edit source, so only a fresh reparse can
+see the post-transform shape. And that shape can differ materially: havocking drops void
+calls and prunes control flow left empty by the drop, so a function can fall below
+complexity thresholds it originally met.
+
+Consumer chain (over a fresh AST of the finished, post-main-gen source):
+
+1. `CountingConsumer` (reused from Filter) — fresh per-function counts.
+2. `VerifyFunctionsConsumer` — re-applies `[Complexity Requirements]` /
+   `[Feature Requirements]`. Exempts the generated artifacts: `main` and any
+   `__VERIFIER_*`/`__havoc_*` definitions (`isVerifierGenerated` in
+   `VerifierNames.hpp`). No parameter-type gate (params were vetted in Filter, and
+   `original_main`'s `argc/argv` are legitimate). `__VERIFIER_nondet_*` calls are
+   excluded from the `CallFunc` count (they replace real calls 1:1 and aren't
+   interprocedural complexity).
+3. `RemoveConsumer` (reused from Filter) — strips rejected bodies to `;`.
+4. `HarnessRepairConsumer` — **repair policy**: a stripped function's call must also be
+   removed from the generated `main`, or the harness calls a declared-but-undefined
+   function (passes `-fsyntax-only`, unsound for termination). All harness calls are
+   top-level statements of `main`, so repair only scans main's direct children, erasing
+   calls to rejected functions and counting those that remain. Zero remaining harness
+   calls → the benchmark is discarded.
+
+The driver then finalizes each survivor:
+
+- **Compile check**: `clang -fsyntax-only` (with `__VERIFIER_*` stubs prepended);
+  failures are discarded when `keepCompilesOnly` is set (default true)
+- **Task file**: `.yml` written via `selectProperties`, which receives the fresh
+  per-function counts (the hook for future AST-driven property selection; currently a
+  fixed `termination` + `no-overflow` set)
+- **Preprocessing**: `clang -E -P -std=gnu11` produces the `.i` SV-Comp consumes; on
+  failure the `.c`/`.yml` are removed
+
+`.set` files in `argc-benchmarks/` group `.yml` files into SV-Comp benchmark sets.
 
 ## Design Choices and Limitations
 
@@ -173,6 +221,10 @@ which `__VERIFIER_nondet_*` variant to use.
   For `main(int, char**)`, the pointer params have a well-defined contract (unlike an
   arbitrary `void *`), so we synthesize a realistic `argc`/`argv` using havocked C strings
   rather than skipping the function.
+- **Verify**: the *generated* `main` is exempt from the threshold re-check (it's harness
+  scaffolding, not benchmark content); `original_main` is subject to thresholds like any
+  function, but no parameter gate is re-applied, so its `argc`/`argv` never trigger
+  removal.
 - The `argc` bound (`0–7`) and `argv` string size (`16` bytes) are fixed constants — they
   keep the verifier's state space bounded but are not configurable.
 
@@ -191,7 +243,8 @@ project-local headers are havocked anyway, so the includes only leave unresolvab
 references. Standard types that were reaching the file transitively through a stripped
 project header are recovered by `AddStdIncludesConsumer` (see the Transform stage above).
 Files that depend on *project* types or macros from a local header will still fail to
-compile after stripping and are caught by `keepCompilesOnly`.
+compile after stripping and are caught by the Verify stage's `keepCompilesOnly` compile
+check.
 
 ### Function-Name Map Lookups in `CountingVisitor`
 
@@ -224,10 +277,13 @@ as raw text.
 
 ### Empty Benchmark Discard
 
-A benchmark whose generated `main` calls no functions (because every function was
-unsupported) is unconditionally deleted. This is a post-write text check coupled to
-`MainGenConsumer`'s generated-main format string — it detects the exact verbatim empty
-main `int main(void) {\n  return 0;\n}`.
+A benchmark whose generated `main` calls no functions is unconditionally deleted. This
+happens at two points: Transform does an early post-write text check coupled to
+`MainGenConsumer`'s generated-main format string (the exact verbatim empty main
+`int main(void) {\n  return 0;\n}`), and Verify does a structural recount after harness
+repair — the text check can't work there, because repaired calls leave `;` statements
+behind, so `HarnessRepairConsumer` counts the surviving harness calls instead and the
+benchmark is discarded when that count is zero.
 
 ### What Is Not Supported
 
@@ -252,18 +308,58 @@ main `int main(void) {\n  return 0;\n}`.
   correctly via `getAs<BuiltinType>()`, but a typedef to an unsupported type (e.g.
   `typedef struct foo bar`) is treated as unsupported
 
+## Downstream Verifier Frontend Compatibility
+
+Benchmarks that clang accepts can still be rejected by an SV-Comp verifier's own C
+frontend. Two classes of this have been characterized on full benchmark runs:
+
+### CPAchecker "parsing failed" (32/1,880 benchmarks)
+
+CPAchecker's Eclipse-CDT frontend is stricter than CBMC's and UAutomizer's about a
+handful of valid-but-unusual C constructs. All 32 failures traced back to constructs in
+the *original* downloaded source (none transform-introduced), in eight categories — the
+largest being non-const string literals initialized into `char *` (~11 files), K&R-style
+function definitions, and function-scope `extern` re-declarations, plus one-offs
+(`_Atomic(...)` typedefs from `<stdatomic.h>`, GCC vector-`mode` attributes, excess
+array initializers, scalar braced initializers). Four of the categories map onto clang
+warning flags (`-Wdeprecated-non-prototype`, `-Wwrite-strings`, `-Wexcess-initializers`,
+`-Wdeprecated-attributes`); the proposed mitigation is to enable those in the Verify
+stage's `checkCompilable` and record hits as a `verifier-frontend-risk` note rather than
+a filtering gate, since the other verifiers tolerate these files. Function-scope
+`extern` has no clang diagnostic and would need a small `VisitVarDecl` AST check.
+Full breakdown: [`cpachecker-parsing-failures.md`](./cpachecker-parsing-failures.md).
+
+### CBMC `_FloatNN` typedef conflict (~66% of CBMC runs)
+
+Preprocessing with `clang -E -P -std=gnu11` inlines glibc's fallback typedefs for the
+C23 extended float types (`typedef float _Float32;` etc., from `bits/floatn-common.h`)
+into the `.i` file. CBMC treats `_Float32`/`_Float64`/… as reserved built-in type names
+and aborts with `ERROR (6)` on the (semantically inert) redeclaration; CPAchecker and
+UAutomizer don't special-case the names and are unaffected. The fix is to strip exactly
+those `typedef <type> _FloatNN;` lines from the `.i` after preprocessing — safe because
+no generated code spells those names; they are pure header noise. A `stripFloatNNTypedefs`
+regex helper doing this was validated on a full run (identical benchmark counts, CBMC
+went from instant errors to real verdicts) but **is not currently in the tree** — its
+home would be `Verifier::preprocess`, now that preprocessing lives in the Verify stage.
+A same-shaped, currently 1-file gap exists for `<stdatomic.h>`'s
+`typedef _Atomic(_Bool) atomic_bool;` lines (a CPAchecker parse failure, category 4
+above). Details: [`cbmc-float-nn-typedef-fix.md`](./cbmc-float-nn-typedef-fix.md).
+
 ## Internal Structure: the Clang AST Pipeline Pattern
 
-Filter and Transform share the same Clang tooling skeleton. Each tool wires a sequence of
-AST consumers into a `MultiplexConsumer`; all consumers share one `Rewriter` and
-communicate through shared state (`toFilter` map, `toRemove` vector, `neededTypes` set).
-The Rewriter's edited buffer is flushed to the output file in `EndSourceFileAction`.
+Filter, Transform, and Verify share the same Clang tooling skeleton. Each tool wires a
+sequence of AST consumers into a `MultiplexConsumer`; all consumers share one `Rewriter`
+and communicate through shared state (`toFilter` map, `toRemove` vector, `neededTypes`
+set). The Rewriter's edited buffer is flushed to the output file in
+`EndSourceFileAction`. Verify deliberately *reuses* Filter's `CountingConsumer` and
+`RemoveConsumer` rather than reimplementing them, so the counting and stripping
+semantics cannot drift between the two stages.
 
 ```mermaid
 flowchart TB
-    DRV["Filterer / Transformer<br/>(tool driver)"]
+    DRV["Filterer / Transformer / Verifier<br/>(tool driver)"]
     FAC["FrontendActionFactory<br/>(carries config args)"]
-    ACT["FilterAction / TransformAction<br/>(ASTFrontendAction)"]
+    ACT["FilterAction / TransformAction / VerifyAction<br/>(ASTFrontendAction)"]
     MUX["MultiplexConsumer"]
 
     DRV --> FAC --> ACT --> MUX
@@ -284,17 +380,28 @@ flowchart TB
         T1 --> T2 --> T3 --> T4
     end
 
+    subgraph verifyC["Verify consumers (in order)"]
+        V1["CountingConsumer<br/>(reused from Filter) fresh counts"]
+        V2["VerifyFunctionsConsumer<br/>re-apply thresholds, exempt generated"]
+        V3["RemoveConsumer<br/>(reused from Filter) strip rejected bodies"]
+        V4["HarnessRepairConsumer<br/>erase rejected calls from main"]
+        V1 --> V2 --> V3 --> V4
+    end
+
     MUX --> filterC
     MUX --> transformC
+    MUX --> verifyC
 
     RW[("shared Rewriter<br/>+ toFilter / toRemove / neededTypes")]
     filterC -.-> RW
     transformC -.-> RW
+    verifyC -.-> RW
     RW --> OUT[/"output .c file<br/>(flushed in EndSourceFileAction)"/]
 ```
 
-Verifier nondet naming and suffix→C-type mappings live in
-`src/common/include/VerifierNames.hpp`, shared by both stages.
+Verifier nondet naming, suffix→C-type mappings, and the `isVerifierGenerated`
+generated-artifact check live in `src/common/include/VerifierNames.hpp`, shared by all
+stages.
 
 ## Binaries
 
@@ -302,4 +409,5 @@ Verifier nondet naming and suffix→C-type mappings live in
 |-------------|------------------|--------------------------------------------------|
 | `filter`    | `src/filter/`    | Filter stage only                                 |
 | `transform` | `src/transform/` | Transform stage only                              |
-| `full`      | `src/full/`      | Filter then Transform in one run                  |
+| `verify`    | `src/verify/`    | Verify stage only                                 |
+| `full`      | `src/full/`      | Filter, Transform, then Verify in one run         |

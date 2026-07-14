@@ -5,41 +5,36 @@
 #include "ArgsFrontendActionFactory.hpp"
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
+#include "ConfigParser.hpp"
 #include "DebugLog.hpp"
 
-#include <csignal>
-#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
-#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <vector>
 
 const int defaultDebugLevel = 0;
-const bool defaultKeepCompilesOnly = true;
 const std::string defaultFilterDir = "filteredFiles";
-const std::string defaultBenchmarkDir = "benchmarks";
+const std::string defaultTransformDir = "transformedFiles";
 /// Per-file wall-clock budget for the isolated transform child, in seconds.
 const int defaultFileTimeoutSecs = 60;
 
 Transformer::Transformer(std::string configFile, std::string inputPath) : configuration() {
   // Apply defaults; parseConfig overrides any keys present in configFile.
-  // When an input path is given on the command line, the derived benchmarkDir
+  // When an input path is given on the command line, the derived transformDir
   // acts as a default (a config file can still override it), but the input
   // itself always wins over any filterDir in the config.
   configuration.debugLevel = defaultDebugLevel;
-  configuration.keepCompilesOnly = defaultKeepCompilesOnly;
   configuration.filterDir = defaultFilterDir;
-  configuration.benchmarkDir =
-      inputPath.empty() ? defaultBenchmarkDir : inputBaseName(inputPath) + "-benchmarks";
+  configuration.transformDir =
+      inputPath.empty() ? defaultTransformDir : inputBaseName(inputPath) + "-transformed";
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   if (!configFile.empty())
     parseConfig(configFile);
@@ -48,7 +43,7 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
   globalDebugLevel() = configuration.debugLevel;
 }
 
-// Flatten the filtered path into a single filename under benchmarkDir:
+// Flatten the filtered path into a single filename under transformDir:
 //   filtered-files/antirez/redis/src/endianconv.c
 //   → transformed-files/antirez_redis_src_endianconv.c
 // Strip the filterDir prefix (works for both relative and absolute paths),
@@ -67,7 +62,7 @@ std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path pat
       flatName += "_";
     flatName += part;
   }
-  return std::filesystem::path(configuration.benchmarkDir) / flatName;
+  return std::filesystem::path(configuration.transformDir) / flatName;
 }
 
 bool Transformer::transformFile(std::filesystem::path path) {
@@ -98,31 +93,14 @@ bool Transformer::transformFile(std::filesystem::path path) {
     std::filesystem::remove(srcPath);
     return false;
   }
-
-  // Result: drop the output if it doesn't compile and we're keeping compiles only
-  if (!checkCompilable(srcPath)) {
-    if (configuration.keepCompilesOnly) {
-      std::filesystem::remove(srcPath);
-    }
-    return false;
-  }
-  writeBenchmarkTask(srcPath);
-  if (!preprocess(srcPath)) {
-    std::cerr << "Preprocessing failed, discarding: " << srcPath.string() << std::endl;
-    std::filesystem::path ymlPath = srcPath;
-    ymlPath.replace_extension(".yml");
-    std::filesystem::remove(srcPath);
-    std::filesystem::remove(ymlPath);
-    return false;
-  }
   return true;
 }
 
 // Runs transformFile in a forked child so a crash, OOM-kill, assertion, or
 // hang on a single pathological file cannot take down the whole batch. The
-// child does all the file I/O (rewritten .c, .yml, .i) and exits with 1 on a
-// produced benchmark, 0 otherwise; the parent enforces a wall-clock timeout
-// and reaps the child, translating its fate into the success count.
+// child does the file I/O (the rewritten .c) and exits with 1 on a produced
+// file, 0 otherwise; the parent enforces a wall-clock timeout and reaps the
+// child, translating its fate into the success count.
 int Transformer::transformFileIsolated(std::filesystem::path path) {
   _totalProcessed++;
   pid_t pid = fork();
@@ -166,23 +144,18 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
   if (WIFEXITED(status))
     return WEXITSTATUS(status) == 1 ? 1 : 0;
   // WIFSIGNALED: segfault, OOM-kill, etc. The child may have left a partial
-  // .c/.yml behind; harnessIsEmpty/keepCompilesOnly never ran, so clean up.
+  // .c behind; harnessIsEmpty never ran, so clean up.
   std::cerr << "Transform crashed (signal " << WTERMSIG(status) << "), skipping: "
             << path.string() << std::endl;
   cleanupPartialOutput(path);
   return 0;
 }
 
-// Remove any .c/.yml/.i a crashed or timed-out child left half-written, so
-// downstream steps never see a partial benchmark.
+// Remove any .c a crashed or timed-out child left half-written, so
+// downstream steps never see a partial file.
 void Transformer::cleanupPartialOutput(std::filesystem::path path) {
-  std::filesystem::path srcPath = flattenedOutputPath(path);
   std::error_code ec;
-  for (const char *ext : {".c", ".yml", ".i"}) {
-    std::filesystem::path p = srcPath;
-    p.replace_extension(ext);
-    std::filesystem::remove(p, ec);
-  }
+  std::filesystem::remove(flattenedOutputPath(path), ec);
 }
 
 int Transformer::transformAll(std::filesystem::path path) {
@@ -201,66 +174,6 @@ int Transformer::transformAll(std::filesystem::path path) {
   return 0;
 }
 
-static constexpr const char *kVerifierStubs = R"(
-#include <stdbool.h>
-#include <stddef.h>
-bool __VERIFIER_nondet_bool(void) { return false; }
-char __VERIFIER_nondet_char(void) { return 'a'; }
-unsigned char __VERIFIER_nondet_uchar(void) { return 'a'; }
-short __VERIFIER_nondet_short(void) { return 0; }
-unsigned short __VERIFIER_nondet_ushort(void) { return 0; }
-int __VERIFIER_nondet_int(void) { return 0; }
-unsigned int __VERIFIER_nondet_uint(void) { return 0; }
-long __VERIFIER_nondet_long(void) { return 0; }
-unsigned long __VERIFIER_nondet_ulong(void) { return 0; }
-long long __VERIFIER_nondet_longlong(void) { return 0; }
-unsigned long long __VERIFIER_nondet_ulonglong(void) { return 0; }
-float __VERIFIER_nondet_float(void) { return 0; }
-double __VERIFIER_nondet_double(void) { return 0; }
-void* __VERIFIER_nondet_pointer(void) { return (void*)(0); }
-void __VERIFIER_nondet_memory(void *mem, size_t size) {
-  unsigned char *p = (unsigned char *)mem;
-  for (size_t i = 0; i < size; i++) p[i] = __VERIFIER_nondet_uchar();
-}
-void reach_error(void) {}
-)";
-
-namespace {
-
-// Builds "clang <flags> -resource-dir=<dir> [-isysroot <sdk>]", or nullopt if
-// the resource directory can't be determined.
-std::optional<std::string> clangCommand(const std::string &flags) {
-  std::optional<std::string> resourceDir = getResourceDir();
-  if (!resourceDir)
-    return std::nullopt;
-  std::string cmd = "clang " + flags + " -resource-dir=" + *resourceDir;
-  if (std::optional<std::string> sysroot = getSysroot())
-    cmd += " -isysroot " + *sysroot;
-  return cmd;
-}
-
-} // namespace
-
-// NOTE: cmd is passed to std::system (shell-interpreted), and path/verifierPath
-// are not escaped. path originates from a cloned/downloaded repository, so a
-// pathological filename containing shell metacharacters could inject commands
-bool Transformer::checkCompilable(std::filesystem::path path) {
-  std::optional<std::string> cmd = clangCommand("-fsyntax-only -xc");
-  if (!cmd)
-    return false;
-
-  std::filesystem::path verifierPath = path.parent_path() / "__verifier_stubs.c";
-  {
-    std::ofstream out(verifierPath);
-    out << kVerifierStubs;
-  }
-
-  *cmd += " " + path.string() + " " + verifierPath.string() + " 2>/dev/null";
-  int result = std::system(cmd->c_str());
-  std::filesystem::remove(verifierPath);
-  return result == 0;
-}
-
 bool Transformer::harnessIsEmpty(std::filesystem::path path) {
   std::ifstream in(path);
   if (!in)
@@ -276,85 +189,19 @@ bool Transformer::harnessIsEmpty(std::filesystem::path path) {
   return content.find("int main(void) {\n  return 0;\n}") != std::string::npos;
 }
 
-std::vector<BenchmarkProperty> Transformer::selectProperties() {
-  // TODO(you): later, accept AST characteristics and conditionally include
-  // properties (loops → termination, int arithmetic → no-overflow, etc.).
-  // For now, every benchmark gets both.
-  return {
-      {"../properties/no-overflow.prp", true},
-      {"../properties/termination.prp", true},
-  };
-}
-
-void Transformer::writeBenchmarkTask(std::filesystem::path cPath) {
-  std::filesystem::path ymlPath = cPath;
-  ymlPath.replace_extension(".yml");
-
-  std::string inputFile = cPath.stem().string() + ".i";
-  std::vector<BenchmarkProperty> properties = selectProperties();
-
-  std::ofstream out(ymlPath);
-  if (!out) {
-    std::cerr << "Failed to write task file: " << ymlPath.string() << std::endl;
-    return;
-  }
-
-  out << "format_version: '2.0'\n"
-      << "\n"
-      << "input_files: '" << inputFile << "'\n"
-      << "\n"
-      << "properties:\n";
-  for (const BenchmarkProperty &prop : properties) {
-    out << "  - property_file: " << prop.propertyFile << "\n"
-        << "    expected_verdict: " << (prop.expectedVerdict ? "true" : "false") << "\n";
-  }
-  out << "\n"
-      << "options:\n"
-      << "  language: C\n"
-      << "  data_model: LP64\n";
-}
-
-// NOTE: same std::system/unescaped-path caveat as checkCompilable above.
-bool Transformer::preprocess(std::filesystem::path cPath) {
-  std::filesystem::path iPath = cPath;
-  iPath.replace_extension(".i");
-
-  std::optional<std::string> cmd = clangCommand("-E -P -std=gnu11");
-  if (!cmd)
-    return false;
-  *cmd += " " + cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
-  return std::system(cmd->c_str()) == 0;
-}
-
 void Transformer::parseConfig(std::string configFile) {
-  if (!std::filesystem::exists(configFile)) {
-    std::cerr << "Config file not found: " << configFile << " — using defaults" << std::endl;
-    return;
+  PipelineConfig config = parsePipelineConfig(configFile);
+  configuration.debugLevel = config.fileSettings.at("debugLevel");
+  configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  if (!config.transformDir.empty()) {
+    configuration.transformDir = config.transformDir;
+    if (!std::filesystem::exists(config.transformDir))
+      std::filesystem::create_directory(config.transformDir);
   }
-  for (const auto &[key, value] : parseIniFile(configFile)) {
-    if (key == "benchmarkDir") {
-      configuration.benchmarkDir = value;
-      if (!std::filesystem::exists(value))
-        std::filesystem::create_directory(value);
-    } else if (key == "filterDir") {
-      configuration.filterDir = value;
-      if (!std::filesystem::exists(value))
-        std::cerr << "Filter directory not found: " << value << std::endl;
-    } else if (key == "debugLevel") {
-      try {
-        configuration.debugLevel = std::stoi(value);
-      } catch (...) {
-        configuration.debugLevel = 0;
-      }
-    } else if (key == "keepCompilesOnly") {
-      configuration.keepCompilesOnly = (value == "true" || value == "True");
-    } else if (key == "fileTimeoutSecs") {
-      try {
-        configuration.fileTimeoutSecs = std::stoi(value);
-      } catch (...) {
-        configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
-      }
-    }
+  if (!config.filterDir.empty()) {
+    configuration.filterDir = config.filterDir;
+    if (!std::filesystem::exists(config.filterDir))
+      std::cerr << "Filter directory not found: " << config.filterDir << std::endl;
   }
 }
 
@@ -368,7 +215,7 @@ int Transformer::run() {
   int discarded = _totalProcessed - result;
   std::cout << "\n=== Transform summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"
-            << "  Benchmarks produced:    " << result << "\n"
+            << "  Files transformed:      " << result << "\n"
             << "  Discarded/failed:       " << discarded << std::endl;
   return result;
 }

@@ -56,5 +56,5 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      - name: Smoke test (end-to-end filter/transform)
-        run: ./tests/smoke/run_smoke_test.sh ./build/filter ./build/transform
+      - name: Smoke test (end-to-end filter/transform/verify)
+        run: ./tests/smoke/run_smoke_test.sh ./build/filter ./build/transform ./build/verify

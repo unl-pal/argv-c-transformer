@@ -77,12 +77,14 @@ inline void printUsage(const std::string &toolName) {
  * @brief Derives the short name of an input for output-directory naming.
  *
  * A directory yields its final component ("path/to/redis" → "redis"), a file
- * its stem ("src/foo.c" → "foo"). A trailing "-filtered" suffix is stripped so
- * the transform step run on "redis-filtered" still names its output
- * "redis-benchmarks" rather than "redis-filtered-benchmarks".
+ * its stem ("src/foo.c" → "foo"). A trailing "-filtered" or "-transformed"
+ * stage suffix is stripped so e.g. the verify step run on "redis-transformed"
+ * still names its output "redis-benchmarks" rather than
+ * "redis-transformed-benchmarks".
  *
  * @param inputPath Directory or .c file path as given on the command line.
- * @return The base name to build "<name>-filtered" / "<name>-benchmarks" from.
+ * @return The base name to build "<name>-filtered" / "<name>-transformed" /
+ *         "<name>-benchmarks" from.
  */
 inline std::string inputBaseName(const std::string &inputPath) {
   // lexically_normal drops a trailing slash so "repo/" still yields "repo".
@@ -90,8 +92,12 @@ inline std::string inputBaseName(const std::string &inputPath) {
   std::string name = path.stem().string();
   if (name.empty() || name == ".")
     name = std::filesystem::absolute(path).parent_path().filename().string();
-  const std::string suffix = "-filtered";
-  if (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0)
-    name = name.substr(0, name.size() - suffix.size());
+  for (const std::string suffix : {"-filtered", "-transformed"}) {
+    if (name.size() > suffix.size() &&
+        name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+      name = name.substr(0, name.size() - suffix.size());
+      break;
+    }
+  }
   return name;
 }

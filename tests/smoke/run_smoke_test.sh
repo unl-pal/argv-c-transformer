@@ -4,23 +4,24 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# End-to-end smoke test for the filter/transform pipeline, run against a
-# small fixed corpus (tests/smoke/samples) exercising known-quirky patterns.
+# End-to-end smoke test for the filter/transform/verify pipeline, run against
+# a small fixed corpus (tests/smoke/samples) exercising known-quirky patterns.
 #
 # Unlike the ctest golden tests (which check AST-consumer behavior in
 # isolation), this drives the actual built binaries end-to-end, including
-# the `clang -E -P` / `clang -fsyntax-only` shell-outs in Transformer.cpp
+# the `clang -E -P` / `clang -fsyntax-only` shell-outs in Verifier.cpp
 # that resolve `clang` via PATH rather than the linked LLVM libraries. That
 # path is the one most likely to drift between platforms (e.g. macOS
 # resolving Apple's system clang instead of Homebrew's llvm@20), so this is
 # meant to run on every CI platform, not just Linux.
 #
-# Usage: run_smoke_test.sh <filter_bin> <transform_bin>
+# Usage: run_smoke_test.sh <filter_bin> <transform_bin> <verify_bin>
 
 set -eu
 
-FILTER_BIN="${1:?usage: run_smoke_test.sh <filter_bin> <transform_bin>}"
-TRANSFORM_BIN="${2:?usage: run_smoke_test.sh <filter_bin> <transform_bin>}"
+FILTER_BIN="${1:?usage: run_smoke_test.sh <filter_bin> <transform_bin> <verify_bin>}"
+TRANSFORM_BIN="${2:?usage: run_smoke_test.sh <filter_bin> <transform_bin> <verify_bin>}"
+VERIFY_BIN="${3:?usage: run_smoke_test.sh <filter_bin> <transform_bin> <verify_bin>}"
 SAMPLES_DIR="$(cd "$(dirname "$0")/samples" && pwd)"
 
 WORK=$(mktemp -d)
@@ -31,7 +32,8 @@ fail=0
 echo "=================================== Toolchain ==================================="
 echo "filter:    $FILTER_BIN"
 echo "transform: $TRANSFORM_BIN"
-echo "clang (PATH-resolved, used by Transformer.cpp's shell-outs):"
+echo "verify:    $VERIFY_BIN"
+echo "clang (PATH-resolved, used by Verifier.cpp's shell-outs):"
 command -v clang && clang --version || {
   echo "FAIL: no 'clang' resolvable on PATH"
   fail=1
@@ -42,16 +44,27 @@ echo "=================================== Run: default config (Concurrency=ignor
 cat > "$WORK/default.config" <<EOF
 [File Locations]
 filterDir=$WORK/filtered-default
+transformDir=$WORK/transformed-default
 benchmarkDir=$WORK/bench-default
 EOF
 
 "$FILTER_BIN" "$SAMPLES_DIR" "$WORK/default.config"
 "$TRANSFORM_BIN" "$WORK/filtered-default" "$WORK/default.config"
+"$VERIFY_BIN" "$WORK/transformed-default" "$WORK/default.config"
 
 echo
 echo "--- Assertion: baseline file produces a benchmark ---"
 if [ ! -f "$WORK/bench-default/clean_ok.c" ]; then
   echo "FAIL: clean_ok.c did not produce a benchmark — pipeline itself is broken on this platform"
+  fail=1
+else
+  echo "OK"
+fi
+
+echo
+echo "--- Assertion: benchmark has task file and preprocessed input ---"
+if [ ! -f "$WORK/bench-default/clean_ok.yml" ] || [ ! -f "$WORK/bench-default/clean_ok.i" ]; then
+  echo "FAIL: clean_ok benchmark is missing its .yml or .i (verify finalization broken)"
   fail=1
 else
   echo "OK"
@@ -71,6 +84,7 @@ echo "=================================== Run: Concurrency=forbid ==============
 cat > "$WORK/forbid.config" <<EOF
 [File Locations]
 filterDir=$WORK/filtered-forbid
+transformDir=$WORK/transformed-forbid
 benchmarkDir=$WORK/bench-forbid
 
 [Feature Requirements]
@@ -79,6 +93,7 @@ EOF
 
 "$FILTER_BIN" "$SAMPLES_DIR" "$WORK/forbid.config"
 "$TRANSFORM_BIN" "$WORK/filtered-forbid" "$WORK/forbid.config"
+"$VERIFY_BIN" "$WORK/transformed-forbid" "$WORK/forbid.config"
 
 echo
 echo "--- Assertion: no live pthread/semaphore call survives Concurrency=forbid ---"

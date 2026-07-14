@@ -6,33 +6,17 @@
 
 #include <filesystem>
 #include <string>
-#include <vector>
-
-/**
- * @brief A single property entry in an SV-Comp .yml task file.
- *
- * Maps to one block under the {@code properties:} key. For now every benchmark
- * gets the same fixed set; later, {@code selectProperties} will choose based on
- * AST characteristics (loops → termination, integer arithmetic → no-overflow,
- * etc.).
- */
-struct BenchmarkProperty {
-  std::string propertyFile; ///< Relative path to the .prp file (e.g. "../properties/termination.prp").
-  bool expectedVerdict;     ///< {@code true} = program satisfies the property.
-};
 
 /**
  * @brief Runtime configuration loaded from the INI-style config file.
  *
  * Holds the path settings and flags that control where filtered input is
- * read from, where benchmarks are written, and how compile failures are
- * handled.
+ * read from and where transformed files are written.
  */
 struct transformConfigs {
   int debugLevel;           ///< Verbosity level for debug output (currently unused).
-  bool keepCompilesOnly;    ///< If true, delete output files that fail checkCompilable.
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
-  std::string benchmarkDir; ///< Output directory for transformed benchmark files.
+  std::string transformDir; ///< Output directory for transformed files (verify-stage input).
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
 };
 
@@ -42,8 +26,12 @@ struct transformConfigs {
  * Reads a config file, walks a directory tree of filtered C source files, and
  * runs the full Clang AST pipeline on each one: replacing dead calls with
  * `__VERIFIER_nondet_*`, injecting verifier declarations, and ensuring a
- * `main()` exists. Transformed output is written to benchmarkDir under a
+ * `main()` exists. Transformed output is written to transformDir under a
  * single flattened filename per input (see flattenedOutputPath).
+ *
+ * Transform is purely source→source; benchmark finalization (metric
+ * re-check, compile check, .yml task files, preprocessing) happens in the
+ * verify stage that follows.
  */
 class Transformer {
 public:
@@ -53,8 +41,8 @@ public:
    * @param configFile Path to the INI-style properties file ("" = defaults only).
    * @param inputPath  Optional directory (or single .c file) of filtered files
    *                   to transform. When given, it overrides filterDir, and
-   *                   benchmarkDir defaults to "<name>-benchmarks" (a
-   *                   benchmarkDir set in the config still wins).
+   *                   transformDir defaults to "<name>-transformed" (a
+   *                   transformDir set in the config still wins).
    */
   Transformer(std::string configFile, std::string inputPath = "");
 
@@ -62,11 +50,11 @@ public:
    * @brief Runs the full Clang AST pipeline on a single C file.
    *
    * Builds a ClangTool invocation, runs the TransformAction consumer chain,
-   * and writes the rewritten source to benchmarkDir. If the result fails
-   * checkCompilable and keepCompilesOnly is set, the output file is removed.
+   * and writes the rewritten source to transformDir. A file whose generated
+   * main harnesses nothing is discarded immediately (see harnessIsEmpty).
    *
    * @param path Path to the filtered C source file to transform.
-   * @return true if a benchmark (.c + .yml + .i) was produced.
+   * @return true if a transformed .c was produced.
    */
   bool transformFile(std::filesystem::path path);
 
@@ -78,20 +66,20 @@ public:
    * any partial output left by a child that crashed or timed out.
    *
    * @param path Path to the filtered C source file to transform.
-   * @return 1 if a benchmark was produced, 0 otherwise.
+   * @return 1 if a transformed file was produced, 0 otherwise.
    */
   int transformFileIsolated(std::filesystem::path path);
 
   /**
-   * @brief Computes the flattened benchmarkDir output path for a filtered file.
+   * @brief Computes the flattened transformDir output path for a filtered file.
    *
    * @param path Path to the filtered C source file.
-   * @return The {@code benchmarkDir/<flattened>.c} path the transform writes to.
+   * @return The {@code transformDir/<flattened>.c} path the transform writes to.
    */
   std::filesystem::path flattenedOutputPath(std::filesystem::path path);
 
   /**
-   * @brief Removes any .c/.yml/.i a crashed or timed-out child left behind.
+   * @brief Removes any .c a crashed or timed-out child left behind.
    *
    * @param path Path to the filtered C source file whose output to clean up.
    */
@@ -101,20 +89,9 @@ public:
    * @brief Recursively walks a directory tree, transforming every .c file found.
    *
    * @param path Root path to search (file or directory).
-   * @return Total count of compilable benchmarks produced.
+   * @return Total count of transformed files produced.
    */
   int transformAll(std::filesystem::path path);
-
-  /**
-   * @brief Checks whether a transformed file compiles without errors.
-   *
-   * Runs `clang -fsyntax-only` against the file alongside a dummy
-   * `verifier.c` (to resolve extern `__VERIFIER_nondet_*` declarations).
-   *
-   * @param path Path to the transformed C file to check.
-   * @return true if the file compiles with no errors.
-   */
-  bool checkCompilable(std::filesystem::path path);
 
   /**
    * @brief Detects a trivial benchmark whose generated main calls nothing.
@@ -129,10 +106,8 @@ public:
   bool harnessIsEmpty(std::filesystem::path path);
 
   /**
-   * @brief Parses the config file, populating {@code configuration}.
-   *
-   * Recognised keys: benchmarkDir, filterDir, debugLevel, keepCompilesOnly,
-   * fileTimeoutSecs. Unrecognised keys are ignored.
+   * @brief Parses the config file via the shared {@code parsePipelineConfig},
+   * keeping the transform-relevant settings.
    *
    * @param configFile Path to the INI-style properties file.
    */
@@ -141,43 +116,17 @@ public:
   /**
    * @brief Main entry point — runs transformAll over filterDir.
    *
-   * @return The number of compilable benchmarks produced.
+   * @return The number of transformed files produced.
    */
   int run();
 
   /**
-   * @brief Returns the set of verification properties for a benchmark.
+   * @brief Returns the resolved output directory the transform writes to.
    *
-   * Currently returns a fixed set (termination + no-overflow) for every file.
-   * Future: accepts AST characteristics and conditionally includes properties
-   * (e.g. only termination if loops are present, only no-overflow if integer
-   * arithmetic is present, unreach-call when {@code reach_error()} guards exist).
-   *
-   * @return Vector of properties to include in the task .yml.
+   * Lets the full pipeline point the verify stage at the transform's actual
+   * output, whichever of default / config / derived-from-input won.
    */
-  std::vector<BenchmarkProperty> selectProperties();
-
-  /**
-   * @brief Writes an SV-Comp .yml task definition alongside the benchmark .c file.
-   *
-   * The task file references the preprocessed {@code .i} form of the input
-   * (preprocessing is assumed as a later step). Properties are selected via
-   * {@code selectProperties()}.
-   *
-   * @param cPath Path to the transformed .c benchmark file.
-   */
-  void writeBenchmarkTask(std::filesystem::path cPath);
-
-  /**
-   * @brief Preprocesses a transformed .c file into a .i file.
-   *
-   * Runs {@code clang -E -P -std=gnu11} on the source file, writing the
-   * preprocessed output alongside it with a {@code .i} extension.
-   *
-   * @param cPath Path to the transformed .c benchmark file.
-   * @return true if preprocessing succeeded, false otherwise.
-   */
-  bool preprocess(std::filesystem::path cPath);
+  const std::string &getTransformDir() const { return configuration.transformDir; }
 
 private:
   /// Path settings and flags loaded from the config file.

@@ -10,14 +10,10 @@
 #include <clang/Tooling/Tooling.h>
 #include <cstdio>
 #include <cstdlib>
-#include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
-#include <map>
 #include <optional>
-#include <regex>
 #include <string>
 #include <vector>
 
@@ -84,6 +80,23 @@ inline std::optional<std::string> getResourceDir() {
   if (r)
     return std::string(r);
   return readCommandOutput("clang -print-resource-dir 2>/dev/null");
+}
+
+/**
+ * @brief Builds "clang <flags> -resource-dir=<dir> [-isysroot <sdk>]" for a
+ * std::system shell-out, or std::nullopt if the resource directory can't be
+ * determined.
+ *
+ * @param flags Compiler flags to place right after "clang" (e.g. "-E -P").
+ */
+inline std::optional<std::string> clangCommand(const std::string &flags) {
+  std::optional<std::string> resourceDir = getResourceDir();
+  if (!resourceDir)
+    return std::nullopt;
+  std::string cmd = "clang " + flags + " -resource-dir=" + *resourceDir;
+  if (std::optional<std::string> sysroot = getSysroot())
+    cmd += " -isysroot " + *sysroot;
+  return cmd;
 }
 
 /**
@@ -191,44 +204,4 @@ inline bool runToolOnFile(const std::string &filePath,
     return false;
   }
   return true;
-}
-
-/**
- * @brief Strips leading and trailing spaces/tabs.
- */
-inline std::string trim(const std::string &s) {
-  size_t start = s.find_first_not_of(" \t");
-  size_t end = s.find_last_not_of(" \t");
-  if (start == std::string::npos)
-    return "";
-  return s.substr(start, end - start + 1);
-}
-
-/**
- * @brief Parses an INI-style config file and returns raw key/value string pairs.
- *
- * Lines that do not match the {@code key = value} pattern (comments, blank
- * lines, section headers) are silently skipped. Each tool is responsible for
- * interpreting its own keys from the returned map; unknown keys are not
- * reported here.
- *
- * @param configFile Path to the INI-style properties file.
- * @return Map of key to raw string value for every matched line, or an empty
- *         map if the file does not exist or cannot be opened.
- */
-inline std::map<std::string, std::string> parseIniFile(const std::string &configFile) {
-  std::map<std::string, std::string> result;
-  if (!std::filesystem::exists(configFile))
-    return result;
-  std::ifstream file(configFile);
-  if (!file.is_open())
-    return result;
-  std::regex pattern(R"(^\s*(\w+)\s*=\s*([0-9]+|[\w\s,\-]+|[\w/\-_.]+)$)");
-  std::string line;
-  std::smatch match;
-  while (std::getline(file, line)) {
-    if (std::regex_search(line, match, pattern))
-      result[match[1]] = match[2];
-  }
-  return result;
 }

@@ -10,39 +10,7 @@
 #include <clang/AST/DeclBase.h>
 #include <clang/Basic/SourceManager.h>
 #include <llvm/Support/Casting.h>
-#include <stdexcept>
 #include <unordered_map>
-
-namespace {
-
-// Looks up a named field on the complexity axis. Throws if `name` isn't one
-// of the known metrics — a config key typo should surface loudly, not
-// silently no-op.
-int complexityField(const CountingVisitor::ComplexityCounts &c, const std::string &name) {
-  if (name == "CallFunc")
-    return c.CallFunc;
-  if (name == "ForLoops")
-    return c.ForLoops;
-  if (name == "IfStmt")
-    return c.IfStmt;
-  if (name == "Param")
-    return c.Param;
-  if (name == "WhileLoops")
-    return c.WhileLoops;
-  throw std::invalid_argument("unknown complexity metric: " + name);
-}
-
-// Looks up a named flag on the feature axis. Throws if `name` isn't one of
-// the known features, for the same reason as complexityField above.
-bool featureField(const CountingVisitor::FeatureFlags &f, const std::string &name) {
-  if (name == "Concurrency")
-    return f.Concurrency;
-  if (name == "FloatingPoint")
-    return f.FloatingPoint;
-  throw std::invalid_argument("unknown feature: " + name);
-}
-
-} // namespace
 
 FilterFunctionsConsumer::FilterFunctionsConsumer(
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,

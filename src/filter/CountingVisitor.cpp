@@ -4,6 +4,7 @@
 
 #include "include/CountingVisitor.hpp"
 #include "StdHeaders.hpp"
+#include "VerifierNames.hpp"
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/ASTTypeTraits.h>
@@ -53,6 +54,14 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
   // getStmtClass()-based tally.
   if (!_mgr->isInMainFile(CE->getBeginLoc()))
     return true;
+  // Verifier nondet / havoc-helper calls stand in for code the transform
+  // removed; they are not complexity of the function's own logic, so they
+  // never count toward CallFunc (matters when the verify stage re-counts a
+  // havocked file).
+  if (const clang::FunctionDecl *callee = CE->getDirectCallee()) {
+    if (callee->getIdentifier() && isVerifierGenerated(callee->getNameAsString()))
+      return true;
+  }
   if (CE->getStmtClass() == clang::Stmt::CallExprClass)
     _allFunctions->at(getStmtParentFuncName(*CE)).Complexity.CallFunc++;
   // assumes all thread/concurrency calls will have types from concurrency related headers
