@@ -124,3 +124,19 @@ bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
     _allFunctions->at(getStmtParentFuncName(*W)).Complexity.WhileLoops++;
   return true;
 }
+
+bool CountingVisitor::VisitBinaryOperator(clang::BinaryOperator *B) {
+  if (_mgr->isInMainFile(B->getOperatorLoc())) {
+    if (B->isMultiplicativeOp() || B->isAdditiveOp() || B->isShiftOp())
+      _allFunctions->at(getStmtParentFuncName(*B)).Complexity.Operations++;
+  }
+  return true;
+}
+
+bool CountingVisitor::VisitUnaryOperator(clang::UnaryOperator *U) {
+  if (_mgr->isInMainFile(U->getOperatorLoc())) {
+    if (U->canOverflow())
+      _allFunctions->at(getStmtParentFuncName(*U)).Complexity.Operations++;
+  }
+  return true;
+}

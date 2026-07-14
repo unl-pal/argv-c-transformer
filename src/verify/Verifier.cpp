@@ -167,14 +167,23 @@ bool Verifier::checkCompilable(std::filesystem::path path) {
 
 std::vector<BenchmarkProperty> Verifier::selectProperties(
     const std::unordered_map<std::string, CountingVisitor::attributes> &counts) {
-  // TODO: use the per-function counts/features to conditionally include
-  // properties (loops → termination, int arithmetic → no-overflow, etc.).
-  // For now, every benchmark gets both.
-  (void)counts;
-  return {
-      {"../properties/no-overflow.prp", true},
-      {"../properties/termination.prp", true},
-  };
+  std::vector<BenchmarkProperty> properties;
+  bool loopsPresent = false;
+  bool intArithPresent = false;
+  for (const auto &[name, attr] : counts) {
+    if (!loopsPresent && (attr.Complexity.ForLoops || attr.Complexity.WhileLoops)) {
+      loopsPresent = true;
+      properties.push_back({"../properties/termination.prp", true});
+    }
+    if (!intArithPresent && attr.Complexity.Operations) {
+      // The operations check is pretty naive as it counts any/all binary and unary operations with side effects
+      intArithPresent = true;
+      properties.push_back({"../properties/no-overflow.prp", true});
+    }
+    if (loopsPresent && intArithPresent)
+      break;
+  }
+  return properties;
 }
 
 void Verifier::writeBenchmarkTask(

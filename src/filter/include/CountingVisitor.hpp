@@ -40,6 +40,7 @@ public:
     int IfStmt = 0;
     int Param = 0;
     int WhileLoops = 0;
+    int Operations = 0;
   };
 
   /** @brief Per-function feature presence flags — the "what kind" axis. */
@@ -110,6 +111,12 @@ public:
   /** @brief Counts while-loop occurrences per function. */
   bool VisitWhileStmt(clang::WhileStmt *W);
 
+  /** @breif Counts binary operations per function. */
+  bool VisitBinaryOperator(clang::BinaryOperator *BO);
+
+  /** @brief Counts unary operations per function. */
+  bool VisitUnaryOperator(clang::UnaryOperator *UO);
+
 private:
   clang::ASTContext *_C;
   clang::SourceManager *_mgr;
@@ -133,6 +140,8 @@ inline int complexityField(const CountingVisitor::ComplexityCounts &c, const std
     return c.Param;
   if (name == "WhileLoops")
     return c.WhileLoops;
+  if (name == "Operations")
+    return c.Operations;
   throw std::invalid_argument("unknown complexity metric: " + name);
 }
 

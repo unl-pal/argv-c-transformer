@@ -34,7 +34,7 @@ struct PipelineConfig {
   /// to {0, 9999}, meaning no filtering unless explicitly configured.
   std::map<std::string, std::pair<int, int>> complexity = {
       {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}}, {"IfStmt", {0, 9999}},
-      {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}},
+      {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}}, {"Operations", {0,9999}},
   };
 
   /// Per-function feature gates: feature name → ignore|require|forbid.

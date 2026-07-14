@@ -80,6 +80,9 @@ protected:
 };
 
 TEST_F(VerifyStageTest, FlatFileProducesYml) {
+  // add() has an additive binary op (no-overflow-eligible) but no loop, so
+  // this also pins the general .yml shape without overlapping the dedicated
+  // property-selection tests below.
   writeFile(filterDir / "simple.c",
             "int add(int a, int b) { return a + b; }\n");
 
@@ -93,10 +96,88 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   std::string yml = readFile(benchmarkDir / "simple.yml");
   EXPECT_NE(yml.find("input_files: 'simple.i'"), std::string::npos);
   EXPECT_NE(yml.find("format_version: '2.0'"), std::string::npos);
-  EXPECT_NE(yml.find("termination.prp"), std::string::npos);
   EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
+  EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
   EXPECT_NE(yml.find("language: C"), std::string::npos);
   EXPECT_NE(yml.find("data_model: LP64"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// selectProperties: which .prp files get attached, based on the fresh
+// per-function counts taken after transform (see CountingVisitor::Complexity).
+// ---------------------------------------------------------------------------
+
+TEST_F(VerifyStageTest, LoopOnlySourceGetsTerminationNotOverflow) {
+  // A pure loop with no arithmetic operators: increments (i++) come from
+  // UnaryOperator, but the loop guard/body here does no +,-,*,<<,>> at all,
+  // so Operations should stay at 0 and no-overflow.prp should not appear.
+  writeFile(filterDir / "loopy.c",
+            "void spin(int n) {\n"
+            "  int i = 0;\n"
+            "  while (i != n) {\n"
+            "    i = n;\n"
+            "  }\n"
+            "}\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "loopy.yml"));
+  std::string yml = readFile(benchmarkDir / "loopy.yml");
+  EXPECT_NE(yml.find("termination.prp"), std::string::npos);
+  EXPECT_EQ(yml.find("no-overflow.prp"), std::string::npos);
+}
+
+TEST_F(VerifyStageTest, ArithmeticOnlySourceGetsOverflowNotTermination) {
+  // No loop anywhere, but a multiplicative op gives Operations > 0.
+  writeFile(filterDir / "mul.c", "int scale(int a, int b) { return a * b; }\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "mul.yml"));
+  std::string yml = readFile(benchmarkDir / "mul.yml");
+  EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
+  EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
+}
+
+TEST_F(VerifyStageTest, PlainSourceGetsNoProperties) {
+  // No loop, no binary/unary arithmetic operator anywhere: neither property
+  // should be selected, and the benchmark should still be produced.
+  writeFile(filterDir / "flat.c", "int identity(int a) { return a; }\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "flat.yml"));
+  std::string yml = readFile(benchmarkDir / "flat.yml");
+  EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
+  EXPECT_EQ(yml.find("no-overflow.prp"), std::string::npos);
+  EXPECT_NE(yml.find("properties:\n"), std::string::npos);
+}
+
+TEST_F(VerifyStageTest, LoopAndArithmeticAcrossFunctionsGetsBoth) {
+  // The two signals live in different functions; selectProperties scans the
+  // whole per-file counts map, so both should be picked up regardless of
+  // which function iteration order visits first. spin's loop must have an
+  // observable side effect (mutating the parameter n, not just a loop-local
+  // var), or HavocCallsVisitor's no-op pruning drops the whole loop/function.
+  writeFile(filterDir / "both.c",
+            "int spin(int n) {\n"
+            "  for (int i = 0; i < n; i++) {\n"
+            "    n += i;\n"
+            "  }\n"
+            "  return n;\n"
+            "}\n"
+            "int scale(int a, int b) { return a * b; }\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "both.yml"));
+  std::string yml = readFile(benchmarkDir / "both.yml");
+  EXPECT_NE(yml.find("termination.prp"), std::string::npos);
+  EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
 }
 
 TEST_F(VerifyStageTest, DegradedFunctionIsStrippedAndUnharnessed) {
