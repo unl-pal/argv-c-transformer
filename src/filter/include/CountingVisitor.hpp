@@ -40,7 +40,7 @@ public:
     int IfStmt = 0;
     int Param = 0;
     int WhileLoops = 0;
-    int Operations = 0;
+    int Operations = 0; // ops w/ side effects on signed types (for UB/no-overflow property detection)
   };
 
   /** @brief Per-function feature presence flags — the "what kind" axis. */
@@ -111,10 +111,10 @@ public:
   /** @brief Counts while-loop occurrences per function. */
   bool VisitWhileStmt(clang::WhileStmt *W);
 
-  /** @breif Counts binary operations per function. */
+  /** @brief Counts signed binary operations per function. */
   bool VisitBinaryOperator(clang::BinaryOperator *BO);
 
-  /** @brief Counts unary operations per function. */
+  /** @brief Counts signed unary operations per function. */
   bool VisitUnaryOperator(clang::UnaryOperator *UO);
 
 private:

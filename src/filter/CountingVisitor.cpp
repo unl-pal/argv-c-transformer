@@ -126,15 +126,21 @@ bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
 }
 
 bool CountingVisitor::VisitBinaryOperator(clang::BinaryOperator *B) {
-  if (_mgr->isInMainFile(B->getOperatorLoc())) {
-    if (B->isMultiplicativeOp() || B->isAdditiveOp() || B->isShiftOp())
+  // Only signed overlfow is UB
+  if (_mgr->isInMainFile(B->getOperatorLoc()) && B->getType()->isSignedIntegerType()) {
+    clang::BinaryOperator::Opcode op =
+        B->isCompoundAssignmentOp()
+            ? clang::BinaryOperator::getOpForCompoundAssignment(B->getOpcode())
+            : B->getOpcode();
+    if (clang::BinaryOperator::isMultiplicativeOp(op) || clang::BinaryOperator::isAdditiveOp(op) ||
+        clang::BinaryOperator::isShiftOp(op))
       _allFunctions->at(getStmtParentFuncName(*B)).Complexity.Operations++;
   }
   return true;
 }
 
 bool CountingVisitor::VisitUnaryOperator(clang::UnaryOperator *U) {
-  if (_mgr->isInMainFile(U->getOperatorLoc())) {
+  if (_mgr->isInMainFile(U->getOperatorLoc()) && U->getType()->isSignedIntegerType()) {
     if (U->canOverflow())
       _allFunctions->at(getStmtParentFuncName(*U)).Complexity.Operations++;
   }
