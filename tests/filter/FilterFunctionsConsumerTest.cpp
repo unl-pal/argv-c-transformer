@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 // ---------------------------------------------------------------------------
@@ -23,41 +24,21 @@
 
 namespace {
 
-// Mirrors Filterer's default threshold map: every max is permissive (99999)
-// and every min is permissive (0), so a test only needs to override the one
-// or two keys it cares about.
-std::map<std::string, int> permissiveConfig() {
-  return {{"Concurrency", 0},
-          {"maxCallFunc", 99999},
-          {"maxForLoops", 99999},
-          {"maxFunctions", 99999},
-          {"maxIfStmt", 99999},
-          {"maxParam", 99999},
-          {"maxTypeArithmeticOperation", 99999},
-          {"maxTypeCompareOperation", 99999},
-          {"maxTypeIfStmt", 99999},
-          {"maxTypeParameters", 99999},
-          {"maxTypePostfix", 99999},
-          {"maxTypePrefix", 99999},
-          {"maxTypeUnaryOperation", 99999},
-          {"maxTypeVariableReference", 99999},
-          {"maxTypeVariables", 99999},
-          {"maxWhileLoops", 99999},
-          {"minCallFunc", 0},
-          {"minForLoops", 0},
-          {"minFunctions", 0},
-          {"minIfStmt", 0},
-          {"minParam", 0},
-          {"minTypeArithmeticOperation", 0},
-          {"minTypeCompareOperation", 0},
-          {"minTypeIfStmt", 0},
-          {"minTypeParameters", 0},
-          {"minTypePostfix", 0},
-          {"minTypePrefix", 0},
-          {"minTypeUnaryOperation", 0},
-          {"minTypeVariableReference", 0},
-          {"minTypeVariables", 0},
-          {"minWhileLoops", 0}};
+// Mirrors Filterer's default config: every complexity range is permissive
+// ([0, 99999]) and every feature gate is Ignore, so a test only needs to
+// override the one or two keys it cares about.
+std::map<std::string, std::pair<int, int>> permissiveComplexityConfig() {
+  return {
+      {"CallFunc", {0, 99999}}, {"ForLoops", {0, 99999}},  {"Functions", {0, 99999}},
+      {"IfStmt", {0, 99999}},   {"Param", {0, 99999}},     {"WhileLoops", {0, 99999}},
+  };
+}
+
+std::map<std::string, FeatureGate> permissiveFeatureConfig() {
+  return {
+      {"Concurrency", FeatureGate::Ignore},
+      {"FloatingPoint", FeatureGate::Ignore},
+  };
 }
 
 struct FilterResult {
@@ -69,19 +50,21 @@ struct FilterResult {
 };
 
 // Parses `code`, runs CountingVisitor to populate real attribute counts, then
-// runs FilterFunctionsConsumer with `config` and returns what ended up in
-// _ToRemove.
-FilterResult runFilter(const std::string &code, std::map<std::string, int> config) {
+// runs FilterFunctionsConsumer with the given configs and returns what ended
+// up in _ToRemove.
+FilterResult runFilter(const std::string &code,
+                       std::map<std::string, std::pair<int, int>> complexityConfig,
+                       std::map<std::string, FeatureGate> featureConfig) {
   FilterResult r;
   r.ast = clang::tooling::buildASTFromCodeWithArgs(code, {"-xc"}, "test.c");
   EXPECT_NE(r.ast, nullptr) << "AST failed to build for:\n" << code;
   if (!r.ast)
     return r;
 
-  CountingVisitor counter(&r.ast->getASTContext(), {}, r.funcs);
+  CountingVisitor counter(&r.ast->getASTContext(), r.funcs);
   counter.TraverseTranslationUnitDecl(r.ast->getASTContext().getTranslationUnitDecl());
 
-  FilterFunctionsConsumer filterConsumer(r.funcs, r.toRemove, &config);
+  FilterFunctionsConsumer filterConsumer(r.funcs, r.toRemove, &complexityConfig, &featureConfig);
   filterConsumer.FilterFunctions(r.ast->getASTContext());
 
   return r;
@@ -97,11 +80,11 @@ bool contains(const std::vector<std::string> &v, const std::string &name) {
 // main + concurrency
 // ---------------------------------------------------------------------------
 
-TEST(FilterFunctionsConsumer, MainRemovedWhenConcurrencyFlagged) {
+TEST(FilterFunctionsConsumer, MainRemovedWhenConcurrencyRequired) {
   // pthread_create() called directly inside main (no helper function) — this
   // is exactly the case that used to slip through filtering untouched.
-  auto config = permissiveConfig();
-  config["Concurrency"] = 1;
+  auto features = permissiveFeatureConfig();
+  features["Concurrency"] = FeatureGate::Forbid;
   auto r = runFilter(R"(
     typedef unsigned long pthread_t;
     int pthread_create(pthread_t *t, void *attr, void *(*fn)(void *), void *arg);
@@ -112,14 +95,13 @@ TEST(FilterFunctionsConsumer, MainRemovedWhenConcurrencyFlagged) {
       return 0;
     }
   )",
-                       config);
+                       permissiveComplexityConfig(), features);
   EXPECT_TRUE(contains(*r.toRemove, "main"));
 }
 
-TEST(FilterFunctionsConsumer, MainKeptWhenConcurrencyCheckDisabled) {
-  // Same body as above, but Concurrency=0 (the default) means the check is
-  // off entirely — main should survive untouched.
-  auto config = permissiveConfig();
+TEST(FilterFunctionsConsumer, MainKeptWhenConcurrencyIgnored) {
+  // Same body as above, but Concurrency=Ignore (the default) means the check
+  // is off entirely — main should survive untouched.
   auto r = runFilter(R"(
     typedef unsigned long pthread_t;
     int pthread_create(pthread_t *t, void *attr, void *(*fn)(void *), void *arg);
@@ -130,7 +112,7 @@ TEST(FilterFunctionsConsumer, MainKeptWhenConcurrencyCheckDisabled) {
       return 0;
     }
   )",
-                       config);
+                       permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
 
@@ -142,27 +124,26 @@ TEST(FilterFunctionsConsumer, MainRemovedByOrdinaryThresholdCheck) {
   // main is no longer blanket-exempt from the general min/max ladder — a
   // for-loop count over the configured max should remove it just like any
   // other function.
-  auto config = permissiveConfig();
-  config["maxForLoops"] = 0;
+  auto complexity = permissiveComplexityConfig();
+  complexity["ForLoops"] = {0, 0};
   auto r = runFilter(R"(
     int main(void) {
       for (int i = 0; i < 10; i++) {}
       return 0;
     }
   )",
-                       config);
+                       complexity, permissiveFeatureConfig());
   EXPECT_TRUE(contains(*r.toRemove, "main"));
 }
 
 TEST(FilterFunctionsConsumer, MainKeptWhenThresholdsSatisfied) {
-  auto config = permissiveConfig();
   auto r = runFilter(R"(
     int main(void) {
       for (int i = 0; i < 10; i++) {}
       return 0;
     }
   )",
-                       config);
+                       permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
 
@@ -175,13 +156,12 @@ TEST(FilterFunctionsConsumer, MainNotRemovedForUnsupportedArgvParam) {
   // function with this param type would be removed by the trailing
   // param-type check, but main is exempt from that specific check since
   // MainGenConsumer handles argc/argv itself.
-  auto config = permissiveConfig();
   auto r = runFilter(R"(
     int main(int argc, char **argv) {
       return argc;
     }
   )",
-                       config);
+                       permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
 
@@ -189,12 +169,11 @@ TEST(FilterFunctionsConsumer, OrdinaryFunctionRemovedForUnsupportedParam) {
   // Sanity check that the param-type check still fires normally for
   // non-main functions, so the main exemption above is verified against a
   // real contrast rather than a check that never removes anything.
-  auto config = permissiveConfig();
   auto r = runFilter(R"(
     int main(void) { return 0; }
     void helper(char **argv) {}
   )",
-                       config);
+                       permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_TRUE(contains(*r.toRemove, "helper"));
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }

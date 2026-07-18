@@ -4,11 +4,11 @@
 #include <clang/Frontend/FrontendAction.h>
 #include <memory>
 
-FrontendFactoryWithArgs::FrontendFactoryWithArgs(std::map<std::string, int> *config,
-                                                 const std::vector<unsigned int> &types,
-                                                 llvm::raw_fd_ostream &output)
-    : _Config(config), _Types(types), _Output(output) {}
+FrontendFactoryWithArgs::FrontendFactoryWithArgs(
+    std::map<std::string, std::pair<int, int>> *complexityConfig,
+    std::map<std::string, FeatureGate> *featureConfig, llvm::raw_fd_ostream &output)
+    : _ComplexityConfig(complexityConfig), _FeatureConfig(featureConfig), _Output(output) {}
 
 std::unique_ptr<clang::FrontendAction> FrontendFactoryWithArgs::create() {
-  return std::make_unique<FilterAction>(_Config, _Types, _Output);
+  return std::make_unique<FilterAction>(_ComplexityConfig, _FeatureConfig, _Output);
 }

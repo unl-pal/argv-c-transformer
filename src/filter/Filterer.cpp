@@ -30,13 +30,53 @@ Filterer::Filterer(std::string configFile) {
   parseConfigFile(configFile);
 };
 
+namespace {
+
+std::string trim(const std::string &s) {
+  size_t start = s.find_first_not_of(" \t");
+  size_t end = s.find_last_not_of(" \t");
+  if (start == std::string::npos)
+    return "";
+  return s.substr(start, end - start + 1);
+}
+
+} // namespace
+
 void Filterer::parseConfigFile(std::string configFile) {
   if (!std::filesystem::exists(configFile)) {
     std::cerr << "Config file not found: " << configFile << " — using defaults" << std::endl;
     return;
   }
   for (auto [key, value] : parseIniFile(configFile)) {
-    if (config.count(key)) {
+    if (complexityConfig.count(key)) {
+      size_t comma = value.find(',');
+      if (comma == std::string::npos) {
+        std::cerr << "Warning: complexity key '" << key
+                  << "' expects 'min,max' — ignoring value '" << value << "'" << std::endl;
+        continue;
+      }
+      try {
+        int min = std::stoi(trim(value.substr(0, comma)));
+        int max = std::stoi(trim(value.substr(comma + 1)));
+        complexityConfig.at(key) = {min, max};
+      } catch (...) {
+        std::cerr << "Warning: could not parse complexity range for '" << key << "': '" << value
+                  << "'" << std::endl;
+      }
+    } else if (featureConfig.count(key)) {
+      std::string v = trim(value);
+      std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+      if (v == "require") {
+        featureConfig.at(key) = FeatureGate::Require;
+      } else if (v == "forbid") {
+        featureConfig.at(key) = FeatureGate::Forbid;
+      } else if (v == "ignore" || v.empty()) {
+        featureConfig.at(key) = FeatureGate::Ignore;
+      } else {
+        std::cerr << "Warning: unrecognised gate '" << value << "' for feature '" << key
+                  << "' — ignoring" << std::endl;
+      }
+    } else if (config.count(key)) {
       try {
         int i = std::stoi(value);
         config.at(key) = i;
@@ -46,30 +86,6 @@ void Filterer::parseConfigFile(std::string configFile) {
         config.at(key) = 0;
       } else if (value == "true" || value == "True") {
         config.at(key) = 1;
-      }
-    } else if (key == "type" || key == "Type") {
-      std::regex typePattern("([\\w]+)");
-      std::smatch typeMatches;
-      while (std::regex_search(value, typeMatches, typePattern)) {
-        if (typeMatches[0] == "int" || typeMatches[0] == "Int") {
-          typesRequested.push_back(clang::BuiltinType::Int);
-          typeNames.push_back(typeMatches[0]);
-        } else if (typeMatches[0] == "float" || typeMatches[0] == "Float") {
-          typesRequested.push_back(clang::BuiltinType::Float);
-          typeNames.push_back(typeMatches[0]);
-        } else if (typeMatches[0] == "long" || typeMatches[0] == "Long") {
-          typesRequested.push_back(clang::BuiltinType::Long);
-          typeNames.push_back(typeMatches[0]);
-        } else if (typeMatches[0] == "bool" || typeMatches[0] == "Bool") {
-          typesRequested.push_back(clang::BuiltinType::Bool);
-          typeNames.push_back(typeMatches[0]);
-        } else if (typeMatches[0] == "char" || typeMatches[0] == "Char") {
-          typesRequested.push_back(clang::BuiltinType::UChar);
-          typeNames.push_back(typeMatches[0]);
-        } else {
-          std::cerr << "Warning: unrecognised type '" << typeMatches[0] << "' ignored" << std::endl;
-        }
-        value = typeMatches.suffix().str();
       }
     } else if (key == "databaseDir") {
       configuration.databaseDir = value;
@@ -98,8 +114,13 @@ void Filterer::parseConfigFile(std::string configFile) {
     std::string dump = "[filter] loaded config: " + configFile;
     for (const auto &[k, v] : config)
       dump += "\n  " + k + " = " + std::to_string(v);
-    for (const std::string &t : typeNames)
-      dump += "\n  type: " + t;
+    for (const auto &[k, range] : complexityConfig)
+      dump += "\n  " + k + " = " + std::to_string(range.first) + "," + std::to_string(range.second);
+    for (const auto &[k, gate] : featureConfig)
+      dump += "\n  " + k + " = " +
+              (gate == FeatureGate::Require   ? "require"
+               : gate == FeatureGate::Forbid ? "forbid"
+                                              : "ignore");
     debugLog(1, dump);
   }
 }
@@ -252,7 +273,7 @@ int Filterer::run() {
                                      optionsParser.getSourcePathList());
       tool.setDiagnosticConsumer(&diagConsumer);
 
-      FrontendFactoryWithArgs factory(&config, typesRequested, output);
+      FrontendFactoryWithArgs factory(&complexityConfig, &featureConfig, output);
 
       int result = tool.run(&factory);
       debugLog(2, "[filter] tool result for " + fileName + ": " + std::to_string(result));

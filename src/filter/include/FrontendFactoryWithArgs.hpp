@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CountingVisitor.hpp"
+
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Frontend/CompilerInvocation.h>
 #include <clang/Frontend/PCHContainerOperations.h>
@@ -9,27 +11,28 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <vector>
+#include <utility>
 
 /**
  * @brief Carries pipeline state into Clang's tool runner.
  *
  * Clang's {@code ClangTool::run()} only knows how to call {@code create()} on
- * a {@code FrontendActionFactory}. This subclass stores the config map, desired
- * types, and output stream so that each {@code FilterAction} it creates has
- * everything it needs without those objects being globals.
+ * a {@code FrontendActionFactory}. This subclass stores the config maps and
+ * output stream so that each {@code FilterAction} it creates has everything
+ * it needs without those objects being globals.
  */
 class FrontendFactoryWithArgs : public clang::tooling::FrontendActionFactory {
 public:
   /**
    * @brief Constructs the factory, binding the shared pipeline state.
    *
-   * @param config  Pointer to the threshold map owned by {@code Filterer}.
-   * @param types   Reference to the Clang BuiltinType values for requested types.
-   * @param output  Reference to the output stream for the filtered file.
+   * @param complexityConfig  Pointer to the per-metric [min, max] map owned by {@code Filterer}.
+   * @param featureConfig     Pointer to the per-feature gate map owned by {@code Filterer}.
+   * @param output            Reference to the output stream for the filtered file.
    */
-  FrontendFactoryWithArgs(std::map<std::string, int> *config,
-                          const std::vector<unsigned int> &types, llvm::raw_fd_ostream &output);
+  FrontendFactoryWithArgs(std::map<std::string, std::pair<int, int>> *complexityConfig,
+                          std::map<std::string, FeatureGate> *featureConfig,
+                          llvm::raw_fd_ostream &output);
 
   /**
    * @brief Called by {@code ClangTool} once per source file to create the action.
@@ -41,7 +44,7 @@ public:
   std::unique_ptr<clang::FrontendAction> create() override;
 
 private:
-  std::map<std::string, int> *_Config;
-  const std::vector<unsigned int> &_Types;
+  std::map<std::string, std::pair<int, int>> *_ComplexityConfig;
+  std::map<std::string, FeatureGate> *_FeatureConfig;
   llvm::raw_fd_ostream &_Output;
 };
