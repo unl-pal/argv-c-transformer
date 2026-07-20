@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #pragma once
 
 #include <clang/AST/ASTConsumer.h>
@@ -15,9 +19,10 @@
  * to {@code original_main}, then a fresh {@code int main(void)} is appended that
  * calls every function defined in the file with {@code __VERIFIER_nondet_*}
  * arguments. Functions with a parameter type that has no nondet equivalent
- * (pointers, structs, ...) and variadic functions are skipped. For
- * {@code original_main(int, char**)}, a synthesized {@code argc}/{@code argv}
- * harness is generated instead of skipping.
+ * (pointers, structs, ...), variadic functions, and functions whose body
+ * {@code HavocCallsConsumer} found to have collapsed entirely to no-ops are
+ * skipped. For {@code original_main(int, char**)}, a synthesized
+ * {@code argc}/{@code argv} harness is generated instead of skipping.
  */
 class MainGenConsumer : public clang::ASTConsumer {
 public:
@@ -26,9 +31,12 @@ public:
    *
    * @param neededSuffixes Verifier suffixes used by the harness, shared with
    *        {@code AddVerifiersConsumer} which emits the extern declarations.
+   * @param noOpFunctions  Names of functions {@code HavocCallsConsumer} found
+   *        to have an entirely no-op body; these are not harnessed.
    * @param rewriter       Shared rewriter for modifying the source buffer.
    */
-  MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes, clang::Rewriter &rewriter);
+  MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
+                  std::shared_ptr<std::set<std::string>> noOpFunctions, clang::Rewriter &rewriter);
 
   /**
    * @brief Renames an existing {@code main} and appends the generated harness main.
@@ -61,5 +69,6 @@ private:
   std::string genMainHarness(const clang::FunctionDecl *mainFn);
 
   std::shared_ptr<std::set<std::string>> _NeededSuffixes;
+  std::shared_ptr<std::set<std::string>> _NoOpFunctions;
   clang::Rewriter &_Rewriter;
 };

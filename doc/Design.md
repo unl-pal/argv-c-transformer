@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # ArgV C Transformer — Design
 
 ArgV converts real-world C source files into [SV-Comp](https://sv-comp.sosy-lab.org/)-style
@@ -58,12 +64,15 @@ function's body `{ … }` is replaced with `;`, leaving a bare prototype so the
 Transform step can still resolve its return type.
 
 - Counts AST properties per function (loops, comparisons, if-statements, …).
-- Applies `[Function Requirements]` min/max thresholds; functions that fail are removed.
+- Applies `[Complexity Requirements]` min/max thresholds and `[Feature Requirements]`
+  presence gates; functions that fail are removed. `main` is **not** exempt from these —
+  a `main` with, say, zero `for`-loops is removed just like any other function if
+  `ForLoops` has a nonzero minimum.
 - **Parameter-type gate**: any function that survives the thresholds but has at least one
   parameter whose type is not a supported primitive (see *Supported Types* below) is also
   body-stripped. This prevents vestigial functions from appearing in the final benchmark —
-  they would have bodies but never be called.
-- `main` is exempt from all filter removal (its body is always kept).
+  they would have bodies but never be called. `main` **is** exempt from this gate — its
+  `argc`/`argv` params are handled specially by `MainGenConsumer` in the Transform stage.
 - Applies `[File Requirements and Settings]` (e.g. `minFileLoC`, `useNonStdHeaders`,
   `keepCompilesOnly`).
 - Injects `extern __VERIFIER_nondet_*` declarations for the types that removed
@@ -156,8 +165,10 @@ which `__VERIFIER_nondet_*` variant to use.
 
 `main` receives special treatment throughout the pipeline:
 
-- **Filter**: exempt from all removal (thresholds and param-type gate). Its body is always
-  preserved even if it has pointer parameters.
+- **Filter**: subject to the same complexity/feature thresholds as any other function — a
+  `main` that doesn't meet them gets body-stripped too. It's exempt only from the
+  parameter-type gate, so its `argc`/`argv` pointer params never trigger removal on their
+  own.
 - **Transform**: renamed to `original_main` and called from a synthesized `main(void)`.
   For `main(int, char**)`, the pointer params have a well-defined contract (unlike an
   arbitrary `void *`), so we synthesize a realistic `argc`/`argv` using havocked C strings

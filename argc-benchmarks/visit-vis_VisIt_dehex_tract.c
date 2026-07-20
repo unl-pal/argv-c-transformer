@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: Copyright (C) 2004, 2003, 2002 University of Utah
-// SPDX-License-Identifier: Custom
+// SPDX-License-Identifier: Zlib
 // SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*

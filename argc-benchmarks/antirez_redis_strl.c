@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: Copyright (c) 1998, 2015 Todd C. Miller <millert@openbsd.org>
-// SPDX-License-Identifier: Custom
+// SPDX-License-Identifier: ISC
 // SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*

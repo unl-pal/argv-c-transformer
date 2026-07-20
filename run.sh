@@ -1,4 +1,9 @@
 #!/bin/sh
+
+# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Builds and Runs each stage, expecting the configuration file as an argument
 
 if [ -f "$1" ]; then

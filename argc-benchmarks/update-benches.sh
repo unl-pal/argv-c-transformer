@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# SPDX-FileCopyrightText: 2026 The ARG-V Project
+#
+# SPDX-License-Identifier: Apache-2.0
+
 set -e
 
 preprocess() {

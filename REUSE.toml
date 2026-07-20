@@ -1,0 +1,12 @@
+version = 1
+SPDX-PackageName = "argv-c-transformer"
+SPDX-PackageSupplier = "The ARG-V Project"
+SPDX-PackageDownloadLocation = "https://github.com/unl-pal/argv-c-transformer"
+
+# Files with no comment syntax (or, for the golden-test fixtures, files whose
+# exact byte content is asserted against in tests/transform/TransformGoldenTest.cpp)
+# get their licensing declared here instead of via an in-file header.
+[[annotations]]
+path = [".gitignore", "dataset.csv", "dataset-filtered.csv", "tests/transform/cases/**"]
+SPDX-FileCopyrightText = "Copyright (C) 2026 The ARG-V Project"
+SPDX-License-Identifier = "Apache-2.0"

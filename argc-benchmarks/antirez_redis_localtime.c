@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: Copyright (c) 2018-Present, Redis Ltd.
-// SPDX-License-Identifier: RSALv2 or SSPLv1 or AGPLv3
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 
 /*

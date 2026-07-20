@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /*
  * This code is not currently in use BUT can be used to generate pre compiled
  * files with the macros and headers expanded for the computer architecture the

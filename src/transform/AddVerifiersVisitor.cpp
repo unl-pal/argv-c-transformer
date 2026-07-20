@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #include "AddVerifiersVisitor.hpp"
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
