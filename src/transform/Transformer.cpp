@@ -4,6 +4,7 @@
 #include "include/Transformer.hpp"
 #include "ArgsFrontendActionFactory.hpp"
 #include "ClangToolUtils.hpp"
+#include "CliArgs.hpp"
 #include "DebugLog.hpp"
 
 #include <csignal>
@@ -26,20 +27,24 @@ const int defaultDebugLevel = 0;
 const bool defaultKeepCompilesOnly = true;
 const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultBenchmarkDir = "benchmarks";
-/// Not yet implemented in code - currently handled by scripts
-const bool defaultWipeOldBenchmarks = true;
 /// Per-file wall-clock budget for the isolated transform child, in seconds.
 const int defaultFileTimeoutSecs = 60;
 
-Transformer::Transformer(std::string configFile) : configuration() {
-  // Apply defaults; parseConfig overrides any keys present in configFile
+Transformer::Transformer(std::string configFile, std::string inputPath) : configuration() {
+  // Apply defaults; parseConfig overrides any keys present in configFile.
+  // When an input path is given on the command line, the derived benchmarkDir
+  // acts as a default (a config file can still override it), but the input
+  // itself always wins over any filterDir in the config.
   configuration.debugLevel = defaultDebugLevel;
   configuration.keepCompilesOnly = defaultKeepCompilesOnly;
   configuration.filterDir = defaultFilterDir;
-  configuration.benchmarkDir = defaultBenchmarkDir;
-  configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
+  configuration.benchmarkDir =
+      inputPath.empty() ? defaultBenchmarkDir : inputBaseName(inputPath) + "-benchmarks";
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
-  parseConfig(configFile);
+  if (!configFile.empty())
+    parseConfig(configFile);
+  if (!inputPath.empty())
+    configuration.filterDir = inputPath;
   globalDebugLevel() = configuration.debugLevel;
 }
 
@@ -334,9 +339,7 @@ void Transformer::parseConfig(std::string configFile) {
         configuration.debugLevel = 0;
       }
     } else if (key == "keepCompilesOnly") {
-      configuration.keepCompilesOnly = parseConfigBool(value);
-    } else if (key == "wipeOldBenchmarks") {
-      configuration.wipeOldBenchmarks = parseConfigBool(value);
+      configuration.keepCompilesOnly = (value == "true" || value == "True");
     } else if (key == "fileTimeoutSecs") {
       try {
         configuration.fileTimeoutSecs = std::stoi(value);

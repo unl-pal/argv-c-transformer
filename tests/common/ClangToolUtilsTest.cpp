@@ -49,9 +49,9 @@ TEST_F(ParseIniFileTest, ParsesPathValue) {
 }
 
 TEST_F(ParseIniFileTest, ParsesMinMaxPair) {
-  auto m = parse("ForLoops = 1, 99999\n");
+  auto m = parse("ForLoops = 1, 9999\n");
   ASSERT_TRUE(m.count("ForLoops"));
-  EXPECT_EQ(m.at("ForLoops"), "1, 99999");
+  EXPECT_EQ(m.at("ForLoops"), "1, 9999");
 }
 
 TEST_F(ParseIniFileTest, SkipsSectionHeadersAndComments) {
@@ -76,14 +76,6 @@ TEST_F(ParseIniFileTest, MissingFileYieldsEmptyMap) {
 // ---------------------------------------------------------------------------
 // Small string helpers
 // ---------------------------------------------------------------------------
-
-TEST(ParseConfigBool, RecognisesTrueSpellings) {
-  EXPECT_TRUE(parseConfigBool("true"));
-  EXPECT_TRUE(parseConfigBool("True"));
-  EXPECT_FALSE(parseConfigBool("false"));
-  EXPECT_FALSE(parseConfigBool("1"));
-  EXPECT_FALSE(parseConfigBool(""));
-}
 
 TEST(Trim, StripsSpacesAndTabs) {
   EXPECT_EQ(trim("  hello \t"), "hello");

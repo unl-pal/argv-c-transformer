@@ -5,6 +5,7 @@
 #include "include/Filterer.hpp"
 #include "FrontendFactoryWithArgs.hpp"
 #include "ClangToolUtils.hpp"
+#include "CliArgs.hpp"
 #include "DebugLog.hpp"
 
 #include <algorithm>
@@ -18,20 +19,50 @@
 #include <iostream>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
-#include <regex>
+#include <optional>
 #include <sstream>
 #include <string>
 
 const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultDatabaseDir = "database";
-/// Not yet implemented in code - currently handled by scripts
-const bool defaultWipeOldBenchmarks = true;
 
-Filterer::Filterer(std::string configFile) {
-  configuration.filterDir = defaultFilterDir;
+/**
+ * @brief Parses a complexity threshold value into a {min, max} pair.
+ *
+ * Accepts a "min,max" range (e.g. "1,10"), a bare value treated as a minimum
+ * with no upper bound (e.g. "2" == "2,9999"), or a "," followed by just a max
+ * (e.g. ",10" == "0,10").
+ *
+ * @param value Raw config value, already matched as key=value.
+ * @return The parsed pair, or std::nullopt if the value is malformed.
+ */
+static std::optional<std::pair<int, int>> parseComplexityValue(const std::string &value) {
+  std::string trimmed = trim(value);
+  size_t comma = trimmed.find(',');
+  std::string minStr = trim(trimmed.substr(0, comma));
+  std::string maxStr = comma == std::string::npos ? "9999" : trim(trimmed.substr(comma + 1));
+
+  // Note: this will allow and parse "5abc" as 5
+  try {
+    int min = minStr.empty() ? 0 : std::stoi(minStr);
+    int max = maxStr.empty() ? 9999 : std::stoi(maxStr);
+    return std::make_pair(min, max);
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+Filterer::Filterer(std::string configFile, std::string inputPath) {
+  // When an input path is given on the command line, derived directories act
+  // as defaults (a config file can still override filterDir), but the input
+  // itself always wins over any databaseDir in the config.
+  configuration.filterDir =
+      inputPath.empty() ? defaultFilterDir : inputBaseName(inputPath) + "-filtered";
   configuration.databaseDir = defaultDatabaseDir;
-  configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
-  parseConfigFile(configFile);
+  if (!configFile.empty())
+    parseConfigFile(configFile);
+  if (!inputPath.empty())
+    configuration.databaseDir = inputPath;
 };
 
 void Filterer::parseConfigFile(std::string configFile) {
@@ -41,19 +72,17 @@ void Filterer::parseConfigFile(std::string configFile) {
   }
   for (auto [key, value] : parseIniFile(configFile)) {
     if (complexityConfig.count(key)) {
-      size_t comma = value.find(',');
-      if (comma == std::string::npos) {
-        std::cerr << "Warning: complexity key '" << key
-                  << "' expects 'min,max' — ignoring value '" << value << "'" << std::endl;
-        continue;
-      }
-      try {
-        int min = std::stoi(trim(value.substr(0, comma)));
-        int max = std::stoi(trim(value.substr(comma + 1)));
-        complexityConfig.at(key) = {min, max};
-      } catch (...) {
-        std::cerr << "Warning: could not parse complexity range for '" << key << "': '" << value
+      std::optional<std::pair<int, int>> range = parseComplexityValue(value);
+      if (range && range->first > range->second) {
+        std::cerr << "Warning: complexity key '" << key << "' has min (" << range->first
+                  << ") greater than max (" << range->second << ") — ignoring value '" << value
                   << "'" << std::endl;
+      } else if (range) {
+        complexityConfig.at(key) = *range;
+      } else {
+        std::cerr << "Warning: complexity key '" << key
+                  << "' expects 'min,max', 'min', or ',max' — ignoring value '" << value << "'"
+                  << std::endl;
       }
     } else if (featureConfig.count(key)) {
       std::string v = trim(value);
@@ -86,12 +115,12 @@ void Filterer::parseConfigFile(std::string configFile) {
       configuration.filterDir = value;
       if (!std::filesystem::exists(value))
         std::filesystem::create_directory(value);
-    } else if (key == "wipeOldBenchmarks") {
-      configuration.wipeOldBenchmarks = parseConfigBool(value);
     } else if (key == "benchmarkDir" || key == "keepCompilesOnly" || key == "csv" ||
                key == "downloadDir" || key == "language" || key == "projectCount" ||
                key == "minNumStars" || key == "minRepoLoc") {
       // consumed by the transform step or Downloader.py; not a filter key
+    } else if (key == "wipeOldBenchmarks" || key == "useNonStdHeaders") {
+      std::cerr << "Config key '" << key << "' has been removed — ignoring" << std::endl;
     } else if (key == "debug") {
       // silently ignored: replaced by debugLevel
     } else {
@@ -123,21 +152,9 @@ bool Filterer::checkPotentialFile(std::string fileName) {
     return false;
   }
 
-  std::regex allowedHeadersPattern("#(include|import)\\ *[<\"]([\\w\\/0-9\\.]*)[\">]");
   std::string line;
-  std::smatch match;
   int count = 0;
   while (std::getline(file, line)) {
-    if (std::regex_search(line, match, allowedHeadersPattern)) {
-      bool isStdLib =
-          std::find(stdLibNames.begin(), stdLibNames.end(), match[2]) != stdLibNames.end();
-      if (!isStdLib && !fileSettings.at("useNonStdHeaders")) {
-        debugLog(1, "[filter] skipped (non-std header '" + match[2].str() +
-                        "', useNonStdHeaders=" +
-                        std::to_string(fileSettings.at("useNonStdHeaders")) + "): " + fileName);
-        return false;
-      }
-    }
     if (!line.empty())
       count++;
   }
@@ -214,8 +231,9 @@ int Filterer::run() {
     std::filesystem::path oldPath(fileName);
     // Mirror the input's path under filterDir by stripping the databaseDir
     // prefix; relative() handles absolute and relative inputs uniformly.
+    // relative() yields "." when the input path IS the file (single-file mode).
     std::filesystem::path relPath = std::filesystem::relative(oldPath, configuration.databaseDir);
-    if (relPath.empty() || *relPath.begin() == "..")
+    if (relPath.empty() || *relPath.begin() == ".." || relPath == ".")
       relPath = oldPath.filename();
     std::filesystem::path newPath = std::filesystem::path(configuration.filterDir) / relPath;
 
@@ -228,6 +246,11 @@ int Filterer::run() {
     std::filesystem::create_directories(newPath.parent_path());
     std::error_code ec;
     llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
+    if (ec) {
+      std::cerr << "Cannot open output file " << newPath.string() << ": " << ec.message()
+                << std::endl;
+      continue;
+    }
 
     FrontendFactoryWithArgs factory(&complexityConfig, &featureConfig, output);
     bool ran = runToolOnFile(oldPath.string(), factory);

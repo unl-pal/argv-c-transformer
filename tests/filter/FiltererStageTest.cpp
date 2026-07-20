@@ -110,20 +110,6 @@ TEST_F(FiltererStageTest, RejectsFileAboveMaxLoC) {
   EXPECT_FALSE(fs::exists(filterDir / "big.c"));
 }
 
-TEST_F(FiltererStageTest, RejectsNonStdHeaderByDefault) {
-  // useNonStdHeaders defaults to 0: a project-local include disqualifies
-  // the whole file at the pre-filter, before any Clang parsing.
-  writeConfig();
-  writeFile(databaseDir / "uses_local.c",
-            "#include \"project.h\"\n"
-            "int f(void) { return 0; }\n");
-
-  Filterer f(configPath.string());
-  f.run();
-
-  EXPECT_FALSE(fs::exists(filterDir / "uses_local.c"));
-}
-
 TEST_F(FiltererStageTest, AcceptsStdHeader) {
   writeConfig();
   writeFile(databaseDir / "uses_std.c",
@@ -136,8 +122,10 @@ TEST_F(FiltererStageTest, AcceptsStdHeader) {
   EXPECT_TRUE(fs::exists(filterDir / "uses_std.c"));
 }
 
-TEST_F(FiltererStageTest, AcceptsNonStdHeaderWhenEnabled) {
-  writeConfig("useNonStdHeaders = true\n");
+TEST_F(FiltererStageTest, AcceptsNonStdHeader) {
+  // Non-standard includes never disqualify a file at the pre-filter; include
+  // handling is the transform step's problem.
+  writeConfig();
   writeFile(databaseDir / "project.h", "int helper(void);\n");
   writeFile(databaseDir / "uses_local.c",
             "#include \"project.h\"\n"
@@ -150,9 +138,9 @@ TEST_F(FiltererStageTest, AcceptsNonStdHeaderWhenEnabled) {
 }
 
 TEST_F(FiltererStageTest, StripsFunctionFailingComplexityThreshold) {
-  // ForLoops = 1,99999 requires at least one for loop per function: `plain`
+  // ForLoops = 1,9999 requires at least one for loop per function: `plain`
   // fails and is stripped to a bare declaration; `loopy` keeps its body.
-  writeConfig("ForLoops = 1,99999\n");
+  writeConfig("ForLoops = 1,9999\n");
   writeFile(databaseDir / "mixed.c",
             "int loopy(int n) {\n"
             "  int s = 0;\n"

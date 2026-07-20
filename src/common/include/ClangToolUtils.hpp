@@ -176,16 +176,16 @@ inline bool runToolOnFile(const std::string &filePath,
   clang::tooling::ClangTool tool(optionsParser.getCompilations(),
                                  optionsParser.getSourcePathList());
   tool.setDiagnosticConsumer(&diagConsumer);
-  if (tool.run(&factory) != 0)
-    std::cerr << "Clang tool reported errors while processing: " << filePath << std::endl;
+  try {
+    if (tool.run(&factory) != 0)
+      std::cerr << "Clang tool reported errors while processing: " << filePath << std::endl;
+  } catch (const std::exception &e) {
+    // A consumer bug (e.g. a config/metric name mismatch) should not take
+    // down the whole batch — report it and move on to the next file.
+    std::cerr << "Clang tool threw while processing " << filePath << ": " << e.what() << std::endl;
+    return false;
+  }
   return true;
-}
-
-/**
- * @brief Parses a config bool: "true"/"True" is true, anything else false.
- */
-inline bool parseConfigBool(const std::string &value) {
-  return value == "true" || value == "True";
 }
 
 /**
@@ -218,7 +218,7 @@ inline std::map<std::string, std::string> parseIniFile(const std::string &config
   std::ifstream file(configFile);
   if (!file.is_open())
     return result;
-  std::regex pattern(R"(^\s*(\w+)\s*=\s*([0-9]+|[\w\s,]+|[\w/\-_.]+)$)");
+  std::regex pattern(R"(^\s*(\w+)\s*=\s*([0-9]+|[\w\s,\-]+|[\w/\-_.]+)$)");
   std::string line;
   std::smatch match;
   while (std::getline(file, line)) {

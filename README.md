@@ -115,12 +115,19 @@ python3 src/download/Downloader.py <config>
 
 # Running
 
-All three binaries take a config file as their sole argument:
+All three binaries take up to two positional arguments — an input (a directory
+of C files, or a single `.c` file) and/or a config file, in either order.
+A directory or `.c` file is treated as the input; any other argument is the
+config. Both are optional individually, but at least one is required.
 
 ```sh
-./build/filter    <config>   # filter stage only
-./build/transform <config>   # transform stage only
-./build/full      <config>   # filter then transform
+./build/full <config>              # dirs and thresholds from the config file
+./build/full <repo-dir>            # no config needed: built-in defaults,
+                                   #   outputs to <repo>-filtered/ and
+                                   #   <repo>-benchmarks/ in the working dir
+./build/full <repo-dir> <config>   # thresholds from config, input from CLI
+./build/filter    <repo-dir>       # filter stage only → <repo>-filtered/
+./build/transform <repo>-filtered  # transform stage only → <repo>-benchmarks/
 ```
 
 A convenience script builds and runs both stages sequentially:
@@ -138,7 +145,7 @@ Key sections:
 
 - `[File Locations]` — `databaseDir`, `filterDir`, `benchmarkDir`
 - `[Function Requirements]` — per-function thresholds (`minForLoops`, `minTypeIfStmt`, etc.)
-- `[File Requirements and Settings]` — `type`, `minFileLoC`, `useNonStdHeaders`, `keepCompilesOnly`, `fileTimeoutSecs`
+- `[File Requirements and Settings]` — `minFileLoC`, `maxFileLoC`, `fileTimeoutSecs`
 - `[Debugging Flags]` — `debug`, `debugLevel` (0–3)
 
 The transform stage preprocesses each surviving benchmark into a `.i` file with
