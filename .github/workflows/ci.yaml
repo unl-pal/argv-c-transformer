@@ -30,6 +30,19 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install cmake ninja llvm@20 lld@20
 
+      - name: Put versioned clang on PATH (Ubuntu)
+        if: runner.os == 'Linux'
+        run: echo "/usr/lib/llvm-20/bin" >> "$GITHUB_PATH"
+
+      - name: Put versioned clang on PATH (macOS)
+        if: runner.os == 'macOS'
+        run: echo "$(brew --prefix llvm@20)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify clang on PATH
+        run: |
+          command -v clang
+          clang --version
+
       - name: Configure (Ubuntu)
         if: runner.os == 'Linux'
         run: CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja -DLLVM_DIR="$(llvm-config-20 --cmakedir)"
@@ -42,3 +55,6 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+      - name: Smoke test (end-to-end filter/transform)
+        run: ./tests/smoke/run_smoke_test.sh ./build/filter ./build/transform

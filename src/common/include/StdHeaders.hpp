@@ -121,6 +121,9 @@ inline const std::unordered_map<std::string, StdHeaderInfo> kStdTypeHeaders = {
     {"pthread_key_t", {"pthread.h", HeaderCategory::Concurrency}},
     {"pthread_once_t", {"pthread.h", HeaderCategory::Concurrency}},
 
+    // <semaphore.h>
+    {"sem_t", {"semaphore.h", HeaderCategory::Concurrency}},
+
     // <stdarg.h>
     {"va_list", {"stdarg.h", HeaderCategory::Core}},
 
