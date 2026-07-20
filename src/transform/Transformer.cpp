@@ -8,6 +8,7 @@
 #include "ConfigParser.hpp"
 #include "DebugLog.hpp"
 
+#include <csignal>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
