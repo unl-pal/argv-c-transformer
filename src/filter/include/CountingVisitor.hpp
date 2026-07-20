@@ -116,23 +116,6 @@ public:
   bool VisitWhileStmt(clang::WhileStmt *W);
 
 private:
-  /**
-   * @brief Safe accessor for a function's attribute bucket.
-   *
-   * The various Visit* methods resolve an enclosing function name and increment
-   * its counters. That name is not guaranteed to be in {@code _allFunctions}:
-   * only functions whose declaration location is in the main file are emplaced
-   * (see {@code VisitFunctionDecl}), but a node can pass its own
-   * {@code isInMainFile} check while its enclosing function came from a macro
-   * expansion or included header. A raw {@code at()} would throw
-   * {@code std::out_of_range} and terminate the run. This routes any unknown
-   * name to the always-present {@code "Program"} (file-scope) bucket instead.
-   *
-   * @param name  Enclosing-function name from get*ParentFuncName.
-   * @return      Reference to the matching (or fallback) attribute bucket.
-   */
-  attributes &entryFor(const std::string &name);
-
   clang::ASTContext *_C;
   clang::SourceManager *_mgr;
   std::shared_ptr<std::unordered_map<std::string, attributes>> _allFunctions;

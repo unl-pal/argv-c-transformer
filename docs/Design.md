@@ -193,6 +193,28 @@ project header are recovered by `AddStdIncludesConsumer` (see the Transform stag
 Files that depend on *project* types or macros from a local header will still fail to
 compile after stripping and are caught by `keepCompilesOnly`.
 
+### Function-Name Map Lookups in `CountingVisitor`
+
+`CountingVisitor`'s `Visit*` methods resolve the enclosing function name for
+each AST node (via `getStmtParentFuncName`/`getDeclParentFuncName`) and use it
+to key into the `_allFunctions` map, falling through to `.at()` — an unknown
+name throws `std::out_of_range` and aborts that file's processing rather than
+silently misattributing counts. An earlier version routed unknown names to the
+always-present `"Program"` bucket instead of using `.at()` directly, on the
+theory that a node could pass its own `isInMainFile` check while its resolved
+enclosing function came from a macro expansion or an unresolved header. That
+theory doesn't hold up: unresolved local headers (the Filter step has no
+project-local include path — see *Include Stripping*) fail non-fatally and
+their macros are simply never defined, so nothing can expand from them; and
+Clang's error-recovery paths (implicit-int fallback, hard parse bail-outs)
+were verified empirically to never produce the mismatch — tested against 5,134
+real-world files plus adversarial cases (unresolved-header return types,
+unresolved-header macros, broken declarators, macro-synthesized functions,
+`#line`-split declarations) with zero fallback triggers. If `.at()` ever does
+throw in practice, treat it as a real bug to investigate (a genuinely new
+AST shape falling through the traversal-order assumption), not something to
+paper over with a silent fallback again.
+
 ### Preprocessor-Gated Code
 
 The pipeline only operates on the **active** preprocessed translation unit. Functions inside
