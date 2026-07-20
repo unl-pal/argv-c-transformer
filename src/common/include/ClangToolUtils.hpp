@@ -57,6 +57,42 @@ inline std::optional<std::string> readCommandOutput(const char *cmd) {
 }
 
 /**
+ * @brief Aborts if the `clang` resolved off PATH at runtime is too old.
+ *
+ * checkClangVersion() only confirms the Clang this binary was *built*
+ * against; clangCommand() below invokes a bare "clang" that PATH resolves
+ * independently, and it can silently be a different, older install (see
+ * README.md, "clang on PATH must match the build"). Only reached by tools
+ * that actually shell out to clang (verify/full) — filter/transform never
+ * call clangCommand() and don't need this check. Passes through silently
+ * when the user's PATH is already fine; only speaks up when a fix is
+ * actually needed.
+ */
+inline void checkRuntimeClangVersion() {
+  std::optional<std::string> version = readCommandOutput("clang -dumpversion 2>/dev/null");
+  if (!version) {
+    std::cerr << "Error: no `clang` found on PATH. This project needs one at runtime "
+                 "for preprocessing and compile-checking. See README.md (\"Dependencies\") "
+                 "for how to get one."
+              << std::endl;
+    std::exit(1);
+  }
+  int major;
+  try {
+    major = std::stoi(*version);
+  } catch (...) {
+    return; // Unparseable output; let it through and surface any real issue later.
+  }
+  if (major < 20) {
+    std::cerr << "Error: `clang` on PATH is version " << *version
+              << ", but 20 or newer is required. See README.md (\"clang on PATH must "
+                 "match the build\") for how to fix this."
+              << std::endl;
+    std::exit(1);
+  }
+}
+
+/**
  * @brief Returns the macOS SDK sysroot, if applicable.
  *
  * On macOS, system C headers (string.h, stdlib.h, …) live inside the SDK

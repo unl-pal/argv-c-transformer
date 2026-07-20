@@ -188,7 +188,7 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       config.transformDir = value;
     } else if (key == "benchmarkDir") {
       config.benchmarkDir = value;
-    } else if (key == "csv" || key == "downloadDir" || key == "language" ||
+    } else if (key == "csv" || key == "language" ||
                key == "projectCount" || key == "minNumStars" || key == "minRepoLoc" ||
                key == "stars" || key == "size") {
       // consumed by Downloader.py; not a pipeline key

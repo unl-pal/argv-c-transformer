@@ -22,9 +22,7 @@ gitignored, so running this tutorial won't leave anything to clean up in
 
 ```ini
 [File Locations]
-# Downloader.py writes here; filter reads from here. Must match so the
-# downloaded tree is exactly what gets scanned.
-downloadDir=doc/tutorial/source-files
+# Downloader.py writes here; filter reads from here.
 databaseDir=doc/tutorial/source-files
 filterDir=doc/tutorial/filtered-files
 benchmarkDir=doc/tutorial/transformed-files
@@ -76,10 +74,9 @@ Result:
 doc/tutorial/source-files/natsteven/argc-example/src/example.c
 ```
 
-`downloadDir` and `databaseDir` are set to the same path
-(`doc/tutorial/source-files`) on purpose: the downloader writes into
-`downloadDir/<owner>/<name>/...`, and the Filter step scans `databaseDir` —
-they need to line up so Filter sees what Download fetched.
+`databaseDir` serves double duty: the downloader writes into
+`databaseDir/<owner>/<name>/...`, and the Filter step scans that same
+`databaseDir` for what Download fetched.
 
 `.../example.c`:
 
@@ -295,5 +292,5 @@ directly — that's the form SV-Comp benchmark runners consume.
   intraprocedural-by-design, pointer-return havocking, etc.)
 - `properties.config` at the repo root — every filter/transform setting,
   with defaults documented inline.
-- `run.sh` — the same filter → transform sequence as a build+run script,
-  for a real (non-toy) `databaseDir`.
+- `./build/argv-c <config>` — the same filter → transform → verify sequence
+  in one binary, for a real (non-toy) `databaseDir`.

@@ -46,10 +46,13 @@ flowchart LR
     CFG -.-> VF
 ```
 
-The `full` binary runs Filter, Transform, then Verify in one invocation. All four C++
-binaries take up to two positional arguments — an input (directory or single `.c` file)
-and/or a config file, in either order; a `-filtered`/`-transformed` suffix on the input
-name is stripped when deriving default output names.
+The `argv-c` binary runs Filter, Transform, then Verify in one invocation, then
+deletes the intermediate `-filtered`/`-transformed` directories once verify
+finishes (unless the config explicitly names `filterDir`/`transformDir`,
+which is taken as a request to keep them). All four C++ binaries take up to
+two positional arguments — an input (directory or single `.c` file) and/or a
+config file, in either order; a `-filtered`/`-transformed` suffix on the
+input name is stripped when deriving default output names.
 
 ## Stage Responsibilities
 
@@ -61,9 +64,9 @@ Populates `databaseDir` with candidate C code from GitHub.
 - Applies `[Downloading]` config criteria: `language`, `minRepoLoC`, `minNumStars`,
   and stops after `projectCount` repos.
 - Checks each repo URL is still reachable, then shallow-clones (`--depth=1`) into
-  `downloadDir`.
+  `databaseDir`.
 - Not part of the CMake build; invoked directly (`python3 src/download/Downloader.py
-  properties.config`) or from the commented-out step in `run.sh`.
+  properties.config`).
 
 ### 2. Filter (`src/filter/`, driver: `Filterer.cpp`)
 
@@ -410,4 +413,4 @@ stages.
 | `filter`    | `src/filter/`    | Filter stage only                                 |
 | `transform` | `src/transform/` | Transform stage only                              |
 | `verify`    | `src/verify/`    | Verify stage only                                 |
-| `full`      | `src/full/`      | Filter, Transform, then Verify in one run         |
+| `argv-c`    | `src/full/`      | Filter, Transform, then Verify in one run         |

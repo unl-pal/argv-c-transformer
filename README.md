@@ -18,9 +18,123 @@ candidates for verification.
 
 See `argc-benchmarks/` for examples of produced benchmarks.
 
-# Dependencies
+## Contents
 
-This project requires **LLVM/Clang 20**, CMake (>= 3.20), and Ninja.
+- [Install](#install)
+  - [Download a prebuilt package](#download-a-prebuilt-package)
+  - [Build from source](#build-from-source)
+- [Running](#running)
+  - [Configuration](#configuration)
+- [Build](#build)
+  - [macOS (Homebrew)](#macos-homebrew)
+  - [Linux (Debian/Ubuntu)](#linux-debianubuntu)
+  - [`clang` on `PATH` must match the build](#clang-on-path-must-match-the-build)
+- [Testing](#testing)
+- [Downloader (optional)](#downloader-optional)
+
+# Install
+
+`argv-c` is the one binary most users need — it runs the whole filter →
+transform → verify pipeline (see [Running](#running)). Get it either of two
+ways:
+
+## Download a prebuilt package
+
+Grab the archive for your platform from the
+[Releases page](https://github.com/unl-pal/argv-c-transformer/releases):
+
+- Linux (x86_64): `argv-c-<version>-linux-x86_64.tar.gz`
+- macOS (Apple Silicon): `argv-c-<version>-macos-arm64.tar.gz`
+
+then:
+
+```sh
+tar xzf argv-c-<version>-<platform>.tar.gz
+sudo mv argv-c /usr/local/bin/   # or anywhere else on PATH
+```
+
+Packages don't bundle LLVM/Clang — `argv-c` still shells out to a bare
+`clang` at runtime for preprocessing and compile-checking (see
+["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build)),
+so either way you need Clang 20+ on `PATH`. `argv-c` checks this itself at
+startup and tells you what to do if it's missing.
+
+No package for your platform (e.g. Windows, Linux ARM)? Build from source
+instead.
+
+## Build from source
+
+Clone the repo, then see [Build](#build) below for dependencies and build
+steps, then:
+
+```sh
+cmake --install build
+```
+
+installs `argv-c` to the standard CMake prefix (`/usr/local` by default).
+Pass `--prefix <dir>` to install elsewhere, e.g. `cmake --install build --prefix ~/.local`.
+The individual stage binaries (`filter`/`transform`/`verify`) aren't
+installed; run them out of `build/` if you need them (see
+[Running](#running)).
+
+# Running
+
+All four binaries take up to two positional arguments — an input (a directory
+of C files, or a single `.c` file) and/or a config file, in either order.
+A directory or `.c` file is treated as the input; any other argument is the
+config. Both are optional individually, but at least one is required.
+Examples below assume `argv-c` is installed (see [Install](#install));
+otherwise run it as `./build/argv-c`.
+
+`argv-c` runs the whole filter → transform → verify pipeline in one process
+and produces just the final benchmarks — the intermediate `-filtered`/
+`-transformed` directories are cleaned up once verify finishes, unless the
+config file explicitly names `filterDir`/`transformDir`, which is taken as a
+request to keep them around:
+
+```sh
+argv-c <config>              # dirs and thresholds from the config file
+argv-c <repo-dir>            # no config needed: built-in defaults,
+                             #   output goes to <repo>-benchmarks/ in the
+                             #   working directory
+argv-c <repo-dir> <config>   # thresholds from config, input from CLI
+```
+
+Run a single stage on its own — useful for development, e.g. iterating on
+one stage without re-running the others. These aren't installed, so run them
+straight out of `build/`:
+
+```sh
+./build/filter    <repo-dir>          # filter stage only    → <repo>-filtered/
+./build/transform <repo>-filtered     # transform stage only → <repo>-transformed/
+./build/verify    <repo>-transformed  # verify stage only    → <repo>-benchmarks/
+```
+
+## Configuration
+
+Config files use INI syntax. See `properties.config` for all available options.
+Key sections:
+
+- `[File Locations]` — `databaseDir`, `filterDir`, `benchmarkDir`
+- `[Function Requirements]` — per-function thresholds (`minForLoops`, `minTypeIfStmt`, etc.)
+- `[File Requirements and Settings]` — `minFileLoC`, `maxFileLoC`, `fileTimeoutSecs`
+- `[Debugging Flags]` — `debug`, `debugLevel` (0–3)
+
+The transform stage preprocesses each surviving benchmark into a `.i` file with
+`clang -E -P -std=gnu11`, requiring `clang` on `PATH` (see
+["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build)
+below).
+
+# Build
+
+Check what you already have before installing anything — `clang --version`
+tells you the version currently resolved on `PATH`. This project requires
+**LLVM/Clang 20**, CMake (>= 3.20), and Ninja; if you're already on 20 or
+newer, skip straight to the build commands below. `verify` and `argv-c` (the
+tools that shell out to `clang` at runtime — see
+["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build))
+check this for you at startup too, and will only complain if what's on
+`PATH` doesn't meet the minimum.
 
 ## macOS (Homebrew)
 
@@ -54,12 +168,16 @@ CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja
 
 ## `clang` on `PATH` must match the build
 
-Beyond the build itself, `filter`/`transform` shell out to a bare `clang`
-command at runtime (see `ClangToolUtils.hpp` / `Transformer.cpp`) to
+Beyond the build itself, `verify` (and therefore `argv-c`) shells out to a
+bare `clang` command at runtime (see `ClangToolUtils.hpp` / `Verifier.cpp`) to
 preprocess and compile-check each candidate benchmark — this is separate
-from, and not guaranteed to match, the LLVM 20 libraries the tools are
-linked against. Neither platform puts the versioned LLVM install on `PATH`
-by default:
+from, and not guaranteed to match, the LLVM 20 libraries the tools are linked
+against. `verify`/`argv-c` check this at startup and refuse to run if `PATH`
+doesn't resolve to Clang 20+, so a mismatch here is caught immediately rather
+than silently producing different benchmark output than the one the project
+was built and tested with — but you still need to fix your `PATH` to get
+past it. Neither platform puts the versioned LLVM install on `PATH` by
+default:
 
 - **Linux**: installing `clang-20` via apt does not repoint the unversioned
   `clang` — that may already point at a different preinstalled version.
@@ -73,17 +191,18 @@ by default:
   export PATH="$(brew --prefix llvm@20)/bin:$PATH"
   ```
 
-Run `clang --version` after exporting to confirm it resolves to LLVM 20
-before running `filter`/`transform` — a mismatched `clang` here can silently
-produce different benchmark output than the one the project was built and
-tested with. CI sets this explicitly for the same reason.
-
-# Build
+CI sets this explicitly for the same reason.
 
 ```sh
 cmake -B build -S . -G Ninja
-ninja -C build filter transform full
+ninja -C build
 ```
+
+This builds all four binaries — `argv-c` plus the individual `filter`/
+`transform`/`verify` stages (useful for development: iterating on one stage
+without re-running the others). They're runnable straight out of `build/`,
+e.g. `./build/filter <repo-dir>`. See [Install](#install) to install just
+`argv-c`.
 
 # Testing
 
@@ -131,49 +250,9 @@ source .venv/bin/activate
 pip install GitPython
 ```
 
-Configure the `[File Locations]` section of your config file with a `downloadDir`
+Configure the `[File Locations]` section of your config file with a `databaseDir`
 pointing to where repositories should be cloned, then run:
 
 ```sh
 python3 src/download/Downloader.py <config>
 ```
-
-# Running
-
-All three binaries take up to two positional arguments — an input (a directory
-of C files, or a single `.c` file) and/or a config file, in either order.
-A directory or `.c` file is treated as the input; any other argument is the
-config. Both are optional individually, but at least one is required.
-
-```sh
-./build/full <config>              # dirs and thresholds from the config file
-./build/full <repo-dir>            # no config needed: built-in defaults,
-                                   #   outputs to <repo>-filtered/ and
-                                   #   <repo>-benchmarks/ in the working dir
-./build/full <repo-dir> <config>   # thresholds from config, input from CLI
-./build/filter    <repo-dir>       # filter stage only → <repo>-filtered/
-./build/transform <repo>-filtered  # transform stage only → <repo>-benchmarks/
-```
-
-A convenience script builds and runs both stages sequentially:
-
-```sh
-./run.sh <config>
-```
-
-To include the download step, uncomment the relevant lines in `run.sh`.
-
-## Configuration
-
-Config files use INI syntax. See `properties.config` for all available options.
-Key sections:
-
-- `[File Locations]` — `databaseDir`, `filterDir`, `benchmarkDir`
-- `[Function Requirements]` — per-function thresholds (`minForLoops`, `minTypeIfStmt`, etc.)
-- `[File Requirements and Settings]` — `minFileLoC`, `maxFileLoC`, `fileTimeoutSecs`
-- `[Debugging Flags]` — `debug`, `debugLevel` (0–3)
-
-The transform stage preprocesses each surviving benchmark into a `.i` file with
-`clang -E -P -std=gnu11`, requiring `clang` on `PATH` (see
-["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build)
-above).

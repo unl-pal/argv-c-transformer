@@ -102,13 +102,17 @@ std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
 // side-effect-free, since the variable it introduces cannot be observed
 // outside the loop.
 bool isInitSideEffectFree(const clang::Stmt *init) {
+  std::set<const clang::VarDecl *> mutableVars = loopLocalVars(init);
   if (!init)
     return true;
   if (const auto *declStmt = clang::dyn_cast<clang::DeclStmt>(init)) {
-    if (!declStmt->isSingleDecl())
-      return false;
-    const auto *VD = clang::dyn_cast<clang::VarDecl>(declStmt->getSingleDecl());
-    return VD && isSideEffectFree(VD->getInit());
+    for (const auto *D: declStmt->decls()) {
+      if (const auto *varDecl = clang::dyn_cast<clang::VarDecl>(D)) {
+        if (!isSideEffectFree(varDecl->getInit(), mutableVars))
+          return false;
+      }
+    }
+    return true;
   }
   if (const auto *E = clang::dyn_cast<clang::Expr>(init))
     return isSideEffectFree(E);

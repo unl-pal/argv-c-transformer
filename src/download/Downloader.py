@@ -21,7 +21,6 @@ downloadSettings = {
 
 fileSettings = {
     "csv": "dataset.csv",
-    "downloadDir": "database",
     "databaseDir": "database",
 }
 
@@ -145,12 +144,12 @@ headers = get_auth_headers()
 
 if downloadSettings["repo"]:
     repo = downloadSettings["repo"]
-    location = os.path.join(fileSettings["downloadDir"], repo)
+    location = os.path.join(fileSettings["databaseDir"], repo)
     if os.path.exists(location):
         print(f"{location} already exists")
     else:
         print(f"Downloading .c/.h from {repo}...")
-        count = download_c_files(repo, fileSettings["downloadDir"], headers)
+        count = download_c_files(repo, fileSettings["databaseDir"], headers)
         if count > 0:
             print(f"  Extracted {count} file(s)")
         else:
@@ -181,7 +180,7 @@ if os.path.exists(fileSettings["csv"]):
                 print(f"Skipping {row['repository']} - Does Not Meet Criteria")
                 continue
 
-            location = os.path.join(fileSettings["downloadDir"], row["repository"])
+            location = os.path.join(fileSettings["databaseDir"], row["repository"])
             if os.path.exists(location):
                 print(f"{location} already exists")
                 i += 1
@@ -190,7 +189,7 @@ if os.path.exists(fileSettings["csv"]):
             i += 1
             print(f"Downloading .c/.h from {row['repository']}...")
             count = download_c_files(
-                row["repository"], fileSettings["downloadDir"], headers
+                row["repository"], fileSettings["databaseDir"], headers
             )
             if count > 0:
                 print(f"  Extracted {count} file(s)")

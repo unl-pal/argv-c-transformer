@@ -27,7 +27,7 @@
  *
  * Results are written into the {@code _allFunctions} map passed at construction
  * — the same map that {@code FilterFunctionsConsumer} reads next in the
- * pipeline. The special key {@code "Program"} accumulates counts for anything
+ * pipeline. The special key {@code "FileScope"} accumulates counts for anything
  * declared at file scope rather than inside a function.
  */
 class CountingVisitor : public clang::RecursiveASTVisitor<CountingVisitor> {
@@ -36,11 +36,10 @@ public:
   struct ComplexityCounts {
     int CallFunc = 0;
     int ForLoops = 0;
-    int Functions = 0;
     int IfStmt = 0;
     int Param = 0;
     int WhileLoops = 0;
-    int Operations = 0; // ops w/ side effects on signed types (for UB/no-overflow property detection)
+    int Operations = 0; // ops w/side-effects on signed types (for UB/no-overflow property detection)
   };
 
   /** @brief Per-function feature presence flags — the "what kind" axis. */
@@ -56,7 +55,7 @@ public:
   };
 
   /**
-   * @brief Constructs the visitor and seeds the map with the "Program" entry.
+   * @brief Constructs the visitor and seeds the map with the "FileScope" entry.
    *
    * @param C             AST context, used for parent-map lookups.
    * @param allFunctions  Output map shared with downstream consumers.
@@ -74,7 +73,7 @@ public:
    * {@code FunctionDecl} or falls back to {@code getDeclParentFuncName}.
    *
    * @param S  Statement whose enclosing function to find.
-   * @return   Function name, or {@code "Program"} if at file scope.
+   * @return   Function name, or {@code "FileScope"} if at file scope.
    */
   std::string getStmtParentFuncName(const clang::Stmt &S);
 
@@ -85,7 +84,7 @@ public:
    * {@code Decl} nodes.
    *
    * @param D  Declaration whose enclosing function to find.
-   * @return   Function name, or {@code "Program"} if at file scope.
+   * @return   Function name, or {@code "FileScope"} if at file scope.
    */
   std::string getDeclParentFuncName(const clang::Decl &D);
 

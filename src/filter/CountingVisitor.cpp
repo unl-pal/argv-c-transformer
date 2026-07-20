@@ -18,7 +18,7 @@ CountingVisitor::CountingVisitor(
     clang::ASTContext *C,
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> allFunctions)
     : _C(C), _mgr(&(C->getSourceManager())), _allFunctions(allFunctions) {
-  _allFunctions->try_emplace("Program");
+  _allFunctions->try_emplace("FileScope");
 }
 
 std::string CountingVisitor::getDeclParentFuncName(const clang::Decl &D) {
@@ -28,7 +28,7 @@ std::string CountingVisitor::getDeclParentFuncName(const clang::Decl &D) {
       return FD->getNameAsString();
     }
   }
-  return "Program";
+  return "FileScope";
 }
 
 std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
@@ -46,7 +46,7 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
         return getDeclParentFuncName(*d);
     }
   }
-  return "Program";
+  return "FileScope";
 }
 
 bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
@@ -95,10 +95,8 @@ bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
 
 bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   if (_mgr->isInMainFile(FD->getLocation())) {
-    if (!_allFunctions->count(FD->getNameAsString())) {
+    if (!_allFunctions->count(FD->getNameAsString()))
       _allFunctions->try_emplace(FD->getNameAsString());
-      _allFunctions->at("Program").Complexity.Functions++;
-    }
     attributes &entry = _allFunctions->at(FD->getNameAsString());
     entry.Complexity.Param = FD->getNumParams();
     if (FD->getReturnType()->isFloatingType())

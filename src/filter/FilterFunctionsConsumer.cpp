@@ -41,7 +41,7 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
   for (const std::pair<const std::string, CountingVisitor::attributes> &func : *_ToFilter) {
     std::string key = func.first;
     const CountingVisitor::attributes &attr = func.second;
-    if (key == "Program")
+    if (key == "FileScope")
       continue;
 
     bool reject = false;

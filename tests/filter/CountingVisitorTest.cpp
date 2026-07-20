@@ -183,14 +183,6 @@ TEST(CountingVisitor, MixedSignedAndUnsignedOpsOnlyCountsSigned) {
 // Function registration
 // ---------------------------------------------------------------------------
 
-TEST(CountingVisitor, FunctionCountInProgram) {
-  // The special "Program" key tracks file-scope counts.
-  // Each unique function declaration increments Program.Functions.
-  auto r = runCounter("void foo(){} void bar(){}");
-  ASSERT_TRUE(r.funcs->count("Program"));
-  EXPECT_EQ(r.funcs->at("Program").Complexity.Functions, 2);
-}
-
 TEST(CountingVisitor, EachFunctionGetsItsOwnEntry) {
   auto r = runCounter("void foo(){} void bar(){}");
   EXPECT_TRUE(r.funcs->count("foo"));
