@@ -84,16 +84,3 @@ inline std::optional<std::string> verifierSuffixForType(clang::QualType QT) {
     return std::nullopt;
   return it->second;
 }
-
-/**
- * @brief Returns the full verifier function name for a type.
- *
- * @param QT The type to resolve.
- * @return The name (e.g. "__VERIFIER_nondet_uint"), or std::nullopt if unsupported.
- */
-inline std::optional<std::string> verifierFnNameForType(clang::QualType QT) {
-  std::optional<std::string> suffix = verifierSuffixForType(QT);
-  if (!suffix)
-    return std::nullopt;
-  return "__VERIFIER_nondet_" + *suffix;
-}

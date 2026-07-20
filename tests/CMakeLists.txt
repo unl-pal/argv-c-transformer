@@ -13,7 +13,12 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(filter_tests filter/CountingVisitorTest.cpp filter/FilterFunctionsConsumerTest.cpp)
+add_executable(filter_tests
+  common/ClangToolUtilsTest.cpp
+  filter/CountingVisitorTest.cpp
+  filter/FilterFunctionsConsumerTest.cpp
+  filter/FiltererStageTest.cpp
+)
 
 target_include_directories(filter_tests SYSTEM PRIVATE
   ${LLVM_INCLUDE_DIRS}

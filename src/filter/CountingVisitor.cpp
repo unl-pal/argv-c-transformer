@@ -56,8 +56,12 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
 }
 
 bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
-  if (!CE || !_mgr->isInMainFile(CE->getBeginLoc()))
-    return clang::RecursiveASTVisitor<CountingVisitor>::VisitCallExpr(CE);
+  // Only count direct CallExpr, not subclasses, to match the original
+  // getStmtClass()-based tally.
+  if (!_mgr->isInMainFile(CE->getBeginLoc()))
+    return true;
+  if (CE->getStmtClass() == clang::Stmt::CallExprClass)
+    entryFor(getStmtParentFuncName(*CE)).Complexity.CallFunc++;
   // assumes all thread/concurrency calls will have types from concurrency related headers
   for (const clang::Expr *arg : CE->arguments()) {
     clang::QualType argType = arg->getType();
@@ -69,18 +73,10 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
       break;
     }
   }
-  return clang::RecursiveASTVisitor<CountingVisitor>::VisitCallExpr(CE);
-}
-
-bool CountingVisitor::VisitDecl(clang::Decl *D) {
-  if (!D)
-    return false;
-  return clang::RecursiveASTVisitor<CountingVisitor>::VisitDecl(D);
+  return true;
 }
 
 bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
-  if (!VD)
-    return false;
   if (_mgr->isInMainFile(VD->getLocation())) {
     clang::QualType varType = VD->getType();
     if (varType->isPointerType())
@@ -92,12 +88,10 @@ bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
     if (info && info->category == HeaderCategory::Concurrency)
       entryFor(getDeclParentFuncName(*VD)).Features.Concurrency = true;
   }
-  return clang::RecursiveASTVisitor<CountingVisitor>::VisitVarDecl(VD);
+  return true;
 }
 
 bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
-  if (!FD)
-    return false;
   if (_mgr->isInMainFile(FD->getLocation())) {
     if (!_allFunctions->count(FD->getNameAsString())) {
       _allFunctions->try_emplace(FD->getNameAsString());
@@ -108,39 +102,23 @@ bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
     if (FD->getReturnType()->isFloatingType())
       entry.Features.FloatingPoint = true;
   }
-  return clang::RecursiveASTVisitor<CountingVisitor>::VisitFunctionDecl(FD);
-}
-
-bool CountingVisitor::VisitStmt(clang::Stmt *S) {
-  if (!S)
-    return false;
-  if (_mgr->isInMainFile(S->getBeginLoc())) {
-    if (S->getStmtClass() == clang::Stmt::CallExprClass)
-      entryFor(getStmtParentFuncName(*S)).Complexity.CallFunc++;
-  }
-  return clang::RecursiveASTVisitor<CountingVisitor>::VisitStmt(S);
+  return true;
 }
 
 bool CountingVisitor::VisitIfStmt(clang::IfStmt *If) {
-  if (!If)
-    return false;
   if (_mgr->isInMainFile(If->getIfLoc()))
     entryFor(getStmtParentFuncName(*If)).Complexity.IfStmt++;
-  return clang::RecursiveASTVisitor<CountingVisitor>::VisitIfStmt(If);
+  return true;
 }
 
 bool CountingVisitor::VisitForStmt(clang::ForStmt *F) {
-  if (!F)
-    return false;
   if (_mgr->isInMainFile(F->getForLoc()))
     entryFor(getStmtParentFuncName(*F)).Complexity.ForLoops++;
-  return clang::RecursiveASTVisitor<CountingVisitor>::VisitForStmt(F);
+  return true;
 }
 
 bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
-  if (!W)
-    return false;
   if (_mgr->isInMainFile(W->getWhileLoc()))
     entryFor(getStmtParentFuncName(*W)).Complexity.WhileLoops++;
-  return clang::RecursiveASTVisitor<CountingVisitor>::VisitWhileStmt(W);
+  return true;
 }

@@ -45,22 +45,6 @@ public:
                     clang::Rewriter &rewriter);
 
   /**
-   * @brief Initializes the traversal from the translation unit root.
-   *
-   * @param D The translation unit declaration to traverse.
-   * @return {@code false} to stop traversal, {@code true} to continue.
-   */
-  virtual bool VisitTranslationUnit(clang::TranslationUnitDecl *D);
-
-  /**
-   * @brief Default visit function for all declaration nodes.
-   *
-   * @param D The declaration being visited.
-   * @return {@code false} to stop traversal, {@code true} to continue.
-   */
-  virtual bool VisitDecl(clang::Decl *D);
-
-  /**
    * @brief Replaces in-file call expressions with nondeterministic values.
    *
    * This is the primary visitor method. Determines the callee, checks whether
@@ -70,7 +54,7 @@ public:
    * @param E The call expression being visited.
    * @return {@code false} to stop traversal, {@code true} to continue.
    */
-  virtual bool VisitCallExpr(clang::CallExpr *E);
+  bool VisitCallExpr(clang::CallExpr *E);
 
   /**
    * @brief Marks an empty compound statement, or one whose entire body is
@@ -79,7 +63,7 @@ public:
    * @param S The compound statement being visited.
    * @return {@code true} to continue traversal.
    */
-  virtual bool VisitCompoundStmt(clang::CompoundStmt *S);
+  bool VisitCompoundStmt(clang::CompoundStmt *S);
 
   /**
    * @brief Erases an {@code if} statement whose branches are all no-ops and
@@ -89,7 +73,7 @@ public:
    * @param S The if statement being visited.
    * @return {@code true} to continue traversal.
    */
-  virtual bool VisitIfStmt(clang::IfStmt *S);
+  bool VisitIfStmt(clang::IfStmt *S);
 
   /**
    * @brief Erases a {@code while} loop whose body is a no-op and whose
@@ -98,7 +82,7 @@ public:
    * @param S The while statement being visited.
    * @return {@code true} to continue traversal.
    */
-  virtual bool VisitWhileStmt(clang::WhileStmt *S);
+  bool VisitWhileStmt(clang::WhileStmt *S);
 
   /**
    * @brief Same pruning rule as {@code VisitWhileStmt}, for {@code do}/{@code while} loops.
@@ -106,19 +90,21 @@ public:
    * @param S The do statement being visited.
    * @return {@code true} to continue traversal.
    */
-  virtual bool VisitDoStmt(clang::DoStmt *S);
+  bool VisitDoStmt(clang::DoStmt *S);
 
   /**
    * @brief Same pruning rule as {@code VisitWhileStmt}, for {@code for} loops.
    *
    * Additionally requires the init clause (a bare expression, or a
    * declaration with a side-effect-free initializer) and the increment
-   * clause to be side-effect-free.
+   * clause to be side-effect-free. Mutations of variables declared in the
+   * init clause itself ({@code for (int i = 0; i < n; i++)}) don't count:
+   * they are loop-scoped and unobservable after the loop.
    *
    * @param S The for statement being visited.
    * @return {@code true} to continue traversal.
    */
-  virtual bool VisitForStmt(clang::ForStmt *S);
+  bool VisitForStmt(clang::ForStmt *S);
 
   /**
    * @brief Instructs the visitor to use post-order (depth-first) traversal.
@@ -148,6 +134,8 @@ private:
    * {@code init}, and {@code inc} are all side-effect-free (the latter two
    * only meaningful for a for-loop and default to trivially-safe null), the
    * whole statement {@code S} is erased from the source and marked a no-op.
+   * Variables declared by {@code init} are exempt from the side-effect
+   * check in {@code cond}/{@code inc}, since they cannot outlive the loop.
    *
    * @param S        The statement to erase if it proves to be a no-op.
    * @param keyLoc    The statement's leading keyword location, used for the

@@ -4,8 +4,6 @@
 
 #include "CountingConsumer.hpp"
 
-#include <llvm/Support/raw_ostream.h>
-
 CountingConsumer::CountingConsumer(
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter)
     : _ToFilter(toFilter) {}

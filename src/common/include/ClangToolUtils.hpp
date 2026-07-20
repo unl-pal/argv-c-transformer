@@ -5,11 +5,16 @@
 #pragma once
 
 #include <clang/Basic/Version.h>
+#include <clang/Frontend/FrontendAction.h>
+#include <clang/Tooling/CommonOptionsParser.h>
+#include <clang/Tooling/Tooling.h>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/raw_ostream.h>
 #include <map>
 #include <optional>
 #include <regex>
@@ -32,17 +37,14 @@ inline void checkClangVersion() {
 }
 
 /**
- * @brief Returns the macOS SDK sysroot, if applicable.
+ * @brief Runs a shell command and returns its stdout, stripped of the
+ * trailing newline.
  *
- * On macOS, system C headers (string.h, stdlib.h, …) live inside the SDK
- * rather than /usr/include.  Returns std::nullopt on non-Apple platforms or
- * if xcrun fails.
+ * @return The captured output, or std::nullopt if the command could not be
+ *         run or produced no output.
  */
-inline std::optional<std::string> getSysroot() {
-#ifndef __APPLE__
-  return std::nullopt;
-#else
-  FILE *pipe = popen("xcrun --show-sdk-path 2>/dev/null", "r");
+inline std::optional<std::string> readCommandOutput(const char *cmd) {
+  FILE *pipe = popen(cmd, "r");
   if (!pipe)
     return std::nullopt;
   char buf[512];
@@ -53,6 +55,20 @@ inline std::optional<std::string> getSysroot() {
   if (!result.empty() && result.back() == '\n')
     result.pop_back();
   return result.empty() ? std::nullopt : std::optional<std::string>(result);
+}
+
+/**
+ * @brief Returns the macOS SDK sysroot, if applicable.
+ *
+ * On macOS, system C headers (string.h, stdlib.h, …) live inside the SDK
+ * rather than /usr/include.  Returns std::nullopt on non-Apple platforms or
+ * if xcrun fails.
+ */
+inline std::optional<std::string> getSysroot() {
+#ifndef __APPLE__
+  return std::nullopt;
+#else
+  return readCommandOutput("xcrun --show-sdk-path 2>/dev/null");
 #endif
 }
 
@@ -67,18 +83,7 @@ inline std::optional<std::string> getResourceDir() {
   const char *r = std::getenv("CLANG_RESOURCES");
   if (r)
     return std::string(r);
-
-  FILE *pipe = popen("clang -print-resource-dir 2>/dev/null", "r");
-  if (!pipe)
-    return std::nullopt;
-  char buf[512];
-  std::string result;
-  while (fgets(buf, sizeof(buf), pipe))
-    result += buf;
-  pclose(pipe);
-  if (!result.empty() && result.back() == '\n')
-    result.pop_back();
-  return result.empty() ? std::nullopt : std::optional<std::string>(result);
+  return readCommandOutput("clang -print-resource-dir 2>/dev/null");
 }
 
 /**
@@ -127,6 +132,71 @@ inline std::vector<const char *> toArgv(const std::vector<std::string> &args) {
     argv.push_back(arg.c_str());
   argv.push_back(nullptr);
   return argv;
+}
+
+/**
+ * @brief Runs a FrontendActionFactory over a single C file with the standard
+ * tool setup shared by the filter and transform steps.
+ *
+ * Bundles the boilerplate both drivers need: resource-dir discovery,
+ * argument building, options parsing, and a diagnostics-suppressing
+ * ClangTool. Tool-reported errors (the file may be arbitrary downloaded C)
+ * are logged but still count as a successful run — the rewritten output is
+ * written regardless, and downstream compile checks decide its fate.
+ *
+ * @param filePath Path to the C source file to process.
+ * @param factory  Factory producing the FrontendAction to run.
+ * @return true if the tool ran; false if setup failed (no resource dir,
+ *         unparsable options).
+ */
+inline bool runToolOnFile(const std::string &filePath,
+                          clang::tooling::FrontendActionFactory &factory) {
+  static llvm::cl::OptionCategory toolCategory("argv-c-transformer");
+  clang::IgnoringDiagConsumer diagConsumer;
+
+  std::optional<std::string> resourceDir = getResourceDir();
+  if (!resourceDir) {
+    std::cerr << "Could not determine clang resource directory (set CLANG_RESOURCES to override)"
+              << std::endl;
+    return false;
+  }
+
+  std::vector<std::string> args = buildClangArgs(filePath, *resourceDir);
+  std::vector<const char *> argv = toArgv(args);
+  int argc = static_cast<int>(args.size());
+
+  llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
+      clang::tooling::CommonOptionsParser::create(argc, argv.data(), toolCategory);
+  if (!expectedParser) {
+    llvm::errs() << expectedParser.takeError();
+    return false;
+  }
+  clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
+
+  clang::tooling::ClangTool tool(optionsParser.getCompilations(),
+                                 optionsParser.getSourcePathList());
+  tool.setDiagnosticConsumer(&diagConsumer);
+  if (tool.run(&factory) != 0)
+    std::cerr << "Clang tool reported errors while processing: " << filePath << std::endl;
+  return true;
+}
+
+/**
+ * @brief Parses a config bool: "true"/"True" is true, anything else false.
+ */
+inline bool parseConfigBool(const std::string &value) {
+  return value == "true" || value == "True";
+}
+
+/**
+ * @brief Strips leading and trailing spaces/tabs.
+ */
+inline std::string trim(const std::string &s) {
+  size_t start = s.find_first_not_of(" \t");
+  size_t end = s.find_last_not_of(" \t");
+  if (start == std::string::npos)
+    return "";
+  return s.substr(start, end - start + 1);
 }
 
 /**

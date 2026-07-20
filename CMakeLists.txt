@@ -55,9 +55,7 @@ set(SOURCE_TRANSFORM
   src/transform/AddStdIncludesConsumer.cpp
   src/transform/AddVerifiersConsumer.cpp
   src/transform/ArgsFrontendActionFactory.cpp
-  src/transform/GenerateCodeConsumer.cpp
   src/transform/MainGenConsumer.cpp
-  src/transform/RegenCode.cpp
   src/transform/HavocCallsVisitor.cpp
   src/transform/HavocCallsConsumer.cpp
   src/transform/TransformAction.cpp

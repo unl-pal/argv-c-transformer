@@ -43,8 +43,8 @@ struct transformConfigs {
  * Reads a config file, walks a directory tree of filtered C source files, and
  * runs the full Clang AST pipeline on each one: replacing dead calls with
  * `__VERIFIER_nondet_*`, injecting verifier declarations, and ensuring a
- * `main()` exists. Transformed output is written to benchmarkDir, mirroring
- * the original directory structure.
+ * `main()` exists. Transformed output is written to benchmarkDir under a
+ * single flattened filename per input (see flattenedOutputPath).
  */
 class Transformer {
 public:
@@ -63,7 +63,7 @@ public:
    * checkCompilable and keepCompilesOnly is set, the output file is removed.
    *
    * @param path Path to the filtered C source file to transform.
-   * @return false if the AST tool failed to run; otherwise true.
+   * @return true if a benchmark (.c + .yml + .i) was produced.
    */
   bool transformFile(std::filesystem::path path);
 
@@ -99,11 +99,10 @@ public:
   /**
    * @brief Recursively walks a directory tree, transforming every .c file found.
    *
-   * @param path  Root path to search (file or directory).
-   * @param count Running count of compilable benchmarks produced so far.
+   * @param path Root path to search (file or directory).
    * @return Total count of compilable benchmarks produced.
    */
-  int transformAll(std::filesystem::path path, int count);
+  int transformAll(std::filesystem::path path);
 
   /**
    * @brief Checks whether a transformed file compiles without errors.
@@ -112,9 +111,9 @@ public:
    * `verifier.c` (to resolve extern `__VERIFIER_nondet_*` declarations).
    *
    * @param path Path to the transformed C file to check.
-   * @return 1 if the file compiles with no errors, 0 otherwise.
+   * @return true if the file compiles with no errors.
    */
-  int checkCompilable(std::filesystem::path path);
+  bool checkCompilable(std::filesystem::path path);
 
   /**
    * @brief Detects a trivial benchmark whose generated main calls nothing.
@@ -173,7 +172,7 @@ public:
   /**
    * @brief Preprocesses a transformed .c file into a .i file.
    *
-   * Runs {@code gcc -E -P -std=gnu11} on the source file, writing the
+   * Runs {@code clang -E -P -std=gnu11} on the source file, writing the
    * preprocessed output alongside it with a {@code .i} extension.
    *
    * @param cPath Path to the transformed .c benchmark file.

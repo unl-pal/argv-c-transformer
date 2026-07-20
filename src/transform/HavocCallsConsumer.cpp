@@ -19,7 +19,7 @@ HavocCallsConsumer::HavocCallsConsumer(std::shared_ptr<std::set<std::string>> ne
 
 void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   HavocCallsVisitor Visitor(&Context, _NeededSuffixes, _Rewriter);
-  Visitor.VisitTranslationUnit(Context.getTranslationUnitDecl());
+  Visitor.TraverseDecl(Context.getTranslationUnitDecl());
 
   // Strip any function whose body collapsed entirely to no-ops
   clang::SourceManager &mgr = Context.getSourceManager();

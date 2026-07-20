@@ -15,11 +15,3 @@ ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_ostream &output) : _Output(ou
 std::unique_ptr<clang::FrontendAction> ArgsFrontendFactory::create() {
   return std::make_unique<TransformAction>(_Output);
 }
-
-bool ArgsFrontendFactory::runInvocation(
-    std::shared_ptr<clang::CompilerInvocation> Invocation, clang::FileManager *Files,
-    std::shared_ptr<clang::PCHContainerOperations> PCHContainerOps,
-    clang::DiagnosticConsumer *DiagConsumer) {
-  return clang::tooling::FrontendActionFactory::runInvocation(Invocation, Files, PCHContainerOps,
-                                                              DiagConsumer);
-}
