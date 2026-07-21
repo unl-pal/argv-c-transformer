@@ -27,7 +27,7 @@ databaseDir=doc/tutorial/source-files
 filterDir=doc/tutorial/filtered-files
 benchmarkDir=doc/tutorial/transformed-files
 
-[Downloading]
+[Downloader]
 # A single "owner/name" repo, bypassing the CSV-index flow entirely (see
 # Downloader.py's `repo` setting). Good for a known, deliberately-chosen
 # repo like this tutorial's toy example.
@@ -39,12 +39,9 @@ repo=natsteven/argc-example
 # into "removed" and "kept" buckets.
 ForLoops = 1,9999
 
-[File Requirements and Settings]
-minFileLoC=1
-useNonStdHeaders=true
+[File Settings]
+FileLoC=1,9999
 keepCompilesOnly=true
-
-[Debugging Flags]
 debugLevel=1
 ```
 
@@ -58,7 +55,7 @@ Normally `Downloader.py` reads a CSV index of repositories and clones every
 one that meets `language`/`minRepoLoC`/`minNumStars` criteria (see
 `../Design.md`'s Download section). That's the wrong tool for "grab this one
 specific repo I already picked" — so `Downloader.py` also accepts a `repo`
-setting under `[Downloading]` (an `"owner/name"` string) that skips the CSV
+setting under `[Downloader]` (an `"owner/name"` string) that skips the CSV
 entirely and downloads just that repo, no criteria applied. That's what
 `doc/tutorial/tutorial.config` uses above.
 
@@ -290,7 +287,7 @@ directly — that's the form SV-Comp benchmark runners consume.
 - `../Design.md` — full pipeline design, every config option, and the
   design choices/limitations behind them (unsupported types,
   intraprocedural-by-design, pointer-return havocking, etc.)
-- `properties.config` at the repo root — every filter/transform setting,
+- `settings.config` at the repo root — every filter/transform setting,
   with defaults documented inline.
 - `./build/argv-c <config>` — the same filter → transform → verify sequence
   in one binary, for a real (non-toy) `databaseDir`.

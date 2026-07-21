@@ -112,13 +112,12 @@ straight out of `build/`:
 
 ## Configuration
 
-Config files use INI syntax. See `properties.config` for all available options.
+Config files use INI syntax. See `settings.config` for all available options.
 Key sections:
 
 - `[File Locations]` — `databaseDir`, `filterDir`, `benchmarkDir`
 - `[Function Requirements]` — per-function thresholds (`minForLoops`, `minTypeIfStmt`, etc.)
-- `[File Requirements and Settings]` — `minFileLoC`, `maxFileLoC`, `fileTimeoutSecs`
-- `[Debugging Flags]` — `debug`, `debugLevel` (0–3)
+- `[File Settings]` — `FileLoC`, `fileTimeoutSecs`, `keepCompilesOnly`, `debugLevel` (0–3)
 
 The transform stage preprocesses each surviving benchmark into a `.i` file with
 `clang -E -P -std=gnu11`, requiring `clang` on `PATH` (see
@@ -250,9 +249,28 @@ source .venv/bin/activate
 pip install GitPython
 ```
 
-Configure the `[File Locations]` section of your config file with a `databaseDir`
-pointing to where repositories should be cloned, then run:
+Downloader.py has its own config, separate from `settings.config` (which
+the filter/transform/verify/argv-c pipeline reads) since `argv-c` never
+invokes the downloader — it's a standalone step you run first to populate a
+`databaseDir` for the pipeline to later read as input. See
+`src/download/downloader.config` for the default, or write your own with a
+`[File Locations]` `databaseDir` pointing to where repositories should be
+cloned, then run:
 
 ```sh
-python3 src/download/Downloader.py <config>
+python3 src/download/Downloader.py src/download/downloader.config
 ```
+
+This reads a CSV index of repositories (`csv` setting, default `repos.csv`),
+applies the `[Downloader]` section's criteria (CSV column filters like
+`language`, `stars`, `size`), and stops after `projectCount` repos.
+
+Alternatively, pass a `.csv` file directly instead of a `.config`:
+
+```sh
+python3 src/download/Downloader.py <repos.csv>
+```
+
+This treats the file as a plain list of repos (its `repository` column) and
+downloads every row unconditionally, with no filtering, into the default
+`database/` directory.

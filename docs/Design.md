@@ -9,16 +9,16 @@ SPDX-License-Identifier: Apache-2.0
 ArgV converts real-world C source files into [SV-Comp](https://sv-comp.sosy-lab.org/)-style
 verification benchmarks. The pipeline has four stages — **Download**, **Filter**,
 **Transform**, and **Verify** — each driven by the same INI config file (e.g.
-`properties.config`), parsed once by the shared `parsePipelineConfig`
-(`src/common/include/ConfigParser.hpp`) so every stage sees identical thresholds.
+`settings.config`), parsed once by the shared `parsePipelineConfig`
+(`src/common/include/ConfigParser.hpp`).
 
 ## Pipeline Overview
 
 ```mermaid
 flowchart LR
     subgraph inputs[" "]
-        CSV[/"dataset.csv<br/>(GitHub repo index)"/]
-        CFG[/"properties.config"/]
+        CSV[/"repos.csv<br/>(GitHub repo index)"/]
+        CFG[/"settings.config"/]
     end
 
     DL["Download<br/><code>src/download/Downloader.py</code>"]
@@ -58,15 +58,21 @@ input name is stripped when deriving default output names.
 
 ### 1. Download (`src/download/Downloader.py`)
 
-Populates `databaseDir` with candidate C code from GitHub.
+Populates `databaseDir` with candidate C code from GitHub. Standalone step —
+not invoked by `argv-c` or any other stage, and reads its own config
+(`src/download/downloader.config`), entirely separate from `settings.config`.
 
-- Reads a CSV index of repositories (`csv` setting, default `dataset.csv`).
-- Applies `[Downloading]` config criteria: `language`, `minRepoLoC`, `minNumStars`,
-  and stops after `projectCount` repos.
+- Takes either a `.config` file or a CSV file directly as its argument.
+  - `.config`: reads a CSV index of repositories (`csv` setting, default
+    `repos.csv`), applies `[Downloader]` config criteria (CSV column
+    filters like `language`, `stars`, `size`), and stops after
+    `projectCount` repos.
+  - `.csv`: treats the file as a plain list of repos (its `repository`
+    column) and downloads every row unconditionally, no filtering.
 - Checks each repo URL is still reachable, then shallow-clones (`--depth=1`) into
   `databaseDir`.
 - Not part of the CMake build; invoked directly (`python3 src/download/Downloader.py
-  properties.config`).
+  src/download/downloader.config`).
 
 ### 2. Filter (`src/filter/`, driver: `Filterer.cpp`)
 
@@ -85,7 +91,7 @@ Transform step can still resolve its return type.
   body-stripped. This prevents vestigial functions from appearing in the final benchmark —
   they would have bodies but never be called. `main` **is** exempt from this gate — its
   `argc`/`argv` params are handled specially by `MainGenConsumer` in the Transform stage.
-- Applies `[File Requirements and Settings]` (e.g. `minFileLoC`, `useNonStdHeaders`).
+- Applies `[File Settings]` (e.g. `FileLoC`).
 - Injects `extern __VERIFIER_nondet_*` declarations for the types that removed
   functions leave behind.
 - Writes the surviving, rewritten files to `filterDir`.

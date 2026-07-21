@@ -63,6 +63,12 @@ TEST_F(ParseIniFileTest, SkipsSectionHeadersAndComments) {
   EXPECT_TRUE(m.count("debugLevel"));
 }
 
+TEST_F(ParseIniFileTest, StripsInlineComment) {
+  auto m = parse("debugLevel = 2 # verbose logging\n");
+  ASSERT_TRUE(m.count("debugLevel"));
+  EXPECT_EQ(m.at("debugLevel"), "2");
+}
+
 TEST_F(ParseIniFileTest, LastDuplicateKeyWins) {
   auto m = parse("debugLevel = 1\ndebugLevel = 3\n");
   EXPECT_EQ(m.at("debugLevel"), "3");

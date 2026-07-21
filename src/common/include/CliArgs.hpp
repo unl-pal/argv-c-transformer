@@ -61,17 +61,17 @@ inline std::optional<CliInvocation> parseCliArgs(int argc, char **argv) {
 inline void printUsage(const std::string &toolName) {
   std::cerr << "Usage: " << toolName << " [<input>] [<config-file>]\n"
             << "  <input>       directory of C files, or a single .c file\n"
-            << "  <config-file> INI-style properties file (see properties.config)\n"
+            << "  <config-file> INI-style config file (see settings.config)\n"
             << "At least one argument is required; with only an input, built-in\n"
             << "defaults are used and output goes to <name>-filtered/ etc. in the\n"
             << "working directory. If both are given, the input path always wins\n"
-            << "over the properties file's directory settings — both the repo it\n"
+            << "over the config file's directory settings — both the repo it\n"
             << "reads from and the derived <name>-filtered/ etc. output name."
             << "Examples:\n"
             << "  ./build/" << toolName << " path/to/repo\n"
             << "  ./build/" << toolName << " foo.c\n"
-            << "  ./build/" << toolName << " properties.config\n"
-            << "  ./build/" << toolName << " path/to/repo properties.config" << std::endl;
+            << "  ./build/" << toolName << " settings.config\n"
+            << "  ./build/" << toolName << " path/to/repo settings.config" << std::endl;
 }
 
 /**

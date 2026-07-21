@@ -15,12 +15,12 @@ import configparser
 downloadSettings = {
     "projectCount": "5",
     # Optional: a single "owner/name" repo to download, bypassing the CSV
-    # index and all [Filters] criteria entirely
+    # index and all [Downloader] filter criteria entirely
     "repo": "",
 }
 
 fileSettings = {
-    "csv": "dataset.csv",
+    "csv": "repos.csv",
     "databaseDir": "database",
 }
 
@@ -113,20 +113,76 @@ def download_c_files(repo, dest_dir, headers):
     return count
 
 
-# Require a config file path as the first argument
+def download_repos(rows, dest_dir, headers, limit=None, filters=None):
+    """
+    Download .c/.h files for each repo named in `rows` (dicts with a
+    "repository" column). If `filters`/`limit` are given, rows are skipped
+    when they don't match and iteration stops once `limit` repos are
+    downloaded; otherwise every row is downloaded unconditionally.
+    """
+    i = 0
+    total_files = 0
+    start = time.time()
+    for row in rows:
+        if limit is not None and i >= limit:
+            break
+        if filters and not row_matches_filters(row, filters):
+            print(f"Skipping {row['repository']} - Does Not Meet Criteria")
+            continue
+
+        location = os.path.join(dest_dir, row["repository"])
+        if os.path.exists(location):
+            print(f"{location} already exists")
+            i += 1
+            continue
+
+        i += 1
+        print(f"Downloading .c/.h from {row['repository']}...")
+        count = download_c_files(row["repository"], dest_dir, headers)
+        if count > 0:
+            print(f"  Extracted {count} file(s)")
+            total_files += count
+        else:
+            print(f"  No .c/.h files found or download failed")
+
+    end = time.time()
+    print(f"Total: {total_files} files from {i} repos in {end - start:.2f}s")
+
+
+# First argument is either a CSV (plain list of repos, downloaded
+# unconditionally with no filtering) or a .config file
 if len(sys.argv) > 1:
-    configFile = sys.argv[1]
+    inputFile = sys.argv[1]
 else:
-    print("No Config File Provided.\nAborting Download")
+    print("No CSV or Config File Provided.\nAborting Download")
     sys.exit(1)
+
+headers = get_auth_headers()
+
+if inputFile.lower().endswith(".csv"):
+    if not os.path.exists(inputFile):
+        print(f"{inputFile} not found.\nAborting Download")
+        sys.exit(1)
+    with open(inputFile, newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        if "repository" not in (reader.fieldnames or []):
+            print(
+                f"CSV {inputFile} has no 'repository' column "
+                f"(columns: {reader.fieldnames}).\nAborting Download"
+            )
+            sys.exit(1)
+        download_repos(reader, fileSettings["databaseDir"], headers)
+    sys.exit(0)
+
+configFile = inputFile
 
 # Override defaults with values from the config file if present
 if os.path.exists(configFile):
-    config = configparser.ConfigParser()
+    config = configparser.ConfigParser(inline_comment_prefixes=("#",))
     config.read(configFile)
     for setting in downloadSettings:
         try:
-            downloadSettings[setting] = config["Downloading"][setting]
+            downloadSettings[setting] = config["Downloader"][setting]
         except KeyError as e:
             print(f"KeyError: {e} On Setting {setting}")
     for setting in fileSettings:
@@ -134,13 +190,19 @@ if os.path.exists(configFile):
             fileSettings[setting] = config["File Locations"][setting]
         except KeyError as e:
             print(f"KeyError: {e} On Setting {setting}")
-    filters = dict(config["Filters"]) if config.has_section("Filters") else {}
+    # Everything else in [Downloader] besides the known settings above is
+    # treated as a CSV column filter (see row_matches_filters). configparser
+    # lowercases option names, so compare against lowercased setting names.
+    known = {config.optionxform(s) for s in downloadSettings}
+    filters = (
+        {k: v for k, v in config["Downloader"].items() if k not in known}
+        if config.has_section("Downloader")
+        else {}
+    )
 else:
     filters = {}
 
 print(f"Settings:\n\t{downloadSettings}\n\t{fileSettings}\n\tFilters: {filters}")
-
-headers = get_auth_headers()
 
 if downloadSettings["repo"]:
     repo = downloadSettings["repo"]
@@ -168,34 +230,10 @@ if os.path.exists(fileSettings["csv"]):
             )
             sys.exit(1)
 
-        i = 0
-        total_files = 0
-        start = time.time()
-        for row in reader:
-            # Stop once we've downloaded the requested number of repos
-            if i >= int(downloadSettings["projectCount"]):
-                break
-            # Skip rows that don't match the configured [Filters] criteria
-            if not row_matches_filters(row, filters):
-                print(f"Skipping {row['repository']} - Does Not Meet Criteria")
-                continue
-
-            location = os.path.join(fileSettings["databaseDir"], row["repository"])
-            if os.path.exists(location):
-                print(f"{location} already exists")
-                i += 1
-                continue
-
-            i += 1
-            print(f"Downloading .c/.h from {row['repository']}...")
-            count = download_c_files(
-                row["repository"], fileSettings["databaseDir"], headers
-            )
-            if count > 0:
-                print(f"  Extracted {count} file(s)")
-                total_files += count
-            else:
-                print(f"  No .c/.h files found or download failed")
-
-        end = time.time()
-        print(f"Total: {total_files} files from {i} repos in {end - start:.2f}s")
+        download_repos(
+            reader,
+            fileSettings["databaseDir"],
+            headers,
+            limit=int(downloadSettings["projectCount"]),
+            filters=filters,
+        )

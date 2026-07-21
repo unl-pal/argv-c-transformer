@@ -57,7 +57,7 @@ protected:
     cfg << "[File Locations]\n"
         << "filterDir = " << filterDir.string() << "\n"
         << "transformDir = " << transformDir.string() << "\n"
-        << "[Debugging Flags]\n"
+        << "[Debug]\n"
         << "debugLevel = 0\n";
   }
 

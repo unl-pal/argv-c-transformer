@@ -72,7 +72,10 @@ inline std::string trim(const std::string &s) {
  * Lines that do not match the {@code key = value} pattern (comments, blank
  * lines, section headers) are silently skipped. Each tool is responsible for
  * interpreting its own keys from the returned map; unknown keys are not
- * reported here.
+ * reported here. A trailing {@code # ...} on a key=value line is treated as
+ * an inline comment and stripped before matching (so e.g.
+ * {@code debugLevel=2 # verbose} isn't silently dropped for having no
+ * '#'-free match).
  *
  * @param configFile Path to the INI-style properties file.
  * @return Map of key to raw string value for every matched line, or an empty
@@ -89,8 +92,11 @@ inline std::map<std::string, std::string> parseIniFile(const std::string &config
   std::string line;
   std::smatch match;
   while (std::getline(file, line)) {
+    size_t hash = line.find('#');
+    if (hash != std::string::npos)
+      line = line.substr(0, hash);
     if (std::regex_search(line, match, pattern))
-      result[match[1]] = match[2];
+      result[match[1]] = trim(match[2]);
   }
   return result;
 }
@@ -125,8 +131,11 @@ inline std::optional<std::pair<int, int>> parseComplexityValue(const std::string
  * @brief Parses the INI-style properties file into a PipelineConfig.
  *
  * All keys any stage understands are interpreted here, so a typo'd key warns
- * exactly once regardless of which binary runs. Downloader.py-only keys are
- * recognised and skipped. A missing file warns and returns the defaults.
+ * exactly once regardless of which binary runs. Downloader.py-only keys
+ * (e.g. `[Downloader]`'s `csv`, `projectCount`, and its CSV column filters)
+ * are not recognised here and will warn as unknown — Downloader.py is
+ * responsible for reading its own section. A missing file warns and returns
+ * the defaults.
  *
  * Path existence checks and directory creation are left to the stage
  * drivers, which know which paths they read vs. write.
@@ -144,7 +153,19 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
   }
 
   for (const auto &[key, value] : parseIniFile(configFile)) {
-    if (config.complexity.count(key)) {
+    if (key == "FileLoC") {
+      std::optional<std::pair<int, int>> range = parseComplexityValue(value);
+      if (range && range->first > range->second) {
+        std::cerr << "Warning: 'FileLoC' has min (" << range->first << ") greater than max ("
+                  << range->second << ") — ignoring value '" << value << "'" << std::endl;
+      } else if (range) {
+        config.fileSettings.at("minFileLoC") = range->first;
+        config.fileSettings.at("maxFileLoC") = range->second;
+      } else {
+        std::cerr << "Warning: 'FileLoC' expects 'min,max', 'min', or ',max' — ignoring value '"
+                  << value << "'" << std::endl;
+      }
+    } else if (config.complexity.count(key)) {
       std::optional<std::pair<int, int>> range = parseComplexityValue(value);
       if (range && range->first > range->second) {
         std::cerr << "Warning: complexity key '" << key << "' has min (" << range->first
@@ -188,14 +209,6 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       config.transformDir = value;
     } else if (key == "benchmarkDir") {
       config.benchmarkDir = value;
-    } else if (key == "csv" || key == "language" ||
-               key == "projectCount" || key == "minNumStars" || key == "minRepoLoc" ||
-               key == "stars" || key == "size") {
-      // consumed by Downloader.py; not a pipeline key
-    } else if (key == "wipeOldBenchmarks" || key == "useNonStdHeaders") {
-      std::cerr << "Config key '" << key << "' has been removed — ignoring" << std::endl;
-    } else if (key == "debug") {
-      // silently ignored: replaced by debugLevel
     } else {
       std::cerr << "Unknown config key: " << key << std::endl;
     }

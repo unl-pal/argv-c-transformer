@@ -60,7 +60,7 @@ protected:
     cfg << "[File Locations]\n"
         << "databaseDir = " << databaseDir.string() << "\n"
         << "filterDir = " << filterDir.string() << "\n"
-        << "[Debugging Flags]\n"
+        << "[Debug]\n"
         << "debugLevel = 0\n"
         << extra;
   }
@@ -88,7 +88,7 @@ TEST_F(FiltererStageTest, MirrorsDirectoryStructure) {
 }
 
 TEST_F(FiltererStageTest, RejectsFileBelowMinLoC) {
-  writeConfig("minFileLoC = 10\n");
+  writeConfig("FileLoC = 10\n");
   writeFile(databaseDir / "tiny.c", "int one(void) { return 1; }\n");
 
   Filterer f(configPath.string());
@@ -98,7 +98,7 @@ TEST_F(FiltererStageTest, RejectsFileBelowMinLoC) {
 }
 
 TEST_F(FiltererStageTest, RejectsFileAboveMaxLoC) {
-  writeConfig("maxFileLoC = 2\n");
+  writeConfig("FileLoC = ,2\n");
   writeFile(databaseDir / "big.c",
             "int a(void) { return 1; }\n"
             "int b(void) { return 2; }\n"

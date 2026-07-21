@@ -66,7 +66,7 @@ protected:
         << "filterDir = " << filterDir.string() << "\n"
         << "transformDir = " << transformDir.string() << "\n"
         << "benchmarkDir = " << benchmarkDir.string() << "\n"
-        << "[Debugging Flags]\n"
+        << "[Debug]\n"
         << "debugLevel = 0\n"
         << extra;
   }
