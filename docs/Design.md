@@ -179,8 +179,6 @@ The driver then finalizes each survivor:
 - **Preprocessing**: `clang -E -P -std=gnu11` produces the `.i` SV-Comp consumes; on
   failure the `.c`/`.yml` are removed
 
-`.set` files in `argc-benchmarks/` group `.yml` files into SV-Comp benchmark sets.
-
 ## Design Choices and Limitations
 
 ### Supported Types

@@ -94,8 +94,7 @@ inline std::string inputBaseName(const std::string &inputPath) {
   if (name.empty() || name == ".")
     name = std::filesystem::absolute(path).parent_path().filename().string();
   for (const std::string suffix : {"-filtered", "-transformed"}) {
-    if (name.size() > suffix.size() &&
-        name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+    if (name.ends_with(suffix)) {
       name = name.substr(0, name.size() - suffix.size());
       break;
     }

@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 #include <sstream>
 #include <string>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 

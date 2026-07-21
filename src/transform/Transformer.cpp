@@ -178,13 +178,9 @@ void Transformer::parseConfig(std::string configFile) {
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
   if (!config.transformDir.empty()) {
     configuration.transformDir = config.transformDir;
-    if (!std::filesystem::exists(config.transformDir))
-      std::filesystem::create_directory(config.transformDir);
   }
   if (!config.filterDir.empty()) {
     configuration.filterDir = config.filterDir;
-    if (!std::filesystem::exists(config.filterDir))
-      std::cerr << "Filter directory not found: " << config.filterDir << std::endl;
   }
 }
 

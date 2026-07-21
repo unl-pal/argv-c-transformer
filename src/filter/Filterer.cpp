@@ -46,11 +46,8 @@ void Filterer::parseConfigFile(std::string configFile) {
     if (!std::filesystem::exists(config.databaseDir))
       std::cerr << "Database directory not found: " << config.databaseDir << std::endl;
   }
-  if (!config.filterDir.empty()) {
+  if (!config.filterDir.empty())
     configuration.filterDir = config.filterDir;
-    if (!std::filesystem::exists(config.filterDir))
-      std::filesystem::create_directory(config.filterDir);
-  }
 
   globalDebugLevel() = config.fileSettings.at("debugLevel");
 
