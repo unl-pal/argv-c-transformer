@@ -12,14 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-/**
- * @brief A single property entry in an SV-Comp .yml task file.
- *
- * Maps to one block under the {@code properties:} key. For now every benchmark
- * gets the same fixed set; later, {@code selectProperties} will choose based on
- * AST characteristics (loops → termination, integer arithmetic → no-overflow,
- * etc.).
- */
+/** @brief A single property entry in an SV-Comp .yml task file — one block under the {@code properties:} key. */
 struct BenchmarkProperty {
   std::string propertyFile; ///< Relative path to the .prp file (e.g. "../properties/termination.prp").
   bool expectedVerdict;     ///< {@code true} = program satisfies the property.
@@ -53,11 +46,10 @@ public:
    *
    * @param configFile Path to the INI-style properties file ("" = defaults only).
    * @param inputPath  Optional directory (or single .c file) of transformed
-   *                   files to verify. When given, it overrides transformDir
-   *                   and sets benchmarkDir to "<name>-benchmarks" (unless
-   *                   the input is literally named the default transformDir,
-   *                   "transformedFiles"), both taking precedence over
-   *                   whatever the config file sets for those keys.
+   *                   files to verify. Overrides transformDir and derives
+   *                   benchmarkDir as "<name>-benchmarks" (unless input is
+   *                   named the default transformDir), both taking
+   *                   precedence over the config file.
    */
   Verifier(std::string configFile, std::string inputPath = "");
 
@@ -102,11 +94,8 @@ public:
   /**
    * @brief Returns the set of verification properties for a benchmark.
    *
-   * Currently returns a fixed set (termination + no-overflow) for every file,
-   * ignoring the counts. Future: use the per-function counts/features from
-   * the verify pass to conditionally include properties (e.g. only
-   * termination if loops are present, only no-overflow if integer arithmetic
-   * is present, unreach-call when {@code reach_error()} guards exist).
+   * Currently a fixed set (termination + no-overflow) for every file, ignoring
+   * counts; the hook for future AST-driven property selection.
    *
    * @param counts Per-function counts from the verify pass over the final source.
    * @return Vector of properties to include in the task .yml.

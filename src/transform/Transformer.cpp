@@ -26,8 +26,6 @@ const std::string defaultTransformDir = "transformedFiles";
 const int defaultFileTimeoutSecs = 60;
 
 Transformer::Transformer(std::string configFile, std::string inputPath) : configuration() {
-  // Apply defaults, then let the config file override them. A command-line
-  // input path always wins over both filterDir and transformDir from the file
   configuration.debugLevel = defaultDebugLevel;
   configuration.filterDir = defaultFilterDir;
   configuration.transformDir = defaultTransformDir;

@@ -24,11 +24,6 @@ const std::string defaultTransformDir = "transformedFiles";
 const std::string defaultBenchmarkDir = "benchmarks";
 
 Verifier::Verifier(std::string configFile, std::string inputPath) : configuration() {
-  // Apply defaults, then let the config file override them. A command-line
-  // input path always wins over config's transformDir and benchmarkDir
-  // (the transformDir-named guard below just avoids deriving
-  // "transformedFiles-benchmarks" when the input is literally that default
-  // directory name).
   config = parsePipelineConfig(configFile);
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;

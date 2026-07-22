@@ -9,7 +9,6 @@
 #include <iostream>
 #include <optional>
 
-/// Main function should be transfered to a driver for use via the full implementation
 int main(int argc, char **argv) {
   checkClangVersion();
   std::optional<CliInvocation> invocation = parseCliArgs(argc, argv);

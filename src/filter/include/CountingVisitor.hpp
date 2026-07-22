@@ -66,11 +66,8 @@ public:
 
   /**
    * @brief Walks up the parent chain of a {@code Stmt} to find its enclosing
-   * function name.
-   *
-   * {@code Stmt} has no direct {@code getParentFunctionOrMethod()} so this
-   * recursively climbs via {@code ASTContext::getParents()} until it reaches a
-   * {@code FunctionDecl} or falls back to {@code getDeclParentFuncName}.
+   * function name, via {@code ASTContext::getParents()} ({@code Stmt} has no
+   * direct {@code getParentFunctionOrMethod()}).
    *
    * @param S  Statement whose enclosing function to find.
    * @return   Function name, or {@code "FileScope"} if at file scope.

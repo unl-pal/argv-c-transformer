@@ -9,7 +9,6 @@
 #include <iostream>
 #include <optional>
 
-// Target for calling the Filterer Individually
 int main(int argc, char **argv) {
   checkClangVersion();
   std::optional<CliInvocation> invocation = parseCliArgs(argc, argv);

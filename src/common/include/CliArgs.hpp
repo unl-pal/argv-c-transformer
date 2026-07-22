@@ -79,13 +79,10 @@ inline void printUsage(const std::string &toolName) {
  *
  * A directory yields its final component ("path/to/redis" → "redis"), a file
  * its stem ("src/foo.c" → "foo"). A trailing "-filtered" or "-transformed"
- * stage suffix is stripped so e.g. the verify step run on "redis-transformed"
- * still names its output "redis-benchmarks" rather than
- * "redis-transformed-benchmarks".
+ * stage suffix is stripped, so chaining stages doesn't compound the suffix.
  *
  * @param inputPath Directory or .c file path as given on the command line.
- * @return The base name to build "<name>-filtered" / "<name>-transformed" /
- *         "<name>-benchmarks" from.
+ * @return The base name to build "<name>-filtered" / "-transformed" / "-benchmarks" from.
  */
 inline std::string inputBaseName(const std::string &inputPath) {
   // lexically_normal drops a trailing slash so "repo/" still yields "repo".

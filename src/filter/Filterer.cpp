@@ -25,9 +25,6 @@ const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultDatabaseDir = "database";
 
 Filterer::Filterer(std::string configFile, std::string inputPath) {
-  // Config file settings apply first; a command-line input path always wins
-  // over both databaseDir and filterDir from the config, since it is a more
-  // specific, explicit instruction than a static file.
   configuration.filterDir = defaultFilterDir;
   configuration.databaseDir = defaultDatabaseDir;
   if (!configFile.empty())
@@ -133,7 +130,6 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   return 0;
 }
 
-/// Main driver for the Filter System
 int Filterer::run() {
   std::filesystem::path pathObject(configuration.databaseDir);
   std::vector<std::string> filesToFilter;

@@ -24,10 +24,8 @@ enum class FeatureGate { Ignore, Require, Forbid };
  * @brief Everything the INI-style properties file can configure, parsed once
  * and shared by all three stages (filter, transform, verify).
  *
- * The complexity thresholds and feature gates are applied per function by the
- * filter stage and re-applied by the verify stage after transformation. Path
- * fields are left empty when the config doesn't set them; each stage driver
- * applies its own defaults (and CLI overrides) on top.
+ * Path fields are left empty when the config doesn't set them; each stage
+ * driver applies its own defaults (and CLI overrides) on top.
  */
 struct PipelineConfig {
   /// Per-function complexity thresholds: metric name → [min, max]. Defaults
@@ -69,17 +67,12 @@ inline std::string trim(const std::string &s) {
 /**
  * @brief Parses an INI-style config file and returns raw key/value string pairs.
  *
- * Lines that do not match the {@code key = value} pattern (comments, blank
- * lines, section headers) are silently skipped. Each tool is responsible for
- * interpreting its own keys from the returned map; unknown keys are not
- * reported here. A trailing {@code # ...} on a key=value line is treated as
- * an inline comment and stripped before matching (so e.g.
- * {@code debugLevel=2 # verbose} isn't silently dropped for having no
- * '#'-free match).
+ * Lines that do not match {@code key = value} (comments, blank lines,
+ * section headers) are silently skipped. A trailing {@code # ...} is
+ * stripped as an inline comment before matching.
  *
  * @param configFile Path to the INI-style properties file.
- * @return Map of key to raw string value for every matched line, or an empty
- *         map if the file does not exist or cannot be opened.
+ * @return Map of key to raw string value, or empty if the file is missing.
  */
 inline std::map<std::string, std::string> parseIniFile(const std::string &configFile) {
   std::map<std::string, std::string> result;
@@ -132,13 +125,8 @@ inline std::optional<std::pair<int, int>> parseComplexityValue(const std::string
  *
  * All keys any stage understands are interpreted here, so a typo'd key warns
  * exactly once regardless of which binary runs. Downloader.py-only keys
- * (e.g. `[Downloader]`'s `csv`, `projectCount`, and its CSV column filters)
- * are not recognised here and will warn as unknown — Downloader.py is
- * responsible for reading its own section. A missing file warns and returns
- * the defaults.
- *
- * Path existence checks and directory creation are left to the stage
- * drivers, which know which paths they read vs. write.
+ * (`[Downloader]`'s `csv`, `projectCount`, etc.) are not recognised here and
+ * will warn as unknown; Downloader.py reads its own section separately.
  *
  * @param configFile Path to the INI-style properties file ("" = defaults only).
  * @return The parsed configuration.

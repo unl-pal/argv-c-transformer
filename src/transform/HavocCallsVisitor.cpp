@@ -126,10 +126,6 @@ HavocCallsVisitor::HavocCallsVisitor(clang::ASTContext *C,
                                      clang::Rewriter &rewriter)
     : _C(C), _NeededSuffixes(neededSuffixes), _Rewriter(rewriter) {};
 
-// Havoc every call to a function from this file so each function body is
-// self-contained (intraprocedural): the call's value is replaced by a fresh
-// nondet of its return type. Library calls (callee declared in a header,
-// e.g. the C standard library) are kept as-is.
 bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   clang::SourceManager &mgr = _C->getSourceManager();
   clang::SourceLocation loc = E->getExprLoc();
@@ -194,23 +190,15 @@ bool HavocCallsVisitor::VisitCompoundStmt(clang::CompoundStmt *S) {
   return true;
 }
 
-// Shared prune rule for if/while/do/for: if every branch/body is already a
-// no-op and every controlling expression (condition, plus a for-loop's init
-// and increment) is side-effect-free, erase the whole statement and mark it
-// a no-op so the pruning can propagate to an enclosing statement. `init` and
-// `inc` are unused (default null, trivially side-effect-free) outside
+// `init`/`inc` are unused (default null, trivially side-effect-free) outside
 // VisitForStmt.
 //
-// For `if`, this can never change whether the program terminates — dropping
-// a dead branch doesn't create or remove divergence. For loops it can: an
-// empty body spinning on a side-effect-free condition (`while (n > 0);`) may
-// hang, and pruning it turns that hang into termination. That's intentional
-// here — such loops are havoc artifacts, not meaningful termination-
-// benchmark content. A condition/increment with a real side effect (e.g.
-// `while (x-- > 0);`) is kept regardless, since `x` may be observed after
-// the loop — except mutations of variables declared in the for-loop's own
-// init clause (`for (int i = 0; i < n; i++)`), which die with the loop and
-// are therefore unobservable.
+// For `if`, pruning a dead branch can never change termination. For loops it
+// can: an empty body spinning on a side-effect-free condition
+// (`while (n > 0);`) may hang, and pruning turns that hang into termination —
+// intentional, since such loops are havoc artifacts, not meaningful
+// termination-benchmark content. A condition/increment with a real side
+// effect is kept, since it may be observed after the loop.
 bool HavocCallsVisitor::pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc,
                                     std::initializer_list<const clang::Stmt *> branches,
                                     const clang::Expr *cond, const clang::Stmt *init,

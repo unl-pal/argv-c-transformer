@@ -24,12 +24,11 @@
  * @brief ASTFrontendAction for the verify stage's re-check of a transformed
  * file.
  *
- * Reparses the generated source from scratch
- * runs: CountingConsumer (fresh counts),
- * VerifyFunctionsConsumer (re-apply thresholds),
- * RemoveConsumer (strip rejected bodies),
- * HarnessRepairConsumer (drop dropped calls).
- * The repaired buffer is written to {@code output}.
+ * Reparses the generated source from scratch and runs: CountingConsumer
+ * (fresh counts), VerifyFunctionsConsumer (re-apply thresholds),
+ * RemoveConsumer (strip rejected bodies), HarnessRepairConsumer (drop
+ * removed functions' calls from main). The repaired buffer is written to
+ * {@code output}.
  *
  * The counts map and removal list are owned by the Verifier driver so it can
  * read them back after the tool run (e.g. for property selection); the

@@ -84,10 +84,9 @@ private:
 /**
  * @brief Carries pipeline state into Clang's tool runner.
  *
- * Clang's {@code ClangTool::run()} only knows how to call {@code create()} on
- * a {@code FrontendActionFactory}. This subclass stores the config maps and
- * output stream so that each {@code FilterAction} it creates has everything
- * it needs without those objects being globals.
+ * {@code ClangTool::run()} only calls {@code create()} on a
+ * {@code FrontendActionFactory}, so this subclass stores the config maps and
+ * output stream needed to construct each {@code FilterAction}.
  */
 class FrontendFactoryWithArgs : public clang::tooling::FrontendActionFactory {
 public:

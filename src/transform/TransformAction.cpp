@@ -14,11 +14,8 @@
 #include <memory>
 #include <vector>
 
-// Strip non-system includes: their functions are havocked by
-// HavocCallsConsumer, so the directives only leave unresolvable references
-// in the output. A quoted include is always project-local by convention and
-// gets stripped outright. Files that needed a local header's
-// types or macros stop compiling and are weeded out by keepCompilesOnly.
+// A quoted include is always project-local by convention and gets stripped
+// outright regardless of FileType.
 void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &,
                                        llvm::StringRef FileName, bool IsAngled,
                                        clang::CharSourceRange FilenameRange,
@@ -40,8 +37,7 @@ IncludeFinder::IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter
 
 TransformAction::TransformAction(llvm::raw_ostream &output) : _Output(output), _Rewriter() {}
 
-// Builds the multiplexed consumer chain; tempVector is built up and moved into
-// the MultiplexConsumer to avoid type-inference/optimization issues seen previously
+// unique_ptr can't be copied, so tempVector is built up and moved into MultiplexConsumer.
 std::unique_ptr<clang::ASTConsumer>
 TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef) {
   auto existingIncludes = std::make_shared<std::set<std::string>>();

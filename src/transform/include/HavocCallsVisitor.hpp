@@ -16,113 +16,76 @@
 #include <string>
 
 /**
- * @brief RecursiveASTVisitor that havocs every function call to make bodies intraprocedural.
+ * @brief Havocs every in-file function call so bodies become intraprocedural.
  *
- * Replaces each {@code CallExpr} to a function declared in the main file with a
- * nondeterministic value of its return type:
- * - Primitive returns → {@code __VERIFIER_nondet_<type>()}
- * - Non-function-pointer returns → {@code __havoc_block(128)} or
- *   {@code __havoc_cstring(128)} (for {@code char *})
- * - {@code void} returns → call is dropped
- * - Aggregate returns (structs, unions) → left as-is
- *
- * Dropped calls are marked as no-ops and enclosures checked for removal
- * so that if any loops or branches are side effect free and contain only
- * no-ops they are removed
+ * Primitive returns -> {@code __VERIFIER_nondet_<type>()}; pointer returns ->
+ * {@code __havoc_block(128)} / {@code __havoc_cstring(128)}; void returns
+ * dropped; aggregate returns left as-is. Dropped calls are marked no-op, and
+ * enclosing loops/branches that become side-effect-free no-ops are pruned.
  */
 class HavocCallsVisitor : public clang::RecursiveASTVisitor<HavocCallsVisitor> {
 public:
   /**
-   * @brief Constructs the visitor with the AST context and shared pipeline state.
-   *
-   * @param C              AST context, used for return-type resolution and
-   *                       source manager access.
-   * @param neededSuffixes Output set; verifier suffixes and havoc helper markers
-   *                       are inserted here.
+   * @param C              AST context, used for return-type resolution and source manager access.
+   * @param neededSuffixes Output set; verifier suffixes and havoc helper markers are inserted here.
    * @param rewriter       Shared rewriter for modifying the source buffer.
    */
   HavocCallsVisitor(clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededSuffixes,
                     clang::Rewriter &rewriter);
 
   /**
-   * @brief Replaces in-file call expressions with nondeterministic values.
-   *
-   * This is the primary visitor method. Determines the callee, checks whether
-   * the call should be havocked (in-file, non-library, non-verifier, non-macro),
-   * and replaces it based on its return type.
-   *
+   * @brief Havocs a call if it should be (in-file, non-library, non-verifier, non-macro).
    * @param E The call expression being visited.
-   * @return {@code false} to stop traversal, {@code true} to continue.
+   * @return false to stop traversal, true to continue.
    */
   bool VisitCallExpr(clang::CallExpr *E);
 
   /**
-   * @brief Marks an empty compound statement, or one whose entire body is
-   * made up of no-op statements, as itself a no-op.
-   *
+   * @brief Marks an empty or all-no-op compound statement as a no-op.
    * @param S The compound statement being visited.
-   * @return {@code true} to continue traversal.
+   * @return true to continue traversal.
    */
   bool VisitCompoundStmt(clang::CompoundStmt *S);
 
   /**
-   * @brief Erases an {@code if} statement whose branches are all no-ops and
-   * whose condition is side-effect-free, then marks it as a no-op so removal
-   * propagates to enclosing statements. See {@code pruneIfNoOp}.
-   *
+   * @brief Prunes an if statement whose branches are all no-ops and condition is side-effect-free. See pruneIfNoOp.
    * @param S The if statement being visited.
-   * @return {@code true} to continue traversal.
+   * @return true to continue traversal.
    */
   bool VisitIfStmt(clang::IfStmt *S);
 
   /**
-   * @brief Erases a {@code while} loop whose body is a no-op and whose
-   * condition is side-effect-free. See {@code pruneIfNoOp}.
-   *
+   * @brief Prunes a while loop whose body is a no-op and condition side-effect-free.
    * @param S The while statement being visited.
-   * @return {@code true} to continue traversal.
+   * @return true to continue traversal.
    */
   bool VisitWhileStmt(clang::WhileStmt *S);
 
   /**
-   * @brief Same pruning rule as {@code VisitWhileStmt}, for {@code do}/{@code while} loops.
-   *
+   * @brief Same rule as VisitWhileStmt, for do/while loops.
    * @param S The do statement being visited.
-   * @return {@code true} to continue traversal.
+   * @return true to continue traversal.
    */
   bool VisitDoStmt(clang::DoStmt *S);
 
   /**
-   * @brief Same pruning rule as {@code VisitWhileStmt}, for {@code for} loops.
+   * @brief Same rule as VisitWhileStmt, for for loops.
    *
-   * Additionally requires the init clause (a bare expression, or a
-   * declaration with a side-effect-free initializer) and the increment
-   * clause to be side-effect-free. Mutations of variables declared in the
-   * init clause itself ({@code for (int i = 0; i < n; i++)}) don't count:
-   * they are loop-scoped and unobservable after the loop.
+   * Init and increment clauses must also be side-effect-free; mutations of
+   * the loop's own init-declared variables don't count, since they can't be
+   * observed after the loop.
    *
    * @param S The for statement being visited.
-   * @return {@code true} to continue traversal.
+   * @return true to continue traversal.
    */
   bool VisitForStmt(clang::ForStmt *S);
 
-  /**
-   * @brief Instructs the visitor to use post-order (depth-first) traversal.
-   * @return {@code true} for post-order traversal.
-   */
+  /** @brief Post-order traversal so a statement's children are classified before it is. @return true. */
   bool shouldTraversePostOrder();
 
   /**
-   * @brief Whether a statement performs no observable operation.
-   *
-   * True for {@code NullStmt}, and for any statement previously recorded in
-   * {@code _NoOpStmts} (dropped void calls, empty/all-no-op compound
-   * statements, erased if-statements). A null statement pointer (e.g. an
-   * absent {@code else} branch) counts as a no-op. Exposed so callers (e.g.
-   * {@code HavocCallsConsumer}) can check whether a whole function body
-   * collapsed to nothing once traversal is complete.
-   *
-   * @param S The statement to classify, or {@code nullptr}.
+   * @brief True for NullStmt and anything previously recorded in _NoOpStmts.
+   * @param S The statement to classify, or nullptr.
    */
   bool isNoOp(const clang::Stmt *S) const;
 
@@ -130,21 +93,16 @@ private:
   /**
    * @brief Shared prune rule for if/while/do/for.
    *
-   * If every statement in {@code branches} is a no-op and {@code cond},
-   * {@code init}, and {@code inc} are all side-effect-free (the latter two
-   * only meaningful for a for-loop and default to trivially-safe null), the
-   * whole statement {@code S} is erased from the source and marked a no-op.
-   * Variables declared by {@code init} are exempt from the side-effect
-   * check in {@code cond}/{@code inc}, since they cannot outlive the loop.
+   * Erases S and marks it a no-op if every statement in branches is a no-op
+   * and cond/init/inc are all side-effect-free (init/inc only apply to for-loops).
    *
    * @param S        The statement to erase if it proves to be a no-op.
-   * @param keyLoc    The statement's leading keyword location, used for the
-   *                   main-file/macro guard (e.g. {@code getIfLoc()}).
-   * @param branches  Every branch/body statement that must be a no-op.
-   * @param cond      The controlling condition; must be side-effect-free.
-   * @param init      A for-loop's init clause, or {@code nullptr}.
-   * @param inc       A for-loop's increment clause, or {@code nullptr}.
-   * @return {@code true} if the statement was erased.
+   * @param keyLoc   Leading keyword location, used for the main-file/macro guard.
+   * @param branches Every branch/body statement that must be a no-op.
+   * @param cond     The controlling condition; must be side-effect-free.
+   * @param init     A for-loop's init clause, or nullptr.
+   * @param inc      A for-loop's increment clause, or nullptr.
+   * @return true if the statement was erased.
    */
   bool pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc,
                    std::initializer_list<const clang::Stmt *> branches, const clang::Expr *cond,

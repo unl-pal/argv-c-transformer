@@ -42,17 +42,11 @@ public:
   /**
    * @brief Called by the preprocessor for each #include/#import directive.
    *
-   * @param HashLoc         Location of the '#' that begins the directive.
-   * @param IncludeTok      The "include"/"import" token.
-   * @param FileName        Name of the included file as written in the source.
-   * @param IsAngled        True for <...> includes, false for "..." includes.
-   * @param FilenameRange   Source range of the filename text.
-   * @param File            The resolved file, if Clang found it.
-   * @param SearchPath      Directory in which the file was found.
-   * @param RelativePath    Path of the file relative to SearchPath.
-   * @param SuggestedModule Module suggested for the include, if any.
-   * @param ModuleImported  Whether the include was treated as a module import.
-   * @param FileType        Characteristic kind (system/user) of the included file.
+   * @param HashLoc       Location of the '#' that begins the directive.
+   * @param FileName      Name of the included file as written in the source.
+   * @param IsAngled      True for <...> includes, false for "..." includes.
+   * @param FilenameRange Source range of the filename text.
+   * @param FileType      Characteristic kind (system/user) of the included file.
    */
   void InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &IncludeTok,
                           llvm::StringRef FileName, bool IsAngled,

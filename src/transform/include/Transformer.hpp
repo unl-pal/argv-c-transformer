@@ -40,10 +40,9 @@ public:
    *
    * @param configFile Path to the INI-style properties file ("" = defaults only).
    * @param inputPath  Optional directory (or single .c file) of filtered files
-   *                   to transform. When given, it overrides filterDir and
-   *                   sets transformDir to "<name>-transformed", both taking
-   *                   precedence over whatever the config file sets for those
-   *                   keys.
+   *                   to transform. Overrides filterDir and derives
+   *                   transformDir as "<name>-transformed", both taking
+   *                   precedence over the config file.
    */
   Transformer(std::string configFile, std::string inputPath = "");
 

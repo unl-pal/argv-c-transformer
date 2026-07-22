@@ -9,7 +9,6 @@
 #include <iostream>
 #include <optional>
 
-// Target for calling the Verifier individually
 int main(int argc, char **argv) {
   checkClangVersion();
   checkRuntimeClangVersion();
