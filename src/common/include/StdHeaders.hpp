@@ -93,7 +93,7 @@ inline const std::unordered_map<std::string, StdHeaderInfo> kStdTypeHeaders = {
     {"ldiv_t", {"stdlib.h", HeaderCategory::Core}},
     {"lldiv_t", {"stdlib.h", HeaderCategory::Core}},
 
-    // <string.h> — no types beyond size_t
+    // <string.h> - no types beyond size_t
 
     // <time.h>
     {"time_t", {"time.h", HeaderCategory::Time}},
@@ -127,7 +127,7 @@ inline const std::unordered_map<std::string, StdHeaderInfo> kStdTypeHeaders = {
     // <stdarg.h>
     {"va_list", {"stdarg.h", HeaderCategory::Core}},
 
-    // <errno.h> — no types, just macros
+    // <errno.h> - no types, just macros
 
     // <inttypes.h>
     {"imaxdiv_t", {"inttypes.h", HeaderCategory::Core}},

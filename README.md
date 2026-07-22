@@ -14,7 +14,9 @@ ArgV C Transformer takes C source files or directories and converts them into
 [SV-Comp](https://sv-comp.sosy-lab.org/) style verification benchmarks. It uses
 Clang/LLVM's C++ APIs to parse and rewrite C ASTs according to user-defined
 parameters that determine what makes a file and its functions interesting
-candidates for verification.
+candidates for verification. In addition, we provide a python [downloader](src/download/Downloader.py)
+script to aid in downloading and filtering open-source Github repositories.
+Otherwise the tool can be pointed to any local repositories as the user desires.
 
 ## Contents
 
@@ -32,8 +34,8 @@ candidates for verification.
 
 # Install
 
-`argv-c` is the one binary most users need — it runs the whole filter →
-transform → verify pipeline (see [Running](#running)). Get it either of two
+`argv-c` is the one binary most users need. It runs the whole filter ->
+transform -> verify pipeline (see [Running](#running)). Get it either of two
 ways:
 
 ## Download a prebuilt package
@@ -51,14 +53,11 @@ tar xzf argv-c-<version>-<platform>.tar.gz
 sudo mv argv-c /usr/local/bin/   # or anywhere else on PATH
 ```
 
-Packages don't bundle LLVM/Clang — `argv-c` still shells out to a bare
-`clang` at runtime for preprocessing and compile-checking (see
-["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build)),
-so either way you need Clang 20+ on `PATH`. `argv-c` checks this itself at
-startup and tells you what to do if it's missing.
+Packages don't bundle LLVM/Clang and  `argv-c` shells out to a bare
+`clang` at runtime for preprocessing and compile-checking. So you need 
+Clang 20+ on `PATH`. `argv-c` checks this itself at startup. Otherwise see
+["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build).
 
-No package for your platform (e.g. Windows, Linux ARM)? Build from source
-instead.
 
 ## Build from source
 
@@ -69,26 +68,18 @@ steps, then:
 cmake --install build
 ```
 
-installs `argv-c` to the standard CMake prefix (`/usr/local` by default).
+This installs `argv-c` to the standard CMake prefix (`/usr/local` by default).
 Pass `--prefix <dir>` to install elsewhere, e.g. `cmake --install build --prefix ~/.local`.
-The individual stage binaries (`filter`/`transform`/`verify`) aren't
-installed; run them out of `build/` if you need them (see
-[Running](#running)).
 
 # Running
 
-All four binaries take up to two positional arguments — an input (a directory
+`argv-c` takes up to two positional arguments: an input path (directory
 of C files, or a single `.c` file) and/or a config file, in either order.
-A directory or `.c` file is treated as the input; any other argument is the
-config. Both are optional individually, but at least one is required.
-Examples below assume `argv-c` is installed (see [Install](#install));
-otherwise run it as `./build/argv-c`.
+At least one is required. Examples below assume `argv-c` is installed.
 
-`argv-c` runs the whole filter → transform → verify pipeline in one process
-and produces just the final benchmarks.  The intermediate `-filtered`/
-`-transformed` directories are cleaned up once verify finishes, unless the
-config file explicitly names `filterDir`/`transformDir`, which is taken as a
-request to keep them around:
+`argv-c` runs the pipeline and outputs final benchmarks in `<input>-benchmarks`.
+Intermediate `-filtered`/ `-transformed` directories are cleaned unless the
+config file explicitly names them under \[Stage Directories\].
 
 ```sh
 argv-c <config>              # dirs and thresholds from the config file
@@ -98,9 +89,7 @@ argv-c <repo-dir>            # no config needed: built-in defaults,
 argv-c <repo-dir> <config>   # thresholds from config, input from CLI
 ```
 
-Run a single stage on its own — useful for development, e.g. iterating on
-one stage without re-running the others. These aren't installed, so run them
-straight out of `build/`:
+Users can run single stages if building from source.
 
 ```sh
 ./build/filter    <repo-dir>          # filter stage only    → <repo>-filtered/
@@ -110,29 +99,31 @@ straight out of `build/`:
 
 ## Configuration
 
-Config files use INI syntax. See `settings.config` for all available options.
-Key sections:
+Config files use INI syntax. Any `*.config` file is accepted with the following
+keys. See `settings.config` for more info.
 
-- `[Stage Directories]` — `databaseDir`, `filterDir`, `transformDir`, `benchmarkDir`
-- `[Complexity Requirements]` — per-function `min,max` thresholds (`ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`)
-- `[Feature Requirements]` — per-function gates: `require` | `forbid` | `ignore` (default), for `Concurrency` and `FloatingPoint`
-- `[File Settings]` — `FileLoC`, `fileTimeoutSecs`, `keepCompilesOnly`, `debugLevel` (0–3)
-
-The transform stage preprocesses each surviving benchmark into a `.i` file with
-`clang -E -P -std=gnu11`, requiring `clang` on `PATH` (see
-["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build)
-below).
+- `[Complexity Requirements]` - per-function `min,max` thresholds: `ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`
+- `[Feature Requirements]` - per-function gates: `require` | `forbid` | `ignore` (default): `Concurrency` and `FloatingPoint`
+- `[File Settings]` - `FileLoC`, `fileTimeoutSecs`, `keepCompilesOnly`, `debugLevel` (0–3)
+- `[Stage Directories]` - `databaseDir`, `filterDir`, `transformDir`, `benchmarkDir`
 
 # Build
 
-Check what you already have before installing anything — `clang --version`
-tells you the version currently resolved on `PATH`. This project requires
-**LLVM/Clang 20**, CMake (>= 3.20), and Ninja; if you're already on 20 or
-newer, skip straight to the build commands below. `verify` and `argv-c` (the
-tools that shell out to `clang` at runtime — see
-["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build))
-check this for you at startup too, and will only complain if what's on
-`PATH` doesn't meet the minimum.
+This project uses CMake and Ninja. To build it run:
+
+```sh
+cmake -B build -S . -G Ninja
+ninja -C build
+```
+
+Each stage's binary and the full `argv-c` version can then be found and run from
+the `build/` directory.
+
+Because this project requires **LLVM/Clang 20**, CMake (>= 3.20) you may need
+to perform additional setup. If you're already on 20 or newer the above build commands
+may have worked. `clang --version` tells you the version currently resolved on `PATH`.
+See [clang-on-path-must-match-the-build](#clang-on-path-must-match-the-build) for more information.
+Platform-specific instructions are below.
 
 ## macOS (Homebrew)
 
@@ -145,8 +136,8 @@ brew install cmake ninja llvm@20 lld@20
 ```
 
 `llvm@20` is keg-only (not symlinked into `/opt/homebrew`) so CMake cannot find
-it automatically — `CMakeLists.txt` handles this on Apple platforms. No extra
-flags are needed when invoking CMake.
+it automatically.  `CMakeLists.txt` handles this on Apple platforms. No extra
+flags are needed when invoking CMake. Now the above build commands should work.
 
 ## Linux (Debian/Ubuntu)
 
@@ -158,65 +149,52 @@ sudo apt install cmake ninja-build \
   zlib1g-dev libzstd-dev libedit-dev
 ```
 
-When invoking CMake, point it at the versioned compiler:
+When invoking CMake, you''d want to point it at the versioned compiler:
 
 ```sh
 CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja
 ```
 
+`CXX`/`CC` only need to be set for this one invocation since CMake caches the
+compiler choice in `build/`. Now you should be able to run `ninja -C build` successfully.
+
 ## `clang` on `PATH` must match the build
 
-Beyond the build itself, `verify` (and therefore `argv-c`) shells out to a
+Beyond the build itself, `argv-c` shells out to a
 bare `clang` command at runtime (see `ClangToolUtils.hpp` / `Verifier.cpp`) to
-preprocess and compile-check each candidate benchmark — this is separate
+preprocess and compile-check each candidate benchmark. This is separate
 from, and not guaranteed to match, the LLVM 20 libraries the tools are linked
 against. `verify`/`argv-c` check this at startup and refuse to run if `PATH`
-doesn't resolve to Clang 20+, so a mismatch here is caught immediately rather
-than silently producing different benchmark output than the one the project
-was built and tested with — but you still need to fix your `PATH` to get
-past it. Neither platform puts the versioned LLVM install on `PATH` by
-default:
+doesn't resolve to Clang 20+.
 
 - **Linux**: installing `clang-20` via apt does not repoint the unversioned
-  `clang` — that may already point at a different preinstalled version.
+  `clang`, which may already point at a different preinstalled version.
   Put the versioned install first on `PATH`:
+
   ```sh
   export PATH="/usr/lib/llvm-20/bin:$PATH"
   ```
+
 - **macOS**: Homebrew's `llvm@20` is keg-only, so it's never on `PATH`
   automatically:
+
   ```sh
   export PATH="$(brew --prefix llvm@20)/bin:$PATH"
   ```
 
-CI sets this explicitly for the same reason.
-
-```sh
-cmake -B build -S . -G Ninja
-ninja -C build
-```
-
-This builds all four binaries — `argv-c` plus the individual `filter`/
-`transform`/`verify` stages (useful for development: iterating on one stage
-without re-running the others). They're runnable straight out of `build/`,
-e.g. `./build/filter <repo-dir>`. See [Install](#install) to install just
-`argv-c`.
-
 # Testing
 
-Build and run the test suite (GoogleTest is fetched automatically by CMake):
+After building, run the test suite (GoogleTest is fetched automatically by CMake):
 
 ```sh
-cmake -B build -S . -G Ninja
-ninja -C build
 ctest --test-dir build
 ```
 
 Two suites run:
 
-- **`filter_tests`** — unit tests for the filter stage's AST counting
+- **`filter_tests`** - unit tests for the filter stage's AST counting
   (`tests/filter/`).
-- **`transform_tests`** — golden-file tests for the transform stage
+- **`transform_tests`** - golden-file tests for the transform stage
   (`tests/transform/`). Each case is a pair of files in
   `tests/transform/cases/`: `<name>.input.c` is fed through the full transform
   pipeline (include stripping → call havocking → main generation → verifier
@@ -230,11 +208,11 @@ its golden:
 UPDATE_GOLDENS=1 ./build/tests/transform_tests
 ```
 
-Review the generated/changed `.expected.c` files like any other code change —
+Review the generated/changed `.expected.c` files like any other code change -
 this is also how goldens are refreshed after an intentional behavior change.
 
 Note: test cases that include system headers are skipped (with an explanatory
-message) when the clang resource directory cannot be resolved — this usually
+message) when the clang resource directory cannot be resolved. This usually
 means `clang` is not on `PATH`.
 
 # Downloader (optional)
@@ -250,7 +228,7 @@ pip install GitPython
 
 Downloader.py has its own config, separate from `settings.config` (which
 the filter/transform/verify/argv-c pipeline reads) since `argv-c` never
-invokes the downloader — it's a standalone step you run first to populate a
+invokes the downloader. It's a standalone step you run first to populate a
 `databaseDir` for the pipeline to later read as input. See
 `src/download/downloader.config` for the default, or write your own with a
 `[File Locations]` `databaseDir` pointing to where repositories should be
@@ -260,9 +238,11 @@ cloned, then run:
 python3 src/download/Downloader.py src/download/downloader.config
 ```
 
-This reads a CSV index of repositories (`csv` setting, default `repos.csv`),
-applies the `[Downloader]` section's criteria (CSV column filters like
+This uses a CSV index of repositories (`csv` setting, default `repos.csv`),
+and applies the `[Downloader]` section's criteria (CSV column filters like
 `language`, `stars`, `size`), and stops after `projectCount` repos.
+Alternatively, you can use the repo key to pass a single repo to download. This
+downloads the tarball and only extracts the `*.c/*.h` files.
 
 Alternatively, pass a `.csv` file directly instead of a `.config`:
 
@@ -272,4 +252,4 @@ python3 src/download/Downloader.py <repos.csv>
 
 This treats the file as a plain list of repos (its `repository` column) and
 downloads every row unconditionally, with no filtering, into the default
-`database/` directory.
+`repos/` directory.

@@ -24,7 +24,7 @@
  * System headers (C stdlib and platform headers) are kept; project-local
  * includes are removed from the output, since every function they declare is
  * havocked by HavocCallsConsumer anyway. A file that uses types or macros
- * from a local header will no longer compile after stripping — those outputs
+ * from a local header will no longer compile after stripping; those outputs
  * are weeded out by keepCompilesOnly (header type/macro handling is a future
  * feature).
  */

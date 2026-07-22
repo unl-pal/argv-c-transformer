@@ -21,7 +21,7 @@ downloadSettings = {
 
 fileSettings = {
     "csv": "repos.csv",
-    "databaseDir": "database",
+    "databaseDir": "repos",
 }
 
 C_EXTENSIONS = {".c", ".h"}
@@ -57,7 +57,7 @@ def get_auth_headers():
     if token:
         return {"Authorization": f"token {token}"}
     print(
-        "Warning: GITHUB_TOKEN not set — using unauthenticated API (60 req/hour limit)"
+        "Warning: GITHUB_TOKEN not set - using unauthenticated API (60 req/hour limit)"
     )
     return {}
 

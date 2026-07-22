@@ -14,7 +14,7 @@
  * @brief Runtime configuration loaded from the INI-style config file.
  *
  * Holds the path settings and flags that live outside the per-function
- * config maps — i.e. things that are not per-function complexity ranges or
+ * config maps - i.e. things that are not per-function complexity ranges or
  * feature gates.
  */
 struct filterConfigs {
@@ -78,7 +78,7 @@ public:
                    int numFiles = 0);
 
   /**
-   * @brief Main entry point — collects files, pre-filters, and runs the AST pipeline.
+   * @brief Main entry point - collects files, pre-filters, and runs the AST pipeline.
    *
    * For each .c file that passes {@code checkPotentialFile}, builds a Clang
    * tool invocation and runs the full filter consumer chain (count → filter →

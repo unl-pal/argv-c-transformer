@@ -26,13 +26,13 @@
  * {@code false} from any {@code Visit*} stops the entire walk.
  *
  * Results are written into the {@code _allFunctions} map passed at construction
- * — the same map that {@code FilterFunctionsConsumer} reads next in the
+ * - the same map that {@code FilterFunctionsConsumer} reads next in the
  * pipeline. The special key {@code "FileScope"} accumulates counts for anything
  * declared at file scope rather than inside a function.
  */
 class CountingVisitor : public clang::RecursiveASTVisitor<CountingVisitor> {
 public:
-  /** @brief Per-function structural complexity counts — the "how much" axis. */
+  /** @brief Per-function structural complexity counts - the "how much" axis. */
   struct ComplexityCounts {
     int CallFunc = 0;
     int ForLoops = 0;
@@ -42,7 +42,7 @@ public:
     int Operations = 0; // ops w/side-effects on signed types (for UB/no-overflow property detection)
   };
 
-  /** @brief Per-function feature presence flags — the "what kind" axis. */
+  /** @brief Per-function feature presence flags - the "what kind" axis. */
   struct FeatureFlags {
     bool Concurrency = false;
     bool FloatingPoint = false;
@@ -122,7 +122,7 @@ private:
 /**
  * @brief Looks up a named field on the complexity axis, shared by the
  * filter's threshold check and the verify stage's post-transform re-check.
- * Throws if `name` isn't one of the known metrics — a config key typo should
+ * Throws if `name` isn't one of the known metrics; a config key typo should
  * surface loudly, not silently no-op.
  */
 inline int complexityField(const CountingVisitor::ComplexityCounts &c, const std::string &name) {

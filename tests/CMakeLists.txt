@@ -11,7 +11,7 @@ FetchContent_Declare(
 )
 # Prevent GTest from overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-# GTest defaults to installing its own headers/libs alongside the project's —
+# GTest defaults to installing its own headers/libs alongside the project's -
 # it's a test-only dependency and has no business in a user's `cmake --install`.
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)

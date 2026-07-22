@@ -22,7 +22,7 @@
 #include <string>
 
 const std::string defaultFilterDir = "filteredFiles";
-const std::string defaultDatabaseDir = "database";
+const std::string defaultDatabaseDir = "repos";
 
 Filterer::Filterer(std::string configFile, std::string inputPath) {
   configuration.filterDir = defaultFilterDir;

@@ -37,7 +37,7 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
   clang::DynTypedNodeList parents = _C->getParents(S);
   if (parents.size()) {
     for (const clang::DynTypedNode &parent : parents) {
-      // DynTypedNode is type-erased — try each possible parent kind
+      // DynTypedNode is type-erased - try each possible parent kind
       if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>())
         return fd->getNameAsString();
       if (const clang::Stmt *s = parent.get<clang::Stmt>())

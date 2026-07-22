@@ -231,7 +231,7 @@ TEST_F(VerifyStageTest, HarnessEmptyAfterRepairIsDiscarded) {
 }
 
 TEST_F(VerifyStageTest, KeepCompilesOnlyDiscardsUndefinedTypes) {
-  // Uses a type from a local header that gets stripped during transform —
+  // Uses a type from a local header that gets stripped during transform -
   // the transformed file parses but won't compile, so keepCompilesOnly
   // (default true) should discard it in the verify stage.
   writeFile(filterDir / "local_types.h",

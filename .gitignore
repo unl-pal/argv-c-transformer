@@ -7,5 +7,11 @@ repos-filtered/
 repos-transformed/
 repos-benchmarks/
 
+# Tutorial I/O (docs/tutorial/Tutorial.md)
+docs/tutorial/source-files/
+docs/tutorial/filtered-files/
+docs/tutorial/transformed-files/
+docs/tutorial/benchmark-files/
+
 # AI artifacts
 CLAUDE.md

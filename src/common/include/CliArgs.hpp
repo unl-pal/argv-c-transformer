@@ -44,7 +44,7 @@ inline std::optional<CliInvocation> parseCliArgs(int argc, char **argv) {
     std::string &slot = isInput ? invocation.inputPath : invocation.configFile;
     if (!slot.empty()) {
       std::cerr << "Both '" << slot << "' and '" << arg << "' look like "
-                << (isInput ? "inputs" : "config files") << " — give at most one of each."
+                << (isInput ? "inputs" : "config files") << ". Give at most one of each."
                 << std::endl;
       return std::nullopt;
     }
@@ -65,7 +65,7 @@ inline void printUsage(const std::string &toolName) {
             << "At least one argument is required; with only an input, built-in\n"
             << "defaults are used and output goes to <name>-filtered/ etc. in the\n"
             << "working directory. If both are given, the input path always wins\n"
-            << "over the config file's directory settings — both the repo it\n"
+            << "over the config file's directory settings, both the repo it\n"
             << "reads from and the derived <name>-filtered/ etc. output name."
             << "Examples:\n"
             << "  ./build/" << toolName << " path/to/repo\n"

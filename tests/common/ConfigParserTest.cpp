@@ -14,7 +14,7 @@
 namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
-// parseIniFile — every config both tools read goes through this one regex,
+// parseIniFile - every config both tools read goes through this one regex,
 // so pin down exactly which line shapes it accepts and skips.
 // ---------------------------------------------------------------------------
 

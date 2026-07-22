@@ -62,7 +62,7 @@ EOF
 echo
 echo "--- Assertion: baseline file produces a benchmark ---"
 if [ ! -f "$WORK/bench-default/clean_ok.c" ]; then
-  echo "FAIL: clean_ok.c did not produce a benchmark — pipeline itself is broken on this platform"
+  echo "FAIL: clean_ok.c did not produce a benchmark; pipeline itself is broken on this platform"
   fail=1
 else
   echo "OK"

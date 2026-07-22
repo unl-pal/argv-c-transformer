@@ -159,7 +159,7 @@ inline std::vector<const char *> toArgv(const std::vector<std::string> &args) {
  * tool setup shared by the filter and transform steps.
  *
  * Tool-reported errors (the file may be arbitrary downloaded C) are logged
- * but still count as a successful run — downstream compile checks decide the
+ * but still count as a successful run; downstream compile checks decide the
  * output's fate.
  *
  * @param filePath Path to the C source file to process.
@@ -198,7 +198,7 @@ inline bool runToolOnFile(const std::string &filePath,
       std::cerr << "Clang tool reported errors while processing: " << filePath << std::endl;
   } catch (const std::exception &e) {
     // A consumer bug (e.g. a config/metric name mismatch) should not take
-    // down the whole batch — report it and move on to the next file.
+    // down the whole batch. Report it and move on to the next file.
     std::cerr << "Clang tool threw while processing " << filePath << ": " << e.what() << std::endl;
     return false;
   }

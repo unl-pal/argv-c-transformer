@@ -18,7 +18,7 @@
 //
 // CountingVisitor needs a live ASTContext, which means we have to actually
 // parse some C code. clang::tooling::buildASTFromCodeWithArgs() does that
-// in-process from a string — no temp files, no compiler invocation.
+// in-process from a string - no temp files, no compiler invocation.
 //
 // We keep the ASTUnit alive in the struct below because the ASTContext it
 // owns is referenced while the visitor populates the map. If the unit is
@@ -48,12 +48,12 @@ static CountResult runCounter(const std::string &code) {
 }
 
 // ---------------------------------------------------------------------------
-// TEST vs TEST_F — a note for reference
+// TEST vs TEST_F - a note for reference
 //
-// TEST(Suite, Name)   — standalone, no shared setup. Fine when each test
+// TEST(Suite, Name)   - standalone, no shared setup. Fine when each test
 //                       can build its own CountResult in one line.
 //
-// TEST_F(Fixture, Name) — inherits from a class that has SetUp()/TearDown().
+// TEST_F(Fixture, Name) - inherits from a class that has SetUp()/TearDown().
 //                         Useful when setup is expensive or identical across
 //                         many tests (e.g., all tests on the same source file).
 //
@@ -98,7 +98,7 @@ TEST(CountingVisitor, IfStmt) {
 }
 
 // ---------------------------------------------------------------------------
-// Operations counting — signed-only, since unsigned overflow is defined
+// Operations counting - signed-only, since unsigned overflow is defined
 // behavior (wraps, C11 6.2.5p9) and shouldn't feed the no-overflow.prp signal.
 // ---------------------------------------------------------------------------
 
@@ -160,7 +160,7 @@ TEST(CountingVisitor, SignedCompoundAssignInLoopCounted) {
 }
 
 TEST(CountingVisitor, BitwiseCompoundAssignNotCounted) {
-  // &=, |=, ^= are bitwise, not arithmetic — they don't overflow.
+  // &=, |=, ^= are bitwise, not arithmetic - they don't overflow.
   auto r = runCounter("void foo(int a, int b) { a &= b; a |= b; a ^= b; }");
   ASSERT_TRUE(r.funcs->count("foo"));
   EXPECT_EQ(r.funcs->at("foo").Complexity.Operations, 0);
@@ -260,7 +260,7 @@ TEST(CountingVisitor, ConcurrencyFlaggedForLocalPthreadVariable) {
 
 TEST(CountingVisitor, ConcurrencyFlaggedByCallArgumentAlone) {
   // The pthread_mutex_t lives at file scope ("Program"), never as a VarDecl
-  // inside the function — only the call argument's type can catch this, so
+  // inside the function; only the call argument's type can catch this, so
   // this isolates the VisitCallExpr path from the VisitVarDecl path.
   auto r = runCounter(std::string(kPthreadStubs) + R"(
     pthread_mutex_t global_lock;
@@ -274,7 +274,7 @@ TEST(CountingVisitor, ConcurrencyFlaggedByCallArgumentAlone) {
 
 TEST(CountingVisitor, ConcurrencyFlaggedForPointerTypedLocal) {
   // A pointer-typed local (pthread_mutex_t *) with no call at all should
-  // still be flagged — VisitVarDecl strips the pointer before the lookup.
+  // still be flagged; VisitVarDecl strips the pointer before the lookup.
   auto r = runCounter(std::string(kPthreadStubs) + R"(
     void worker(pthread_mutex_t *m) {
       pthread_mutex_t *alias = m;
@@ -297,7 +297,7 @@ TEST(CountingVisitor, ConcurrencyNotSetForCleanFunction) {
 
 TEST(CountingVisitor, ConcurrencyIsolatedPerFunction) {
   // Only the function that actually touches a pthread type should be
-  // flagged — a sibling function must not pick it up.
+  // flagged; a sibling function must not pick it up.
   auto r = runCounter(std::string(kPthreadStubs) + R"(
     void worker() {
       pthread_mutex_t m;
@@ -312,7 +312,7 @@ TEST(CountingVisitor, ConcurrencyIsolatedPerFunction) {
 }
 
 // ---------------------------------------------------------------------------
-// Floating-point detection — tracked but not yet enforced by the filter.
+// Floating-point detection - tracked but not yet enforced by the filter.
 // ---------------------------------------------------------------------------
 
 TEST(CountingVisitor, FloatingPointFlaggedForLocalFloatVariable) {

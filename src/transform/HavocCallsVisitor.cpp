@@ -29,7 +29,7 @@ const clang::VarDecl *referencedVar(const clang::Expr *E) {
 
 // Conservative purity check used to decide whether an `if` condition can be
 // dropped along with its (now no-op) branches. Anything not explicitly
-// recognized here — calls, overloaded operators, volatile accesses, etc. —
+// recognized here - calls, overloaded operators, volatile accesses, etc. -
 // is treated as side-effecting, so we only ever prune conditionals we can
 // prove are safe to remove.
 //
@@ -195,7 +195,7 @@ bool HavocCallsVisitor::VisitCompoundStmt(clang::CompoundStmt *S) {
 //
 // For `if`, pruning a dead branch can never change termination. For loops it
 // can: an empty body spinning on a side-effect-free condition
-// (`while (n > 0);`) may hang, and pruning turns that hang into termination —
+// (`while (n > 0);`) may hang, and pruning turns that hang into termination -
 // intentional, since such loops are havoc artifacts, not meaningful
 // termination-benchmark content. A condition/increment with a real side
 // effect is kept, since it may be observed after the loop.

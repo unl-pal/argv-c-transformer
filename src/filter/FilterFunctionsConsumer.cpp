@@ -72,7 +72,7 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
       continue;
     }
 
-    // All threshold checks passed — now check whether every parameter has a
+    // All threshold checks passed; now check whether every parameter has a
     // nondet equivalent. If any param type is unsupported (pointer, struct,
     // etc.), strip the body so HavocCallsVisitor can still use the return
     // type from the remaining declaration. main is exempt here: its argc/argv

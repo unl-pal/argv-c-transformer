@@ -102,7 +102,7 @@ public:
   void parseConfig(std::string configFile);
 
   /**
-   * @brief Main entry point — runs transformAll over filterDir.
+   * @brief Main entry point - runs transformAll over filterDir.
    *
    * @return The number of transformed files produced.
    */

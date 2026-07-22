@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-/** @brief A single property entry in an SV-Comp .yml task file — one block under the {@code properties:} key. */
+/** @brief A single property entry in an SV-Comp .yml task file - one block under the {@code properties:} key. */
 struct BenchmarkProperty {
   std::string propertyFile; ///< Relative path to the .prp file (e.g. "../properties/termination.prp").
   bool expectedVerdict;     ///< {@code true} = program satisfies the property.
@@ -29,7 +29,7 @@ struct verifyConfigs {
 };
 
 /**
- * @brief Top-level orchestrator for the verify step — the third stage of the
+ * @brief Top-level orchestrator for the verify step - the third stage of the
  * pipeline (filter → transform → verify).
  *
  * Reparses each transformed file, re-applies the filter's thresholds
@@ -85,7 +85,7 @@ public:
   bool checkCompilable(std::filesystem::path path);
 
   /**
-   * @brief Main entry point — runs verifyAll over transformDir.
+   * @brief Main entry point - runs verifyAll over transformDir.
    *
    * @return The number of finalized benchmarks produced.
    */
@@ -127,7 +127,7 @@ public:
   bool preprocess(std::filesystem::path cPath);
 
 private:
-  /// Thresholds and feature gates re-applied post-transform — the same
+  /// Thresholds and feature gates re-applied post-transform - the same
   /// PipelineConfig structure the filter stage applies pre-transform.
   PipelineConfig config;
   /// Path settings and flags for this stage.

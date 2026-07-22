@@ -136,7 +136,7 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
   if (configFile.empty())
     return config;
   if (!std::filesystem::exists(configFile)) {
-    std::cerr << "Config file not found: " << configFile << " — using defaults" << std::endl;
+    std::cerr << "Config file not found: " << configFile << " - using defaults" << std::endl;
     return config;
   }
 
@@ -145,25 +145,25 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       std::optional<std::pair<int, int>> range = parseComplexityValue(value);
       if (range && range->first > range->second) {
         std::cerr << "Warning: 'FileLoC' has min (" << range->first << ") greater than max ("
-                  << range->second << ") — ignoring value '" << value << "'" << std::endl;
+                  << range->second << ") - ignoring value '" << value << "'" << std::endl;
       } else if (range) {
         config.fileSettings.at("minFileLoC") = range->first;
         config.fileSettings.at("maxFileLoC") = range->second;
       } else {
-        std::cerr << "Warning: 'FileLoC' expects 'min,max', 'min', or ',max' — ignoring value '"
+        std::cerr << "Warning: 'FileLoC' expects 'min,max', 'min', or ',max' - ignoring value '"
                   << value << "'" << std::endl;
       }
     } else if (config.complexity.count(key)) {
       std::optional<std::pair<int, int>> range = parseComplexityValue(value);
       if (range && range->first > range->second) {
         std::cerr << "Warning: complexity key '" << key << "' has min (" << range->first
-                  << ") greater than max (" << range->second << ") — ignoring value '" << value
+                  << ") greater than max (" << range->second << ") - ignoring value '" << value
                   << "'" << std::endl;
       } else if (range) {
         config.complexity.at(key) = *range;
       } else {
         std::cerr << "Warning: complexity key '" << key
-                  << "' expects 'min,max', 'min', or ',max' — ignoring value '" << value << "'"
+                  << "' expects 'min,max', 'min', or ',max' - ignoring value '" << value << "'"
                   << std::endl;
       }
     } else if (config.features.count(key)) {
@@ -177,7 +177,7 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
         config.features.at(key) = FeatureGate::Ignore;
       } else {
         std::cerr << "Warning: unrecognised gate '" << value << "' for feature '" << key
-                  << "' — ignoring" << std::endl;
+                  << "' - ignoring" << std::endl;
       }
     } else if (config.fileSettings.count(key)) {
       try {
@@ -192,7 +192,7 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       if (key == "debugLevel") {
         int &level = config.fileSettings.at(key);
         if (level < 0 || level > 3) {
-          std::cerr << "Warning: 'debugLevel' expects 0-3 — clamping value '" << value << "'"
+          std::cerr << "Warning: 'debugLevel' expects 0-3 - clamping value '" << value << "'"
                     << std::endl;
           level = std::clamp(level, 0, 3);
         }

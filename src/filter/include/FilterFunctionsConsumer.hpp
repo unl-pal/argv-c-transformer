@@ -22,7 +22,7 @@
 /**
  * @brief ASTConsumer that decides which functions to remove based on counted attributes.
  *
- * Does not use a visitor — by the time this consumer runs, {@code CountingConsumer}
+ * Does not use a visitor - by the time this consumer runs, {@code CountingConsumer}
  * has already populated {@code toFilter} with per-function attribute counts. This
  * consumer just reads that map and applies the configured complexity ranges and
  * feature gates, writing any violating function names into {@code toRemove} for
