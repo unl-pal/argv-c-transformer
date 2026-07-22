@@ -116,6 +116,7 @@ int Verifier::verifyAll(std::filesystem::path path) {
   }
   if (std::filesystem::is_regular_file(path) && path.extension() == ".c") {
     _totalProcessed++;
+    std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
     return verifyFile(path) ? 1 : 0;
   }
   return 0;

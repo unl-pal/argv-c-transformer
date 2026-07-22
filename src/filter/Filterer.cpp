@@ -144,7 +144,9 @@ int Filterer::run() {
   debugLog(1, "[filter] found " + std::to_string(filesFound) + " .c file(s)");
 
   int passed = 0;
+  int i = 0;
   for (const std::string &fileName : filesToFilter) {
+    std::cout << "\r[filter] " << ++i << "/" << filesFound << std::flush;
     if (!checkPotentialFile(fileName))
       continue;
     passed++;
@@ -188,6 +190,8 @@ int Filterer::run() {
       }
     }
   }
+  if (filesFound > 0)
+    std::cout << std::endl;
 
   std::cout << "\n=== Filter summary ===\n"
             << "  Files found:            " << filesFound << "\n"

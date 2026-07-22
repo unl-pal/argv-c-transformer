@@ -16,8 +16,6 @@ Clang/LLVM's C++ APIs to parse and rewrite C ASTs according to user-defined
 parameters that determine what makes a file and its functions interesting
 candidates for verification.
 
-See `argc-benchmarks/` for examples of produced benchmarks.
-
 ## Contents
 
 - [Install](#install)
@@ -87,7 +85,7 @@ Examples below assume `argv-c` is installed (see [Install](#install));
 otherwise run it as `./build/argv-c`.
 
 `argv-c` runs the whole filter → transform → verify pipeline in one process
-and produces just the final benchmarks — the intermediate `-filtered`/
+and produces just the final benchmarks.  The intermediate `-filtered`/
 `-transformed` directories are cleaned up once verify finishes, unless the
 config file explicitly names `filterDir`/`transformDir`, which is taken as a
 request to keep them around:
@@ -115,8 +113,9 @@ straight out of `build/`:
 Config files use INI syntax. See `settings.config` for all available options.
 Key sections:
 
-- `[File Locations]` — `databaseDir`, `filterDir`, `benchmarkDir`
-- `[Function Requirements]` — per-function thresholds (`minForLoops`, `minTypeIfStmt`, etc.)
+- `[Stage Directories]` — `databaseDir`, `filterDir`, `transformDir`, `benchmarkDir`
+- `[Complexity Requirements]` — per-function `min,max` thresholds (`ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`)
+- `[Feature Requirements]` — per-function gates: `require` | `forbid` | `ignore` (default), for `Concurrency` and `FloatingPoint`
 - `[File Settings]` — `FileLoC`, `fileTimeoutSecs`, `keepCompilesOnly`, `debugLevel` (0–3)
 
 The transform stage preprocesses each surviving benchmark into a `.i` file with

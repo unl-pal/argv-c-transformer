@@ -101,6 +101,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
 // child, translating its fate into the success count.
 int Transformer::transformFileIsolated(std::filesystem::path path) {
   _totalProcessed++;
+  std::cout << "\r[transform] " << _totalProcessed << " processed" << std::flush;
   pid_t pid = fork();
   if (pid < 0) {
     std::cerr << "fork failed, transforming in-process: " << path.string() << std::endl;
