@@ -96,13 +96,13 @@ bool Filterer::checkPotentialFile(std::string fileName) {
 int Filterer::getAllCFiles(std::filesystem::path pathObject,
                            std::vector<std::string> &filesToFilter, int numFiles) {
   if (!std::filesystem::exists(pathObject)) {
-    debugLog(2, "[filter] path does not exist: " + pathObject.string());
+    debugLog(1, "[filter] path does not exist: " + pathObject.string());
     return 0;
   }
   if (std::filesystem::is_regular_file(pathObject)) {
     if (pathObject.has_extension()) {
       if (pathObject.extension() == ".c") {
-        debugLog(2, "[filter] queued: " + pathObject.filename().string());
+        debugLog(3, "[filter] queued: " + pathObject.filename().string());
         filesToFilter.push_back(pathObject.string());
         return 1;
       } else {
@@ -147,6 +147,7 @@ int Filterer::run() {
   int i = 0;
   for (const std::string &fileName : filesToFilter) {
     std::cout << "\r[filter] " << ++i << "/" << filesFound << std::flush;
+    debugLog(1, "[filter] file: " + fileName);
     if (!checkPotentialFile(fileName))
       continue;
     passed++;
@@ -181,12 +182,12 @@ int Filterer::run() {
     if (!ran)
       continue;
 
-    if (globalDebugLevel() >= 2 && std::filesystem::exists(newPath)) {
+    if (globalDebugLevel() >= 3 && std::filesystem::exists(newPath)) {
       std::ifstream outFile(newPath.string());
       if (outFile.is_open()) {
         std::stringstream contents;
         contents << outFile.rdbuf();
-        debugLog(2, "[filter] output for " + newPath.string() + ":\n" + contents.str());
+        debugLog(3, "[filter] output for " + newPath.string() + ":\n" + contents.str());
       }
     }
   }

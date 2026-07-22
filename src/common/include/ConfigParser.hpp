@@ -201,6 +201,14 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       } else if (value == "true" || value == "True") {
         config.fileSettings.at(key) = 1;
       }
+      if (key == "debugLevel") {
+        int &level = config.fileSettings.at(key);
+        if (level < 0 || level > 3) {
+          std::cerr << "Warning: 'debugLevel' expects 0-3 — clamping value '" << value << "'"
+                    << std::endl;
+          level = std::clamp(level, 0, 3);
+        }
+      }
     } else if (key == "databaseDir") {
       config.databaseDir = value;
     } else if (key == "filterDir") {

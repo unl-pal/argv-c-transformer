@@ -58,7 +58,7 @@ void HarnessRepairConsumer::HandleTranslationUnit(clang::ASTContext &context) {
           call->getEndLoc(), clang::tok::semi, mgr, context.getLangOpts(),
           /*SkipTrailingWhitespaceAndNewLine=*/true);
       _Rewriter.RemoveText(clang::CharSourceRange::getCharRange(lineStart, afterSemi));
-      debugLog(1, "[verify] unharnessed (failed post-transform re-check): " + name);
+      debugLog(2, "[verify] unharnessed (failed post-transform re-check): " + name);
     }
   }
 }

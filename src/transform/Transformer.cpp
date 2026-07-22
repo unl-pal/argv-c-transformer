@@ -64,7 +64,7 @@ std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path pat
 }
 
 bool Transformer::transformFile(std::filesystem::path path) {
-  debugLog(1, "Transforming: " + path.string());
+  debugLog(1, "[transform] file: " + path.string());
   if (!std::filesystem::exists(path))
     return false;
 

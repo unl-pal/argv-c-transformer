@@ -14,7 +14,7 @@
  * read from and where transformed files are written.
  */
 struct transformConfigs {
-  int debugLevel;           ///< Verbosity level for debug output (currently unused).
+  int debugLevel;           ///< Verbosity level for debug output (see DebugLog.hpp).
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string transformDir; ///< Output directory for transformed files (verify-stage input).
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.

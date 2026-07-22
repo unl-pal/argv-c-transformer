@@ -45,7 +45,7 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
 }
 
 bool Verifier::verifyFile(std::filesystem::path path) {
-  debugLog(1, "Verifying: " + path.string());
+  debugLog(1, "[verify] file: " + path.string());
   if (!std::filesystem::exists(path))
     return false;
 
