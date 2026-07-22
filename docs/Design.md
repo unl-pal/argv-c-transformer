@@ -26,7 +26,7 @@ flowchart LR
         CFG[/"settings.config"/]
     end
 
-    DL["Download<br/><code>src/download/Downloader.py</code>"]
+    DL["Download<br/><code>scripts/downloader.py</code>"]
     FI["Filter<br/><code>build/filter</code>"]
     TR["Transform<br/><code>build/transform</code>"]
     VF["Verify<br/><code>build/verify</code>"]

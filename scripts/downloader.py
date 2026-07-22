@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
 #
 # SPDX-License-Identifier: Apache-2.0

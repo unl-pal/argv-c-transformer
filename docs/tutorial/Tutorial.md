@@ -71,7 +71,7 @@ debugLevel=1
 ## 1. Download
 
 ```sh
-python3 src/download/Downloader.py docs/tutorial/download.config
+./scripts/downloader.py docs/tutorial/download.config
 ```
 
 Normally `Downloader.py` reads a CSV index of repositories and clones every

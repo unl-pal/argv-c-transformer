@@ -14,14 +14,14 @@ ArgV C Transformer takes C source files or directories and converts them into
 [SV-Comp](https://sv-comp.sosy-lab.org/) style verification benchmarks. It uses
 Clang/LLVM's C++ APIs to parse and rewrite C ASTs according to user-defined
 parameters that determine what makes a file and its functions interesting
-candidates for verification. In addition, we provide a python [downloader](src/download/Downloader.py)
+candidates for verification. In addition, we provide a python [downloader](scripts/downloader.py)
 script to aid in downloading and filtering open-source Github repositories.
 Otherwise the tool can be pointed to any local repositories as the user desires.
 
 ## Contents
 
 - [Install](#install)
-  - [Download a prebuilt package](#download-a-prebuilt-package)
+  - [Quick install (script)](#quick-install-script)
   - [Build from source](#build-from-source)
 - [Running](#running)
   - [Configuration](#configuration)
@@ -38,25 +38,28 @@ Otherwise the tool can be pointed to any local repositories as the user desires.
 transform -> verify pipeline (see [Running](#running)). Get it either of two
 ways:
 
-## Download a prebuilt package
+## Quick install (script)
 
-Grab the archive for your platform from the
-[Releases page](https://github.com/unl-pal/argv-c-transformer/releases):
-
-- Linux (x86_64): `argv-c-<version>-linux-x86_64.tar.gz`
-- macOS (Apple Silicon): `argv-c-<version>-macos-arm64.tar.gz`
-
-then:
+There's no prebuilt binary: `argv-c` dynamically links `libclang-cpp`/`libLLVM`
+at runtime and separately shells out to a bare `clang` for preprocessing and
+compile-checking (see
+["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build)),
+so a downloaded binary would still require you to separately install a
+matching LLVM 20 - it wouldn't actually save you the setup step. Instead,
+clone the repo and run the install script, which detects your platform,
+installs the pinned LLVM/Clang 20 toolchain (via `apt` on Linux or `brew` on
+macOS), and builds and installs `argv-c` for you:
 
 ```sh
-tar xzf argv-c-<version>-<platform>.tar.gz
-sudo mv argv-c /usr/local/bin/   # or anywhere else on PATH
+git clone https://github.com/unl-pal/argv-c-transformer
+cd argv-c-transformer
+./scripts/install.sh              # installs to the default CMake prefix
+./scripts/install.sh --prefix ~/.local   # or install elsewhere
 ```
 
-Packages don't bundle LLVM/Clang and  `argv-c` shells out to a bare
-`clang` at runtime for preprocessing and compile-checking. So you need 
-Clang 20+ on `PATH`. `argv-c` checks this itself at startup. Otherwise see
-["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build).
+Only Debian/Ubuntu (`apt`) and macOS (`brew`) are supported by the script.
+On other platforms, or if you'd rather manage the toolchain yourself, follow
+[Build from source](#build-from-source) below.
 
 
 ## Build from source
@@ -230,12 +233,12 @@ Downloader.py has its own config, separate from `settings.config` (which
 the filter/transform/verify/argv-c pipeline reads) since `argv-c` never
 invokes the downloader. It's a standalone step you run first to populate a
 `databaseDir` for the pipeline to later read as input. See
-`src/download/downloader.config` for the default, or write your own with a
+`scripts/downloader.config` for the default, or write your own with a
 `[File Locations]` `databaseDir` pointing to where repositories should be
 cloned, then run:
 
 ```sh
-python3 src/download/Downloader.py src/download/downloader.config
+./scripts/downloader.py scripts/downloader.config
 ```
 
 This uses a CSV index of repositories (`csv` setting, default `repos.csv`),
@@ -247,7 +250,7 @@ downloads the tarball and only extracts the `*.c/*.h` files.
 Alternatively, pass a `.csv` file directly instead of a `.config`:
 
 ```sh
-python3 src/download/Downloader.py <repos.csv>
+./scripts/downloader.py <repos.csv>
 ```
 
 This treats the file as a plain list of repos (its `repository` column) and
