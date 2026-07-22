@@ -1,1 +1,0 @@
-The program does not contain undefined behavior according to the C standard.

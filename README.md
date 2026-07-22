@@ -31,6 +31,7 @@ Otherwise the tool can be pointed to any local repositories as the user desires.
   - [`clang` on `PATH` must match the build](#clang-on-path-must-match-the-build)
 - [Testing](#testing)
 - [Downloader (optional)](#downloader-optional)
+- [Repository Layout](#repository-layout)
 
 # Install
 
@@ -256,3 +257,22 @@ Alternatively, pass a `.csv` file directly instead of a `.config`:
 This treats the file as a plain list of repos (its `repository` column) and
 downloads every row unconditionally, with no filtering, into the default
 `repos/` directory.
+
+# Repository Layout
+
+- `src/` - the C++ pipeline (filter/transform/verify/full stages, plus shared
+  headers under `src/common/`).
+- `scripts/` - standalone tooling that isn't part of the C++ build:
+  `install.sh` ([Quick install](#quick-install-script)) and
+  `downloader.py`/`downloader.config` ([Downloader](#downloader-optional)).
+- `properties/` - SV-Comp property files (`.prp`, with a `.md` description
+  each) that generated benchmarks' `.yml` task files point to, e.g.
+  `unreach-call.prp`, `termination.prp`.
+- `tests/` - the CMake-driven test suite (`ctest --test-dir build`); see
+  [Testing](#testing).
+- `docs/` - `Design.md` (design rationale and known limitations) and a
+  worked-example tutorial (`docs/tutorial/`).
+- `settings.config` - the default pipeline config (filter/transform/verify
+  thresholds); see [Configuration](#configuration).
+- `repos.csv` - the default CSV index of repositories the downloader reads;
+  see [Downloader](#downloader-optional).
