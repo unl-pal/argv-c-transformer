@@ -18,7 +18,6 @@
 #include <iostream>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
-#include <sstream>
 #include <string>
 
 const std::string defaultFilterDir = "filteredFiles";
@@ -179,14 +178,6 @@ int Filterer::run() {
       continue;
     }
 
-    if (globalDebugLevel() >= 3 && std::filesystem::exists(newPath)) {
-      std::ifstream outFile(newPath.string());
-      if (outFile.is_open()) {
-        std::stringstream contents;
-        contents << outFile.rdbuf();
-        debugLog(3, "[filter] output for " + newPath.string() + ":\n" + contents.str());
-      }
-    }
   }
   if (filesFound > 0)
     std::cout << std::endl;

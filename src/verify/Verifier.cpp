@@ -41,8 +41,10 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
 
 bool Verifier::verifyFile(std::filesystem::path path) {
   debugLog(1, "[verify] file: " + path.string());
-  if (!std::filesystem::exists(path))
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[verify] path does not exist: " + path.string());
     return false;
+  }
 
   // Transform output is already flat, so the benchmark keeps the filename.
   std::filesystem::path outPath =
@@ -52,8 +54,7 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   std::filesystem::create_directories(outPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(outPath.string()), ec);
   if (ec) {
-    std::cerr << "Cannot open output file " << outPath.string() << ": " << ec.message()
-              << std::endl;
+    debugLog(0, "Cannot open output file " + outPath.string() + ": " + ec.message());
     return false;
   }
 
@@ -66,6 +67,7 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   bool ran = runToolOnFile(path.string(), factory);
   output.close();
   if (!ran) {
+    debugLog(1, "[verify] clang tool failed on: " + path.string());
     std::filesystem::remove(outPath);
     return false;
   }
@@ -79,16 +81,18 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   // Drop the output if it doesn't compile and we're keeping compiles only
   if (!checkCompilable(outPath)) {
     if (configuration.keepCompilesOnly) {
+      debugLog(1, "[verify] discarded (fails compile check): " + outPath.string());
       std::filesystem::remove(outPath);
       return false;
     }
     // Kept for inspection, but not a benchmark: no task file, no .i.
+    debugLog(1, "[verify] kept but not a benchmark (fails compile check): " + outPath.string());
     return false;
   }
 
   writeBenchmarkTask(outPath, *counts);
   if (!preprocess(outPath)) {
-    std::cerr << "Preprocessing failed, discarding: " << outPath.string() << std::endl;
+    debugLog(0, "Preprocessing failed, discarding: " + outPath.string());
     std::filesystem::path ymlPath = outPath;
     ymlPath.replace_extension(".yml");
     std::filesystem::remove(outPath);
@@ -99,8 +103,10 @@ bool Verifier::verifyFile(std::filesystem::path path) {
 }
 
 int Verifier::verifyAll(std::filesystem::path path) {
-  if (!std::filesystem::exists(path))
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[verify] path does not exist: " + path.string());
     return 0;
+  }
   if (std::filesystem::is_directory(path)) {
     int successes = 0;
     for (const std::filesystem::directory_entry &entry :
@@ -109,11 +115,16 @@ int Verifier::verifyAll(std::filesystem::path path) {
     }
     return successes;
   }
-  if (std::filesystem::is_regular_file(path) && path.extension() == ".c") {
-    _totalProcessed++;
-    std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
-    return verifyFile(path) ? 1 : 0;
+  if (std::filesystem::is_regular_file(path)) {
+    if (path.extension() == ".c") {
+      _totalProcessed++;
+      std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
+      return verifyFile(path) ? 1 : 0;
+    }
+    debugLog(3, "[verify] skipped (not .c): " + path.filename().string());
+    return 0;
   }
+  debugLog(3, "[verify] ignored: " + path.filename().string());
   return 0;
 }
 
@@ -193,7 +204,7 @@ void Verifier::writeBenchmarkTask(
 
   std::ofstream out(ymlPath);
   if (!out) {
-    std::cerr << "Failed to write task file: " << ymlPath.string() << std::endl;
+    debugLog(0, "Failed to write task file: " + ymlPath.string());
     return;
   }
 
@@ -227,7 +238,7 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
 int Verifier::run() {
   std::filesystem::path path(configuration.transformDir);
   if (!std::filesystem::exists(path)) {
-    std::cerr << "Transform directory not found: " << configuration.transformDir << std::endl;
+    debugLog(0, "Transform directory not found: " + configuration.transformDir);
     return 0;
   }
   int result = verifyAll(path);
