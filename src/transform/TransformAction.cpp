@@ -5,6 +5,7 @@
 #include "TransformAction.hpp"
 #include "AddStdIncludesConsumer.hpp"
 #include "AddVerifiersConsumer.hpp"
+#include "DebugLog.hpp"
 #include "HavocCallsConsumer.hpp"
 #include "MainGenConsumer.hpp"
 
@@ -25,6 +26,7 @@ void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc, const clan
   if (!_Mgr.isInMainFile(HashLoc))
     return;
   if (!IsAngled || FileType == clang::SrcMgr::C_User) {
+    debugLog(3, "[transform] stripped project-local include: " + FileName.str());
     _Rewriter.RemoveText(clang::CharSourceRange::getCharRange(HashLoc, FilenameRange.getEnd()));
     return;
   }

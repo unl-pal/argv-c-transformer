@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "DebugLog.hpp"
+
 #include <clang/Basic/Version.h>
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Tooling/CommonOptionsParser.h>
@@ -14,6 +16,7 @@
 #include <fstream>
 #include <iostream>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <optional>
 #include <sstream>
@@ -173,8 +176,7 @@ inline bool runToolOnFile(const std::string &filePath,
 
   std::optional<std::string> resourceDir = getResourceDir();
   if (!resourceDir) {
-    std::cerr << "Could not determine clang resource directory (set CLANG_RESOURCES to override)"
-              << std::endl;
+    debugLog(0, "Could not determine clang resource directory (set CLANG_RESOURCES to override)");
     return false;
   }
 
@@ -185,7 +187,8 @@ inline bool runToolOnFile(const std::string &filePath,
   llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser =
       clang::tooling::CommonOptionsParser::create(argc, argv.data(), toolCategory);
   if (!expectedParser) {
-    llvm::errs() << expectedParser.takeError();
+    debugLog(0, "CommonOptionsParser::create failed for " + filePath + ": " +
+                    llvm::toString(expectedParser.takeError()));
     return false;
   }
   clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
@@ -195,11 +198,11 @@ inline bool runToolOnFile(const std::string &filePath,
   tool.setDiagnosticConsumer(&diagConsumer);
   try {
     if (tool.run(&factory) != 0)
-      std::cerr << "Clang tool reported errors while processing: " << filePath << std::endl;
+      debugLog(1, "Clang tool reported errors while processing: " + filePath);
   } catch (const std::exception &e) {
     // A consumer bug (e.g. a config/metric name mismatch) should not take
     // down the whole batch. Report it and move on to the next file.
-    std::cerr << "Clang tool threw while processing " << filePath << ": " << e.what() << std::endl;
+    debugLog(0, "Clang tool threw while processing " + filePath + ": " + e.what());
     return false;
   }
   return true;

@@ -63,8 +63,10 @@ std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path pat
 
 bool Transformer::transformFile(std::filesystem::path path) {
   debugLog(1, "[transform] file: " + path.string());
-  if (!std::filesystem::exists(path))
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[transform] path does not exist: " + path.string());
     return false;
+  }
 
   std::filesystem::path srcPath = flattenedOutputPath(path);
 
@@ -73,19 +75,22 @@ bool Transformer::transformFile(std::filesystem::path path) {
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
   if (ec) {
-    std::cerr << "Cannot open output file " << srcPath.string() << ": " << ec.message()
-              << std::endl;
+    debugLog(0, "Cannot open output file " + srcPath.string() + ": " + ec.message());
     return false;
   }
 
   ArgsFrontendFactory factory(output);
   bool ran = runToolOnFile(path.string(), factory);
   output.close();
-  if (!ran)
+  if (!ran) {
+    debugLog(1, "[transform] clang tool failed on: " + path.string());
     return false;
+  }
 
   // harness may be empty due to unsupported transforming
   if (harnessIsEmpty(srcPath)) {
+    debugLog(2, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
+                    srcPath.string());
     std::filesystem::remove(srcPath);
     return false;
   }
@@ -102,7 +107,7 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
   std::cout << "\r[transform] " << _totalProcessed << " processed" << std::flush;
   pid_t pid = fork();
   if (pid < 0) {
-    std::cerr << "fork failed, transforming in-process: " << path.string() << std::endl;
+    debugLog(0, "fork failed, transforming in-process: " + path.string());
     return transformFile(path) ? 1 : 0;
   }
 
@@ -124,11 +129,11 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
     if (done == pid)
       break;
     if (done < 0) {
-      std::cerr << "waitpid failed for " << path.string() << std::endl;
+      debugLog(0, "waitpid failed for " + path.string());
       return 0;
     }
     if (time(nullptr) >= deadline) {
-      std::cerr << "Timeout, killing transform of: " << path.string() << std::endl;
+      debugLog(0, "Timeout, killing transform of: " + path.string());
       kill(pid, SIGKILL);
       waitpid(pid, &status, 0);
       cleanupPartialOutput(path);
@@ -142,8 +147,8 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
     return WEXITSTATUS(status) == 1 ? 1 : 0;
   // WIFSIGNALED: segfault, OOM-kill, etc. The child may have left a partial
   // .c behind; harnessIsEmpty never ran, so clean up.
-  std::cerr << "Transform crashed (signal " << WTERMSIG(status) << "), skipping: "
-            << path.string() << std::endl;
+  debugLog(0, "Transform crashed (signal " + std::to_string(WTERMSIG(status)) + "), skipping: " +
+                  path.string());
   cleanupPartialOutput(path);
   return 0;
 }
@@ -156,8 +161,10 @@ void Transformer::cleanupPartialOutput(std::filesystem::path path) {
 }
 
 int Transformer::transformAll(std::filesystem::path path) {
-  if (!std::filesystem::exists(path))
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[transform] path does not exist: " + path.string());
     return 0;
+  }
   if (std::filesystem::is_directory(path)) {
     int successes = 0;
     for (const std::filesystem::directory_entry &entry :
@@ -166,8 +173,13 @@ int Transformer::transformAll(std::filesystem::path path) {
     }
     return successes;
   }
-  if (std::filesystem::is_regular_file(path) && path.extension() == ".c")
-    return transformFileIsolated(path);
+  if (std::filesystem::is_regular_file(path)) {
+    if (path.extension() == ".c")
+      return transformFileIsolated(path);
+    debugLog(3, "[transform] skipped (not .c): " + path.filename().string());
+    return 0;
+  }
+  debugLog(3, "[transform] ignored: " + path.filename().string());
   return 0;
 }
 
@@ -186,7 +198,7 @@ void Transformer::parseConfig(std::string configFile) {
 int Transformer::run() {
   std::filesystem::path path(configuration.filterDir);
   if (!std::filesystem::exists(path)) {
-    std::cerr << "Filter directory not found: " << configuration.filterDir << std::endl;
+    debugLog(0, "Filter directory not found: " + configuration.filterDir);
     return 0;
   }
   int result = transformAll(path);

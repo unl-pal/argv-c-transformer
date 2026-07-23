@@ -4,6 +4,7 @@
 
 #include "include/HavocCallsVisitor.hpp"
 
+#include "DebugLog.hpp"
 #include "VerifierNames.hpp"
 
 #include <clang/AST/DeclBase.h>
@@ -16,6 +17,14 @@
 #include <optional>
 
 namespace {
+
+// Formats a source location as "file:line" for per-decision debug logging.
+std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
+  clang::PresumedLoc presumed = mgr.getPresumedLoc(loc);
+  if (!presumed.isValid())
+    return "<unknown>";
+  return std::string(presumed.getFilename()) + ":" + std::to_string(presumed.getLine());
+}
 
 // Returns the VarDecl behind an expression if it's a plain variable
 // reference, else null.
@@ -150,9 +159,12 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     // A void call yields no value to havoc; drop it (the statement's
     // semicolon stays behind, leaving an empty statement). Mark it a no-op so
     // an enclosing if-branch made up only of dropped calls can be pruned too.
+    debugLog(3, "[transform] " + locString(mgr, loc) + ": dropped void call");
     _Rewriter.ReplaceText(E->getSourceRange(), "");
     _NoOpStmts.insert(E);
   } else if (std::optional<std::string> suffix = verifierSuffixForType(returnType)) {
+    debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked call -> __VERIFIER_nondet_" +
+                    *suffix + "()");
     _Rewriter.ReplaceText(E->getSourceRange(), "__VERIFIER_nondet_" + *suffix + "()");
     _NeededSuffixes->emplace(*suffix);
   } else if (returnType->isAnyPointerType() && !returnType->isFunctionPointerType()) {
@@ -162,6 +174,8 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     // emits the helper definitions when it sees these markers.
     bool isCharPtr = returnType->getPointeeType()->isAnyCharacterType();
     std::string helper = isCharPtr ? "__havoc_cstring" : "__havoc_block";
+    debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked pointer call -> " + helper +
+                    "(128)");
     // The helpers return char* / void*; cast back to the call's actual
     // return type so e.g. unsigned char* or a struct pointer doesn't end up
     // assigned from an incompatible pointer type.
@@ -214,6 +228,7 @@ bool HavocCallsVisitor::pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc
   if (!isSideEffectFree(cond, mutableVars) || !isInitSideEffectFree(init) ||
       !isSideEffectFree(inc, mutableVars))
     return false;
+  debugLog(3, "[transform] " + locString(mgr, keyLoc) + ": pruned no-op statement");
   _Rewriter.ReplaceText(S->getSourceRange(), "");
   _NoOpStmts.insert(S);
   return true;

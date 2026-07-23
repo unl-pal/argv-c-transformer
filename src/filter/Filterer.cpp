@@ -41,7 +41,7 @@ void Filterer::parseConfigFile(std::string configFile) {
   if (!config.databaseDir.empty()) {
     configuration.databaseDir = config.databaseDir;
     if (!std::filesystem::exists(config.databaseDir))
-      std::cerr << "Database directory not found: " << config.databaseDir << std::endl;
+      debugLog(0, "Database directory not found: " + config.databaseDir);
   }
   if (!config.filterDir.empty())
     configuration.filterDir = config.filterDir;
@@ -66,7 +66,7 @@ void Filterer::parseConfigFile(std::string configFile) {
 bool Filterer::checkPotentialFile(std::string fileName) {
   std::ifstream file(fileName);
   if (!file.is_open()) {
-    std::cerr << "Failed to open file: " << fileName << std::endl;
+    debugLog(0, "Failed to open file: " + fileName);
     return false;
   }
 
@@ -159,7 +159,7 @@ int Filterer::run() {
 
     // Hard guard: never write over the source, whatever the path arithmetic.
     if (std::filesystem::weakly_canonical(oldPath) == std::filesystem::weakly_canonical(newPath)) {
-      std::cerr << "Refusing to overwrite source file: " << oldPath.string() << std::endl;
+      debugLog(0, "Refusing to overwrite source file: " + oldPath.string());
       continue;
     }
 
@@ -167,16 +167,17 @@ int Filterer::run() {
     std::error_code ec;
     llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
     if (ec) {
-      std::cerr << "Cannot open output file " << newPath.string() << ": " << ec.message()
-                << std::endl;
+      debugLog(0, "Cannot open output file " + newPath.string() + ": " + ec.message());
       continue;
     }
 
     FrontendFactoryWithArgs factory(&config.complexity, &config.features, output);
     bool ran = runToolOnFile(oldPath.string(), factory);
     output.close();
-    if (!ran)
+    if (!ran) {
+      debugLog(1, "[filter] clang tool failed on: " + oldPath.string());
       continue;
+    }
 
     if (globalDebugLevel() >= 3 && std::filesystem::exists(newPath)) {
       std::ifstream outFile(newPath.string());

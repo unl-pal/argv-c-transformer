@@ -5,6 +5,8 @@
 #include "HavocCallsConsumer.hpp"
 #include "HavocCallsVisitor.hpp"
 
+#include "DebugLog.hpp"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
@@ -31,6 +33,7 @@ void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     if (!Visitor.isNoOp(func->getBody()))
       continue;
+    debugLog(2, "[transform] " + func->getNameAsString() + " body collapsed entirely to no-ops");
     clang::SourceRange bodyRange = func->getBody()->getSourceRange();
     if (bodyRange.isValid())
       _Rewriter.ReplaceText(bodyRange, ";");
