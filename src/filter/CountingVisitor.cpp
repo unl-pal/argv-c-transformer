@@ -69,8 +69,9 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
     clang::QualType argType = arg->getType();
     if (argType->isPointerType())
       argType = argType->getPointeeType();
-    auto info = stdHeaderForType(argType.getUnqualifiedType().getAsString());
-    if (info && info->category == HeaderCategory::Concurrency) {
+    auto it = StdHeaders.find(argType.getUnqualifiedType().getAsString());
+    if (it != StdHeaders.end() &&
+        (it->second == "pthread.h" || it->second == "threads.h" || it->second == "semaphore.h")) {
       _allFunctions->at(getStmtParentFuncName(*CE)).Features.Concurrency = true;
       break;
     }
@@ -86,8 +87,9 @@ bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
     if (varType->isFloatingType())
       _allFunctions->at(getDeclParentFuncName(*VD)).Features.FloatingPoint = true;
     // check for concurrency
-    auto info = stdHeaderForType(varType.getUnqualifiedType().getAsString());
-    if (info && info->category == HeaderCategory::Concurrency)
+    auto it = StdHeaders.find(varType.getUnqualifiedType().getAsString());
+    if (it != StdHeaders.end() &&
+        (it->second == "pthread.h" || it->second == "threads.h" || it->second == "semaphore.h"))
       _allFunctions->at(getDeclParentFuncName(*VD)).Features.Concurrency = true;
   }
   return true;
