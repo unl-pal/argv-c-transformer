@@ -112,8 +112,10 @@ private:
 }// namespace
 
 AddStdIncludesConsumer::AddStdIncludesConsumer(
-    std::shared_ptr<std::set<std::string>> existingIncludes, clang::Rewriter &rewriter)
-    : _ExistingIncludes(existingIncludes), _Rewriter(rewriter) {
+    std::shared_ptr<std::set<std::string>> existingIncludes,
+    std::shared_ptr<std::set<std::string>> unresolvedTypeNames, clang::Rewriter &rewriter)
+    : _ExistingIncludes(existingIncludes), _UnresolvedTypeNames(unresolvedTypeNames),
+      _Rewriter(rewriter) {
 }
 
 void AddStdIncludesConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
@@ -137,6 +139,13 @@ void AddStdIncludesConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     includes += "#include <" + header + ">\n";
     _ExistingIncludes->insert(header);
+  }
+  for (const std::string &name : *_UnresolvedTypeNames) {
+    auto it = StdHeaders.find(name);
+    if (it == StdHeaders.end() || _ExistingIncludes->count(it->second))
+      continue;
+    includes += "#include <" + it->second + ">\n";
+    _ExistingIncludes->insert(it->second);
   }
 
   if (includes.empty())
