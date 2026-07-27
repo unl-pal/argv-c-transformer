@@ -62,7 +62,7 @@ std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path pat
 }
 
 bool Transformer::transformFile(std::filesystem::path path) {
-  debugLog(1, "[transform] file: " + path.string());
+  debugLog(1, "[transform] file " + std::to_string(_totalProcessed) + ": " + path.string());
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[transform] path does not exist: " + path.string());
     return false;
@@ -104,7 +104,8 @@ bool Transformer::transformFile(std::filesystem::path path) {
 // child, translating its fate into the success count.
 int Transformer::transformFileIsolated(std::filesystem::path path) {
   _totalProcessed++;
-  std::cout << "\r[transform] " << _totalProcessed << " processed" << std::flush;
+  if (globalDebugLevel() == 0)
+    std::cout << "\r[transform] " << _totalProcessed << " processed" << std::flush;
   pid_t pid = fork();
   if (pid < 0) {
     debugLog(0, "fork failed, transforming in-process: " + path.string());
@@ -113,8 +114,7 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
 
   if (pid == 0) {
     // Child: do the work and report 1/0 through the exit status. _exit skips
-    // C++ stream flushing, so flush explicitly first (stdout may be fully
-    // buffered when redirected, e.g. under benchexec).
+    // C++ stream flushing, so flush explicitly first
     int produced = transformFile(path) ? 1 : 0;
     std::cout.flush();
     std::cerr.flush();

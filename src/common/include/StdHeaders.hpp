@@ -22,6 +22,9 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     // <stdbool.h>
     // types
     {"bool", "stdbool.h"},
+    // macros
+    {"true", "stdbool.h"},
+    {"false", "stdbool.h"},
 
     // <stddef.h>
     // types
@@ -29,6 +32,9 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"ptrdiff_t", "stddef.h"},
     {"wchar_t", "stddef.h"},
     {"max_align_t", "stddef.h"},
+    // macros
+    {"NULL", "stddef.h"},
+    {"offsetof", "stddef.h"},
 
     // <stdint.h>
     // types
@@ -141,6 +147,10 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"div", "stdlib.h"},
     {"ldiv", "stdlib.h"},
     {"lldiv", "stdlib.h"},
+    // macros
+    {"EXIT_SUCCESS", "stdlib.h"},
+    {"EXIT_FAILURE", "stdlib.h"},
+    {"RAND_MAX", "stdlib.h"},
 
     // <string.h>
     // functions (no types beyond size_t)
@@ -201,6 +211,8 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"localtime", "time.h"},
     {"strftime", "time.h"},
     {"clock", "time.h"},
+    // macros
+    {"CLOCKS_PER_SEC", "time.h"},
 
     // <signal.h>
     // types
@@ -241,6 +253,10 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"modf", "math.h"},
     {"round", "math.h"},
     {"trunc", "math.h"},
+    // macros
+    {"HUGE_VAL", "math.h"},
+    {"NAN", "math.h"},
+    {"INFINITY", "math.h"},
 
     // <threads.h> / <pthread.h>
     // types
@@ -293,7 +309,42 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     // types
     {"va_list", "stdarg.h"},
 
-    // <errno.h> - no types, just macros
+    // <errno.h>
+    // macros
+    {"errno", "errno.h"},
+
+    // <limits.h>
+    // macros
+    {"CHAR_BIT", "limits.h"},
+    {"CHAR_MIN", "limits.h"},
+    {"CHAR_MAX", "limits.h"},
+    {"SCHAR_MIN", "limits.h"},
+    {"SCHAR_MAX", "limits.h"},
+    {"UCHAR_MAX", "limits.h"},
+    {"SHRT_MIN", "limits.h"},
+    {"SHRT_MAX", "limits.h"},
+    {"USHRT_MAX", "limits.h"},
+    {"INT_MIN", "limits.h"},
+    {"INT_MAX", "limits.h"},
+    {"UINT_MAX", "limits.h"},
+    {"LONG_MIN", "limits.h"},
+    {"LONG_MAX", "limits.h"},
+    {"ULONG_MAX", "limits.h"},
+    {"LLONG_MIN", "limits.h"},
+    {"LLONG_MAX", "limits.h"},
+    {"ULLONG_MAX", "limits.h"},
+
+    // <float.h>
+    // macros
+    {"FLT_MIN", "float.h"},
+    {"FLT_MAX", "float.h"},
+    {"FLT_EPSILON", "float.h"},
+    {"DBL_MIN", "float.h"},
+    {"DBL_MAX", "float.h"},
+    {"DBL_EPSILON", "float.h"},
+    {"LDBL_MIN", "float.h"},
+    {"LDBL_MAX", "float.h"},
+    {"LDBL_EPSILON", "float.h"},
 
     // <inttypes.h>
     // types

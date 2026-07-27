@@ -40,7 +40,7 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
 }
 
 bool Verifier::verifyFile(std::filesystem::path path) {
-  debugLog(1, "[verify] file: " + path.string());
+  debugLog(1, "[verify] file " + std::to_string(_totalProcessed) + ": " + path.string());
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[verify] path does not exist: " + path.string());
     return false;
@@ -118,7 +118,8 @@ int Verifier::verifyAll(std::filesystem::path path) {
   if (std::filesystem::is_regular_file(path)) {
     if (path.extension() == ".c") {
       _totalProcessed++;
-      std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
+      if (globalDebugLevel() == 0)
+        std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
       return verifyFile(path) ? 1 : 0;
     }
     debugLog(3, "[verify] skipped (not .c): " + path.filename().string());
