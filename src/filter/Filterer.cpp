@@ -138,6 +138,10 @@ int Filterer::run() {
   int filesFound = getAllCFiles(pathObject, filesToFilter, 0);
   debugLog(1, "[filter] found " + std::to_string(filesFound) + " .c file(s)");
 
+  // Built once and reused for every file below, so resolving local
+  // #includes to -I paths doesn't re-walk databaseDir per file.
+  headerIndex.emplace(configuration.databaseDir);
+
   int passed = 0;
   int i = 0;
   for (const std::string &fileName : filesToFilter) {
@@ -170,8 +174,10 @@ int Filterer::run() {
       continue;
     }
 
+    std::vector<std::string> includeDirs = collectLocalIncludeDirs(oldPath, *headerIndex);
+
     FrontendFactoryWithArgs factory(&config.complexity, &config.features, output);
-    bool ran = runToolOnFile(oldPath.string(), factory);
+    bool ran = runToolOnFile(oldPath.string(), factory, includeDirs);
     output.close();
     if (!ran) {
       debugLog(1, "[filter] clang tool failed on: " + oldPath.string());

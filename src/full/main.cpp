@@ -35,6 +35,9 @@ int main(int argc, char **argv) {
   if (!invocation->inputPath.empty())
     transformInput = filter.getFilterDir();
   Transformer transformer(invocation->configFile, transformInput);
+  // filter's resolved input tree, so transform can resolve local #includes
+  // against it too (filterDir only mirrors .c files, not headers).
+  transformer.setDatabaseDir(filter.getDatabaseDir());
   transformer.run();
 
   // Verify always reads the transform's resolved output directory, whichever
