@@ -150,7 +150,6 @@ void __VERIFIER_nondet_memory(void *mem, size_t size) {
   unsigned char *p = (unsigned char *)mem;
   for (size_t i = 0; i < size; i++) p[i] = __VERIFIER_nondet_uchar();
 }
-void reach_error(void) {}
 )";
 
 // NOTE: cmd is passed to std::system (shell-interpreted), and path/verifierPath
@@ -176,6 +175,8 @@ bool Verifier::checkCompilable(std::filesystem::path path) {
 std::vector<BenchmarkProperty> Verifier::selectProperties(
     const std::unordered_map<std::string, CountingVisitor::attributes> &counts) {
   std::vector<BenchmarkProperty> properties;
+  if (counts.count("reach_error"))
+    properties.push_back({"../properties/unreach-call.prp", true});
   bool loopsPresent = false;
   bool intArithPresent = false;
   for (const auto &[name, attr] : counts) {
@@ -222,6 +223,8 @@ void Verifier::writeBenchmarkTask(
       << "options:\n"
       << "  language: C\n"
       << "  data_model: LP64\n";
+  if (properties.empty())
+    debugLog(1, "[verify] WARN: no properties found for " + cPath.string());
 }
 
 // NOTE: same std::system/unescaped-path caveat as checkCompilable above.

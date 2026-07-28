@@ -54,14 +54,14 @@ inline const std::unordered_map<std::string, std::string> kVerifierCTypes = {
 
 /**
  * @brief True for identifiers the pipeline itself injects (verifier nondet
- * externs/calls and the __havoc_* helpers).
+ * externs/calls, the __havoc_* helpers, and reach_error).
  *
  * The verify stage uses this to exempt generated artifacts from the metric
- * re-check: they are scaffolding, not program logic, and stripping e.g. a
- * __havoc_block definition would break the benchmark.
+ * re-check: they are scaffolding, not program logic.
  */
 inline bool isVerifierGenerated(const std::string &name) {
-  return name.rfind("__VERIFIER_", 0) == 0 || name.rfind("__havoc_", 0) == 0;
+  return name.rfind("__VERIFIER_", 0) == 0 || name.rfind("__havoc_", 0) == 0 ||
+         name == "reach_error";
 }
 
 /**

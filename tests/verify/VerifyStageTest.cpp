@@ -249,6 +249,38 @@ TEST_F(VerifyStageTest, KeepCompilesOnlyDiscardsUndefinedTypes) {
   EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.yml"));
 }
 
+TEST_F(VerifyStageTest, AssertRewriteAddsUnreachCallProperty) {
+  // assert(cond) is rewritten to reach_error() by the transform stage;
+  // reach_error must be exempt from the post-transform threshold re-check
+  // (isVerifierGenerated) or its trivial body would get stripped, and its
+  // presence in the reparsed counts should add unreach-call.prp.
+  writeFile(filterDir / "checked.c",
+            "#include <assert.h>\n"
+            "int add(int a, int b) {\n"
+            "  int r = a + b;\n"
+            "  assert(r >= a);\n"
+            "  return r;\n"
+            "}\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "checked.c"));
+  ASSERT_TRUE(fs::exists(benchmarkDir / "checked.yml"));
+
+  std::string src = readFile(benchmarkDir / "checked.c");
+  EXPECT_NE(src.find("void reach_error(void) { assert(0); }"), std::string::npos);
+  EXPECT_NE(src.find("if (!(r >= a)) reach_error();"), std::string::npos);
+  // AddVerifiersConsumer unconditionally adds its own #include <assert.h>
+  // alongside the reach_error definition, so this may duplicate the one
+  // already in the source; that's harmless since assert.h is deliberately
+  // unguarded against re-inclusion, so only presence is checked here.
+  EXPECT_NE(src.find("#include <assert.h>"), std::string::npos);
+
+  std::string yml = readFile(benchmarkDir / "checked.yml");
+  EXPECT_NE(yml.find("unreach-call.prp"), std::string::npos);
+}
+
 TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
   // original_main takes (int, char**): the verify re-check must not trip
   // over its unsupported params (no param check post-transform) and the

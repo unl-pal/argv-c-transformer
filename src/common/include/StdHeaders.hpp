@@ -428,9 +428,8 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"fstat", "sys/stat.h"},
     {"lstat", "sys/stat.h"},
     {"mkdir", "sys/stat.h"},
-    {"chmod", "sys/stat.h"},
+    {"chmod", "sys/stat.h"}
 
-    // <assert.h>
-    // functions
-    {"assert", "assert.h"}
+    // assert.h handles by AssertRewriter in TransformAction
+ 
 };

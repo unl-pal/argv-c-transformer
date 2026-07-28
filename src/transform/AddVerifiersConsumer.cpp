@@ -86,6 +86,12 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
              "}\n";
   }
 
+  // AssertRewriter rewrote at least one assert(cond) to reach_error()
+  if (_NeededSuffixes->count("__reach_error")) {
+    decls += "#include <assert.h>\n"
+             "void reach_error(void) { assert(0); }\n";
+  }
+
   if (!decls.empty())
     _Rewriter.InsertTextBefore(loc, decls + "\n");
 }
