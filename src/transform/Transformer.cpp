@@ -20,18 +20,20 @@
 #include <unistd.h>
 
 const int defaultDebugLevel = 0;
-const std::string defaultFilterDir = "filteredFiles";
-const std::string defaultTransformDir = "transformedFiles";
+// Mirrors Filterer's own fallback default ("repos" -> "repos-filtered"), so a
+// bare Transformer invocation lines up with a bare Filterer invocation.
+const std::string defaultFilterDir = "repos-filtered";
 /// Per-file wall-clock budget for the isolated transform child, in seconds.
 const int defaultFileTimeoutSecs = 60;
 
 Transformer::Transformer(std::string configFile, std::string inputPath) : configuration() {
   configuration.debugLevel = defaultDebugLevel;
   configuration.filterDir = defaultFilterDir;
-  configuration.transformDir = defaultTransformDir;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   if (!configFile.empty())
     parseConfig(configFile);
+  if (configuration.transformDir.empty())
+    configuration.transformDir = inputBaseName(configuration.filterDir) + "-transformed";
   if (!inputPath.empty()) {
     configuration.filterDir = inputPath;
     configuration.transformDir = inputBaseName(inputPath) + "-transformed";

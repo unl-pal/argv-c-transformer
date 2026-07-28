@@ -20,8 +20,9 @@
 #include <string>
 #include <system_error>
 
-const std::string defaultTransformDir = "transformedFiles";
-const std::string defaultBenchmarkDir = "benchmarks";
+// Mirrors Transformer's own fallback default, so a bare Verifier invocation
+// lines up with the rest of the "repos" -> "repos-benchmarks" chain.
+const std::string defaultTransformDir = "repos-transformed";
 
 Verifier::Verifier(std::string configFile, std::string inputPath) : configuration() {
   config = parsePipelineConfig(configFile);
@@ -29,13 +30,11 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
-  configuration.benchmarkDir =
-      config.benchmarkDir.empty() ? defaultBenchmarkDir : config.benchmarkDir;
-  if (!inputPath.empty()) {
+  if (!inputPath.empty())
     configuration.transformDir = inputPath;
-    if (inputBaseName(inputPath) != defaultTransformDir)
-      configuration.benchmarkDir = inputBaseName(inputPath) + "-benchmarks";
-  }
+  configuration.benchmarkDir = config.benchmarkDir.empty()
+                                    ? inputBaseName(configuration.transformDir) + "-benchmarks"
+                                    : config.benchmarkDir;
   globalDebugLevel() = configuration.debugLevel;
 }
 
