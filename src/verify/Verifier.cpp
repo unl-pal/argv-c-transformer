@@ -178,6 +178,7 @@ std::vector<BenchmarkProperty> Verifier::selectProperties(
     properties.push_back({"../properties/unreach-call.prp", true});
   bool loopsPresent = false;
   bool intArithPresent = false;
+  bool memsafetyPresent = false;
   for (const auto &[name, attr] : counts) {
     if (!loopsPresent && (attr.Complexity.ForLoops || attr.Complexity.WhileLoops)) {
       loopsPresent = true;
@@ -188,7 +189,13 @@ std::vector<BenchmarkProperty> Verifier::selectProperties(
       intArithPresent = true;
       properties.push_back({"../properties/no-overflow.prp", true});
     }
-    if (loopsPresent && intArithPresent)
+    // valid-memsafety.prp bundles deref/free/memtrack CHECKs in one file
+    if (!memsafetyPresent &&
+        (attr.Features.PointerDeref || attr.Features.MemAlloc || attr.Features.MemFree)) {
+      memsafetyPresent = true;
+      properties.push_back({"../properties/valid-memsafety.prp", true});
+    }
+    if (loopsPresent && intArithPresent && memsafetyPresent)
       break;
   }
   return properties;

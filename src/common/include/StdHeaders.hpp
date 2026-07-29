@@ -6,6 +6,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 /**
  * @file StdHeaders.hpp
@@ -111,6 +112,11 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"feof", "stdio.h"},
     {"ferror", "stdio.h"},
     {"clearerr", "stdio.h"},
+    // POSIX/GNU extensions that allocate their own buffer (caller must free)
+    {"getline", "stdio.h"},
+    {"getdelim", "stdio.h"},
+    {"asprintf", "stdio.h"},
+    {"vasprintf", "stdio.h"},
 
     // <stdlib.h>
     // types
@@ -121,6 +127,9 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"malloc", "stdlib.h"},
     {"calloc", "stdlib.h"},
     {"realloc", "stdlib.h"},
+    {"reallocarray", "stdlib.h"},
+    {"aligned_alloc", "stdlib.h"},
+    {"posix_memalign", "stdlib.h"},
     {"free", "stdlib.h"},
     {"exit", "stdlib.h"},
     {"abort", "stdlib.h"},
@@ -176,6 +185,20 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"strlen", "string.h"},
     {"strdup", "string.h"},
     {"strndup", "string.h"},
+
+    // <wchar.h> (memory-alloc-relevant subset; the rest of wchar.h is out of
+    // scope for this registry until something else needs it)
+    {"wcsdup", "wchar.h"},
+
+    // glibc/BSD (declared in <malloc.h>, distinct from <stdlib.h>'s malloc family)
+    {"memalign", "malloc.h"},
+    {"valloc", "malloc.h"},
+    {"malloc_usable_size", "malloc.h"},
+
+    // <sys/mman.h>
+    {"mmap", "sys/mman.h"},
+    {"munmap", "sys/mman.h"},
+    {"mremap", "sys/mman.h"},
 
     // <ctype.h>
     // functions
@@ -431,5 +454,21 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"chmod", "sys/stat.h"}
 
     // assert.h handles by AssertRewriter in TransformAction
- 
+
 };
+
+/**
+ * @brief Named heap alloc/free functions relevant to memory-safety detection
+ */
+inline const std::unordered_set<std::string> MemoryFunctions = {
+    "malloc",  "calloc",         "realloc",  "reallocarray", "aligned_alloc",
+    "posix_memalign", "memalign", "valloc",  "free",
+    "strdup",  "strndup",        "wcsdup",
+    "mmap",    "munmap",         "mremap",
+    "getline", "getdelim",       "asprintf", "vasprintf",
+};
+
+/**
+ * @brief Returns true if `name` is one of the functions in `MemoryFunctions`.
+ */
+inline bool isMemoryFunction(const std::string &name) { return MemoryFunctions.count(name) > 0; }
