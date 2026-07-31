@@ -27,7 +27,7 @@ float fval(void);
 
 int compute(int n) {
   int a = __VERIFIER_nondet_int();
-  ;
+  
   char *s = (char *)__havoc_cstring(__HAVOC_STR_MAX);
   int *b = (int *)__havoc_block(sizeof(int) * __HAVOC_ARRAY_ELEMS);
   float f = __VERIFIER_nondet_float();

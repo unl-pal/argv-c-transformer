@@ -10,7 +10,7 @@
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
 #include <clang/Rewrite/Core/Rewriter.h>
-#include <initializer_list>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -84,32 +84,94 @@ public:
   bool shouldTraversePostOrder();
 
   /**
-   * @brief True for NullStmt and anything previously recorded in _NoOpStmts.
+   * @brief Publishes the verifier suffixes of every call that survived, into
+   *        the shared neededSuffixes set. Call once, after TraverseDecl.
+   *
+   * A call's suffix cannot be published when the call is rewritten: an
+   * enclosing statement may still turn out to be vacuous and erase it, and a
+   * suffix published for an erased call leaves a dangling extern declaration
+   * in the output. Buffering until traversal ends is exact and needs no
+   * reparse, since every erase decision is made by this visitor.
+   */
+  void finalizeSuffixes();
+
+  /**
+   * @brief True if S contributes nothing once havocking is applied.
+   *
+   * Derived structurally from S (see computeNoOp), so it holds whenever it is
+   * asked rather than only after traversal has passed the node. An expression
+   * statement qualifies only if it is side-effect-free *and* contains a call
+   * this transform havocs, so dead code the author wrote is never touched -
+   * only what we hollowed out.
+   *
    * @param S The statement to classify, or nullptr.
    */
   bool isNoOp(const clang::Stmt *S) const;
 
 private:
   /**
-   * @brief Shared prune rule for if/while/do/for.
-   *
-   * Erases S and marks it a no-op if every statement in branches is a no-op
-   * and cond/init/inc are all side-effect-free (init/inc only apply to for-loops).
-   *
-   * @param S        The statement to erase if it proves to be a no-op.
-   * @param keyLoc   Leading keyword location, used for the main-file/macro guard.
-   * @param branches Every branch/body statement that must be a no-op.
-   * @param cond     The controlling condition; must be side-effect-free.
-   * @param init     A for-loop's init clause, or nullptr.
-   * @param inc      A for-loop's increment clause, or nullptr.
-   * @return true if the statement was erased.
+   * @brief Erases a statement's text, at most once per statement, and discards
+   *        the pending suffixes of every havocked call it contains.
+   * @param S The statement to remove from the output buffer.
    */
-  bool pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc,
-                   std::initializer_list<const clang::Stmt *> branches, const clang::Expr *cond,
-                   const clang::Stmt *init = nullptr, const clang::Expr *inc = nullptr);
+  void eraseStmt(const clang::Stmt *S);
+
+  /**
+   * @brief Forgets the pending suffixes of every havocked call within S.
+   * @param S Root of the subtree being erased, or nullptr.
+   */
+  void dropPendingIn(const clang::Stmt *S);
+
+  /**
+   * @brief True if E can be deleted without changing observable behaviour.
+   *
+   * Havocked calls count as pure - the transform being intraprocedural, a
+   * havocked call contributes only its return value - so an expression made
+   * entirely of them and of pure operands is removable. Calls left alone
+   * (system calls, aggregate returns, non-viable pointer plans) are not.
+   *
+   * @param E           Expression to check, or nullptr (vacuously true).
+   * @param mutableVars Variables whose mutation is unobservable, typically a
+   *                    for-loop's own init-declared variables; empty elsewhere.
+   */
+  bool isSideEffectFree(const clang::Expr *E,
+                        const std::set<const clang::VarDecl *> &mutableVars) const;
+
+  /**
+   * @brief isSideEffectFree for a for-loop's init clause, which may be a
+   *        declaration rather than an expression.
+   * @param init        The init clause, or nullptr.
+   * @param mutableVars As in isSideEffectFree.
+   */
+  bool isInitSideEffectFree(const clang::Stmt *init,
+                            const std::set<const clang::VarDecl *> &mutableVars) const;
+
+  /**
+   * @brief True if any call within S is one this transform havocs.
+   * @param S Subtree to search, or nullptr.
+   */
+  bool containsHavocedCall(const clang::Stmt *S) const;
+
+  /**
+   * @brief Shared prune rule for if/while/do/for: erases S if it is a no-op.
+   * @param S      The statement to erase if isNoOp accepts it.
+   * @param keyLoc Leading keyword location, used only for debug logging.
+   */
+  void pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc);
+
+  /**
+   * @brief Computes statement-level vacuity structurally; isNoOp memoizes it.
+   * @param S The statement to classify; never null.
+   */
+  bool computeNoOp(const clang::Stmt *S) const;
 
   clang::ASTContext *_C;
   std::shared_ptr<std::set<std::string>> _NeededSuffixes;
   clang::Rewriter &_Rewriter;
-  std::set<const clang::Stmt *> _NoOpStmts;
+  /** Memoized computeNoOp results; mutable so the const isNoOp can fill it. */
+  mutable std::map<const clang::Stmt *, bool> _NoOpMemo;
+  /** Statements already removed from the buffer, so eraseStmt stays idempotent. */
+  std::set<const clang::Stmt *> _ErasedStmts;
+  /** Suffixes owed by each havocked call, held until the call is known to survive. */
+  std::map<const clang::Expr *, std::set<std::string>> _PendingSuffixes;
 };

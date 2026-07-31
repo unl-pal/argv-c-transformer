@@ -61,9 +61,17 @@ Only C builtin primitives have `__VERIFIER_nondet_*` equivalents. The full set (
 `unsigned int`, `long`, `unsigned long`, `long long`, `unsigned long long`, `float`,
 `double`
 
-Types outside this set (pointers, structs, unions, enums, typedefs to non-builtins) are
+Types outside this set (structs, unions, enums, typedefs to non-builtins) are
 **unsupported for parameter synthesis**. Functions with any unsupported parameter type
 cannot be called in the generated harness and have their bodies stripped during filtering.
+
+Pointer parameters are the exception: they are synthesized by allocating a real block
+rather than inventing an address, so they are supported whenever `planPointer`
+(`src/common/include/HavocPolicy.hpp`) finds a size for the pointee. It does not for
+function pointers, pointer-to-pointer, or records containing pointer fields — those stay
+unsupported, and a function taking one is body-stripped like any other. The filter gates
+on the same classifier the transform uses, so a pointer-param function survives filtering
+exactly when the harness can call it.
 
 ### Intraprocedural by Design
 
@@ -97,8 +105,12 @@ which `__VERIFIER_nondet_*` variant to use.
   scaffolding, not benchmark content); `original_main` is subject to thresholds like any
   function, but no parameter gate is re-applied, so its `argc`/`argv` never trigger
   removal.
-- The `argc` bound (`0–7`) and `argv` string size (`16` bytes) are fixed constants; they
-  keep the verifier's state space bounded but are not configurable.
+- The `argc` bound (default `1–4`) and `argv` string size (default `16` bytes) keep the
+  verifier's state space bounded. They are emitted into each benchmark as the
+  `__HAVOC_ARGC_MIN` / `__HAVOC_ARGC_MAX` / `__HAVOC_STR_MAX` macros rather than inlined
+  as literals, so a generated benchmark can be retuned without rerunning the pipeline;
+  the values come from `[Havoc Settings]` in the config, falling back to the constants in
+  `src/common/include/HavocPolicy.hpp`.
 
 ### Pointer Returns in Havocking
 
@@ -107,6 +119,30 @@ When havocking a call that returns a pointer, a raw nondet pointer value cannot 
 allocates a real block via `malloc` and fills it with nondeterministic content
 (`__VERIFIER_nondet_memory`). `char *` returns are null-terminated so that string
 operations on the result stay in bounds. Function pointer returns are left as-is.
+
+### Cleaning Up After Havocking
+
+Havocking hollows statements out: `helper();` becomes a bare nondet call, and a
+loop whose body and increment were both calls now spins on nothing — the
+transform would have *manufactured* nontermination the source didn't have. Such
+residue is erased, but only under a deliberately narrow rule:
+
+> A statement is removed if it is side-effect-free **and** contains a call this
+> run havocked.
+
+The second condition is the important one. Without it the pass becomes a
+dead-code eliminator, and a benchmark would diff against upstream in places
+havocking never touched. Pure-but-untouched code stays exactly as written.
+
+A havocked call counts as side-effect-free because the transform is
+intraprocedural: the callee's writes to globals and out-parameters are discarded
+already, so the call contributes only its return value. Calls that are *not*
+havocked (library calls, aggregate returns, non-viable pointer plans) remain
+side-effecting and block removal.
+
+Because a statement can be erased after its inner calls were rewritten, verifier
+declarations are decided only once traversal ends — otherwise an erased call
+would leave a dangling `extern` that no compiler warning would catch.
 
 ### Include Stripping
 

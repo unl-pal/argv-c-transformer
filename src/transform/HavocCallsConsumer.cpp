@@ -22,6 +22,9 @@ HavocCallsConsumer::HavocCallsConsumer(std::shared_ptr<std::set<std::string>> ne
 void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   HavocCallsVisitor Visitor(&Context, _NeededSuffixes, _Rewriter);
   Visitor.TraverseDecl(Context.getTranslationUnitDecl());
+  // Only now is it settled which havocked calls survived pruning, and so which
+  // verifier declarations the output actually needs.
+  Visitor.finalizeSuffixes();
 
   // Strip any function whose body collapsed entirely to no-ops
   clang::SourceManager &mgr = Context.getSourceManager();

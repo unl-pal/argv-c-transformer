@@ -121,7 +121,7 @@ int Verifier::verifyAll(std::filesystem::path path) {
         std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
       return verifyFile(path) ? 1 : 0;
     }
-    debugLog(3, "[verify] skipped (not .c): " + path.filename().string());
+    debugLog(4, "[verify] skipped (not .c): " + path.filename().string());
     return 0;
   }
   debugLog(3, "[verify] ignored: " + path.filename().string());
@@ -152,6 +152,26 @@ void __VERIFIER_nondet_memory(void *mem, size_t size) {
 }
 )";
 
+// Pulls the first few "error:" lines out of a clang -fsyntax-only stderr
+// capture and joins them into one compact line, so a failing compile can be
+// diagnosed at debugLevel 4 without dumping the whole diagnostic log.
+static std::string summarizeCompileErrors(const std::filesystem::path &errPath) {
+  std::ifstream in(errPath);
+  std::string line;
+  std::vector<std::string> errors;
+  while (errors.size() < 3 && std::getline(in, line)) {
+    if (line.find("error:") != std::string::npos)
+      errors.push_back(line);
+  }
+  std::string summary;
+  for (size_t i = 0; i < errors.size(); i++) {
+    if (i)
+      summary += " | ";
+    summary += errors[i];
+  }
+  return summary;
+}
+
 // NOTE: cmd is passed to std::system (shell-interpreted), and path/verifierPath
 // are not escaped. path originates from a cloned/downloaded repository, so a
 // pathological filename containing shell metacharacters could inject commands
@@ -166,9 +186,15 @@ bool Verifier::checkCompilable(std::filesystem::path path) {
     out << kVerifierStubs;
   }
 
-  *cmd += " " + path.string() + " " + verifierPath.string() + " 2>/dev/null";
+  std::filesystem::path errPath = path.parent_path() / "__compile_check.err";
+  *cmd += " " + path.string() + " " + verifierPath.string() + " 2>" + errPath.string();
   int result = std::system(cmd->c_str());
   std::filesystem::remove(verifierPath);
+
+  if (result != 0)
+    debugLog(3, "[verify] compile errors for " + path.string() + ": " +
+                    summarizeCompileErrors(errPath));
+  std::filesystem::remove(errPath);
   return result == 0;
 }
 
@@ -247,6 +273,7 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
 }
 
 int Verifier::run() {
+  auto startTime = std::chrono::steady_clock::now();
   std::filesystem::path path(configuration.transformDir);
   if (!std::filesystem::exists(path)) {
     debugLog(0, "Transform directory not found: " + configuration.transformDir);
@@ -257,6 +284,8 @@ int Verifier::run() {
   std::cout << "\n=== Verify summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"
             << "  Benchmarks produced:    " << result << "\n"
-            << "  Discarded/failed:       " << discarded << std::endl;
+            << "  Discarded/failed:       " << discarded << "\n"
+            << "  Time elapsed:           "
+            << formatElapsed(std::chrono::steady_clock::now() - startTime) << std::endl;
   return result;
 }

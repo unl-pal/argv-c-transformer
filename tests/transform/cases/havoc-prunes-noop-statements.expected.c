@@ -9,8 +9,8 @@ void log_other(void);
  * loop, so it does not count as an observable side effect. */
 int busy(int n) {
   
-  ;
-  ;
+  
+  
   return n;
 }
 
