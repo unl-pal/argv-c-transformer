@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "HavocPolicy.hpp"
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/Basic/LangOptions.h>
 #include <clang/Basic/SourceLocation.h>
@@ -34,8 +36,9 @@ public:
    *
    * @param output Stream the transformed source is written to (a file in
    *               production, a string stream in tests).
+   * @param havoc  Bounds emitted as __HAVOC_* macros by AddVerifiersConsumer.
    */
-  TransformAction(llvm::raw_ostream &output);
+  TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc = {});
 
   /**
    * @brief Builds the multiplexed consumer chain for the transform pipeline.
@@ -71,6 +74,7 @@ private:
   llvm::raw_ostream &_Output;
   clang::Rewriter _Rewriter;
   std::shared_ptr<std::set<std::string>> _UnresolvedTypeNames;
+  HavocBounds _Havoc;
 };
 
 /**
@@ -129,8 +133,9 @@ public:
    * @brief Constructs the factory, binding the output stream.
    *
    * @param output Reference to the output stream for the transformed file.
+   * @param havoc  Bounds emitted as __HAVOC_* macros by AddVerifiersConsumer.
    */
-  ArgsFrontendFactory(llvm::raw_ostream &output);
+  ArgsFrontendFactory(llvm::raw_ostream &output, const HavocBounds &havoc = {});
 
   /**
    * @brief Called by {@code ClangTool} once per source file to create the action.
@@ -143,6 +148,7 @@ public:
 
 private:
   llvm::raw_ostream &_Output;
+  HavocBounds _Havoc;
 };
 
 /**

@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "HavocPolicy.hpp"
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/Rewrite/Core/Rewriter.h>
@@ -31,9 +33,10 @@ public:
    * @param neededSuffixes Verifier suffixes collected by earlier consumers
    *        ({@code HavocCallsConsumer}, {@code MainGenConsumer}, {@code AssertRewriter}).
    * @param rewriter       Shared rewriter for modifying the source buffer.
+   * @param havoc          Bounds to emit as the __HAVOC_* macro definitions.
    */
   AddVerifiersConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
-                       clang::Rewriter &rewriter);
+                       clang::Rewriter &rewriter, const HavocBounds &havoc = {});
 
   /**
    * @brief Inserts the extern declarations and helper definitions.
@@ -45,4 +48,5 @@ public:
 private:
   std::shared_ptr<std::set<std::string>> _NeededSuffixes;
   clang::Rewriter &_Rewriter;
+  HavocBounds _Havoc;
 };

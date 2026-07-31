@@ -1,6 +1,9 @@
 
 
 #include <stdlib.h>
+#define __HAVOC_STR_MAX 16
+#define __HAVOC_ARRAY_ELEMS 8
+#define __HAVOC_OPAQUE_BYTES 128
 extern int __VERIFIER_nondet_int(void);
 extern size_t __VERIFIER_nondet_size_t(void);
 extern void __VERIFIER_nondet_memory(void *, size_t);
@@ -18,7 +21,7 @@ static char *__havoc_cstring(size_t size) {
 }
 
 int run(int n) {
-  char *s = (char *)__havoc_cstring(128);
+  char *s = (char *)__havoc_cstring(__HAVOC_STR_MAX);
   return __VERIFIER_nondet_int() + s[0];
 }
 

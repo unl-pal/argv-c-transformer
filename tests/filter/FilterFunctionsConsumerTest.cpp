@@ -183,6 +183,57 @@ TEST(FilterFunctionsConsumer, OrdinaryFunctionRemovedForUnsupportedParam) {
 }
 
 // ---------------------------------------------------------------------------
+// The param-type gate defers to HavocPolicy
+//
+// The filter must accept exactly what the transform can harness: reject a
+// pointer here and no downstream pointer support is ever reachable, but accept
+// one the transform will refuse and the function reaches main generation only
+// to be dropped there.
+// ---------------------------------------------------------------------------
+
+TEST(FilterFunctionsConsumer, PointerParamSurvivesTheGate) {
+  auto r = runFilter(R"(
+    int main(void) { return 0; }
+    int sum(int *values, int n) { return n; }
+    int first_char(const char *s) { return s[0]; }
+    int at(int fixed[3]) { return fixed[0]; }
+    int opaque(void *p) { return p != 0; }
+  )",
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
+  EXPECT_FALSE(contains(*r.toRemove, "sum"));
+  EXPECT_FALSE(contains(*r.toRemove, "first_char"));
+  EXPECT_FALSE(contains(*r.toRemove, "at"));
+  EXPECT_FALSE(contains(*r.toRemove, "opaque"));
+}
+
+TEST(FilterFunctionsConsumer, RecordPointerParamSurvivesWhenPointerFree) {
+  // struct Point has no pointer fields, so bulk nondet_memory over it is
+  // legal and the block can be sized with sizeof.
+  auto r = runFilter(R"(
+    int main(void) { return 0; }
+    struct Point { int x; int y; };
+    int point_x(struct Point *p) { return p->x; }
+  )",
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
+  EXPECT_FALSE(contains(*r.toRemove, "point_x"));
+}
+
+TEST(FilterFunctionsConsumer, NonViablePointerParamStillRemoved) {
+  // Each of these is a shape planPointer refuses: a struct carrying a pointer
+  // field, and a function pointer. Havocking either would hand the callee a
+  // raw nondet pointer value it may not dereference (or call).
+  auto r = runFilter(R"(
+    int main(void) { return 0; }
+    struct Node { int v; struct Node *next; };
+    int walk(struct Node *n) { return n->v; }
+    int apply(int (*cb)(int)) { return cb(1); }
+  )",
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
+  EXPECT_TRUE(contains(*r.toRemove, "walk"));
+  EXPECT_TRUE(contains(*r.toRemove, "apply"));
+}
+
+// ---------------------------------------------------------------------------
 // RemoveVisitor: does main's body actually get stripped once it's in
 // _ToRemove? (FilterFunctionsConsumer only decides; RemoveVisitor acts.)
 // ---------------------------------------------------------------------------

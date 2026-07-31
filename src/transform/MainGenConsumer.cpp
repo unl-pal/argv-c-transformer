@@ -5,6 +5,7 @@
 #include "MainGenConsumer.hpp"
 
 #include "DebugLog.hpp"
+#include "HavocPolicy.hpp"
 #include "VerifierNames.hpp"
 
 #include <clang/AST/Decl.h>
@@ -56,34 +57,91 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
                       " not harnessed");
       continue;
     }
-    std::string args;
-    std::set<std::string> argSuffixes;
-    bool supported = true;
-    for (const clang::ParmVarDecl *parm : func->parameters()) {
-      std::optional<std::string> suffix = verifierSuffixForType(parm->getOriginalType());
-      if (!suffix) {
-        supported = false;
-        break;
-      }
-      if (!args.empty())
-        args += ", ";
-      args += "__VERIFIER_nondet_" + *suffix + "()";
-      argSuffixes.insert(*suffix);
-    }
-    // A parameter without a nondet equivalent (pointer, struct, ...): skip
-    // this function but keep harnessing the rest.
-    if (!supported) {
-      debugLog(2, "Warning: only primitive symbolics supported; " + func->getNameAsString() +
-                      " not harnessed (filter's param check did not strip it)");
+    HarnessCall call = genCallHarness(func, mgr);
+    // A parameter with neither a nondet equivalent nor a viable pointer plan
+    // (aggregate by value, function pointer, ...): skip this function but keep
+    // harnessing the rest.
+    if (!call.viable) {
+      debugLog(2, "Warning: unsupported parameter type; " + func->getNameAsString() +
+                      " not harnessed");
       continue;
     }
     std::string name = func->isMain() ? "original_main" : func->getNameAsString();
-    harness += "  " + name + "(" + args + ");\n";
-    _NeededSuffixes->insert(argSuffixes.begin(), argSuffixes.end());
+    harness += call.prologue;
+    harness += "  " + name + "(" + call.args + ");\n";
   }
 
   std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
   _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainFn);
+}
+
+MainGenConsumer::HarnessCall
+MainGenConsumer::genCallHarness(const clang::FunctionDecl *func,
+                                const clang::SourceManager &mgr) {
+  HarnessCall call;
+  // Markers stay local until the whole list is known to be harnessable, so a
+  // function that turns out to be unsupported leaves no unused externs behind.
+  std::set<std::string> markers;
+
+  // Classify every parameter first: a pointer anywhere in the list changes how
+  // the integer parameters are synthesized, so nothing can be emitted until the
+  // whole list has been seen.
+  std::vector<PointerPlan> plans;
+  bool anyPointer = false;
+  for (const clang::ParmVarDecl *parm : func->parameters()) {
+    // getOriginalType, not getType: a parameter spelled T[N] has already
+    // decayed to T* in the latter, discarding the bound planPointer wants.
+    PointerPlan plan;
+    if (!verifierSuffixForType(parm->getOriginalType())) {
+      plan = planPointer(parm->getOriginalType(), mgr);
+      if (!plan.viable)
+        return call; // viable stays false; caller skips this function
+      anyPointer = true;
+    }
+    plans.push_back(plan);
+  }
+
+  unsigned counter = _LocalCounter;
+  for (size_t i = 0; i < plans.size(); ++i) {
+    const clang::ParmVarDecl *parm = func->parameters()[i];
+    clang::QualType declared = parm->getOriginalType();
+    if (!call.args.empty())
+      call.args += ", ";
+
+    std::optional<std::string> suffix = verifierSuffixForType(declared);
+    if (!suffix) {
+      // Cast to the parameter's decayed type, which is what the call expects.
+      call.args += renderPointerExpr(plans[i], parm->getType().getAsString());
+      markers.insert(plans[i].helper);
+      markers.insert("__havoc_bounds");
+      if (!plans[i].fwdDecl.empty())
+        markers.insert("__havoc_fwd:" + plans[i].fwdDecl);
+      continue;
+    }
+
+    markers.insert(*suffix);
+    // With a pointer in the list, any integer is a candidate index into it.
+    // Clamping every integer to the block's element count is always safe;
+    // inferring which parameter is "the length" from its name is not, since a
+    // wrong guess sizes the block too small and invents an out-of-bounds.
+    if (anyPointer && declared->isIntegerType() && !declared->isBooleanType()) {
+      std::string local = "__h" + std::to_string(counter++);
+      call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
+                       " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
+      if (declared->isSignedIntegerType())
+        call.prologue += local + " < 0 || ";
+      call.prologue += local + " > __HAVOC_ARRAY_ELEMS) abort();\n";
+      call.args += local;
+      markers.insert("__havoc_bounds");
+      continue;
+    }
+    call.args += "__VERIFIER_nondet_" + *suffix + "()";
+  }
+
+  _LocalCounter = counter;
+  _NeededSuffixes->insert(markers.begin(), markers.end());
+  call.viable = true;
+  return call;
 }
 
 std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {

@@ -142,6 +142,7 @@ long __VERIFIER_nondet_long(void) { return 0; }
 unsigned long __VERIFIER_nondet_ulong(void) { return 0; }
 long long __VERIFIER_nondet_longlong(void) { return 0; }
 unsigned long long __VERIFIER_nondet_ulonglong(void) { return 0; }
+size_t __VERIFIER_nondet_size_t(void) { return 0; }
 float __VERIFIER_nondet_float(void) { return 0; }
 double __VERIFIER_nondet_double(void) { return 0; }
 void* __VERIFIER_nondet_pointer(void) { return (void*)(0); }

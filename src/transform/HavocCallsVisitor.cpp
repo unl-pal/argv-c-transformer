@@ -5,6 +5,7 @@
 #include "include/HavocCallsVisitor.hpp"
 
 #include "DebugLog.hpp"
+#include "HavocPolicy.hpp"
 #include "VerifierNames.hpp"
 
 #include <clang/AST/ASTTypeTraits.h>
@@ -170,21 +171,26 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
                     *suffix + "()");
     _Rewriter.ReplaceText(E->getSourceRange(), "__VERIFIER_nondet_" + *suffix + "()");
     _NeededSuffixes->emplace(*suffix);
-  } else if (returnType->isAnyPointerType() && !returnType->isFunctionPointerType()) {
-    // Pointer returns get a havocked-but-valid block (SV-COMP __VERIFIER_nondet_memory).
-    // Block size is a fixed guess for now; char pointers are
-    // null-terminated so string ops stay in bounds. AddVerifiersConsumer
-    // emits the helper definitions when it sees these markers.
-    bool isCharPtr = returnType->getPointeeType()->isAnyCharacterType();
-    std::string helper = isCharPtr ? "__havoc_cstring" : "__havoc_block";
-    debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked pointer call -> " + helper +
-                    "(128)");
-    // The helpers return char* / void*; cast back to the call's actual
-    // return type so e.g. unsigned char* or a struct pointer doesn't end up
-    // assigned from an incompatible pointer type.
-    _Rewriter.ReplaceText(E->getSourceRange(),
-                          "(" + returnType.getAsString() + ")" + helper + "(128)");
-    _NeededSuffixes->emplace(helper);
+  } else if (returnType->isAnyPointerType()) {
+    // Pointer returns get a havocked-but-valid block (SV-COMP
+    // __VERIFIER_nondet_memory). planPointer decides the size from the pointee
+    // rather than guessing; the helpers return char*/void*, so the cast back to
+    // the call's actual return type keeps e.g. an unsigned char* result from
+    // being an incompatible assignment. AddVerifiersConsumer emits the helper
+    // definitions when it sees these markers.
+    //
+    // A non-viable plan (function pointer, or a record whose fields the callee
+    // could not legally dereference after a bulk havoc) leaves the call alone.
+    PointerPlan plan = planPointer(returnType, mgr);
+    if (!plan.viable)
+      return true;
+    std::string replacement = renderPointerExpr(plan, returnType.getAsString());
+    debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked pointer call -> " + replacement);
+    _Rewriter.ReplaceText(E->getSourceRange(), replacement);
+    _NeededSuffixes->emplace(plan.helper);
+    _NeededSuffixes->emplace("__havoc_bounds");
+    if (!plan.fwdDecl.empty())
+      _NeededSuffixes->emplace("__havoc_fwd:" + plan.fwdDecl);
   }
   // Aggregate returns (structs, unions) have no expression-position nondet
   // equivalent; those calls are left as-is

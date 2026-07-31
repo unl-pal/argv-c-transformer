@@ -77,9 +77,9 @@ AssertRewriter::AssertRewriter(clang::SourceManager &SM, clang::Rewriter &rewrit
                                const clang::LangOptions &langOpts)
     : _Mgr(SM), _Rewriter(rewriter), _NeededSuffixes(neededSuffixes), _LangOpts(langOpts) {}
 
-TransformAction::TransformAction(llvm::raw_ostream &output)
+TransformAction::TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc)
     : _Output(output), _Rewriter(),
-      _UnresolvedTypeNames(std::make_shared<std::set<std::string>>()) {}
+      _UnresolvedTypeNames(std::make_shared<std::set<std::string>>()), _Havoc(havoc) {}
 
 // unique_ptr can't be copied, so tempVector is built up and moved into MultiplexConsumer.
 std::unique_ptr<clang::ASTConsumer>
@@ -104,7 +104,7 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
       std::make_unique<HavocCallsConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
   tempVector.emplace_back(
       std::make_unique<MainGenConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
-  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(neededSuffixes, _Rewriter));
+  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(neededSuffixes, _Rewriter, _Havoc));
   tempVector.emplace_back(
       std::make_unique<AddStdIncludesConsumer>(existingIncludes, _UnresolvedTypeNames, _Rewriter));
 
@@ -125,8 +125,9 @@ void TransformAction::EndSourceFileAction() {
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }
 
-ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_ostream &output) : _Output(output) {}
+ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_ostream &output, const HavocBounds &havoc)
+    : _Output(output), _Havoc(havoc) {}
 
 std::unique_ptr<clang::FrontendAction> ArgsFrontendFactory::create() {
-  return std::make_unique<TransformAction>(_Output);
+  return std::make_unique<TransformAction>(_Output, _Havoc);
 }

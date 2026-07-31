@@ -17,8 +17,8 @@
 #include <string>
 
 AddVerifiersConsumer::AddVerifiersConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
-                                           clang::Rewriter &rewriter)
-    : _NeededSuffixes(neededSuffixes), _Rewriter(rewriter) {}
+                                           clang::Rewriter &rewriter, const HavocBounds &havoc)
+    : _NeededSuffixes(neededSuffixes), _Rewriter(rewriter), _Havoc(havoc) {}
 
 void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   if (_NeededSuffixes->empty())
@@ -55,13 +55,29 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   std::string decls;
 
-  // MainGenConsumer marks the argv harness with "__havoc_argv"; emit the
-  // bounds it references as macros so a user can retune a generated benchmark
-  // without rerunning the pipeline.
+  // Earlier consumers mark the argv harness with "__havoc_argv" and any
+  // pointer havocking with "__havoc_bounds". Emit the bounds those reference as
+  // macros so a user can retune a generated benchmark without rerunning the
+  // pipeline. They are emitted as a set rather than individually: the group is
+  // small, and a benchmark whose knobs are all in one place is easier to retune
+  // than one where the available knobs depend on which shapes it happens to use.
   if (_NeededSuffixes->count("__havoc_argv")) {
-    decls += "#define __HAVOC_ARGC_MIN " + std::to_string(kArgcMin) + "\n" +
-             "#define __HAVOC_ARGC_MAX " + std::to_string(kArgcMax) + "\n" +
-             "#define __HAVOC_STR_MAX " + std::to_string(kStrMax) + "\n";
+    decls += "#define __HAVOC_ARGC_MIN " + std::to_string(_Havoc.argcMin) + "\n" +
+             "#define __HAVOC_ARGC_MAX " + std::to_string(_Havoc.argcMax) + "\n";
+  }
+  if (_NeededSuffixes->count("__havoc_argv") || _NeededSuffixes->count("__havoc_bounds")) {
+    decls += "#define __HAVOC_STR_MAX " + std::to_string(_Havoc.strMax) + "\n" +
+             "#define __HAVOC_ARRAY_ELEMS " + std::to_string(_Havoc.arrayElems) + "\n" +
+             "#define __HAVOC_OPAQUE_BYTES " + std::to_string(_Havoc.opaqueBytes) + "\n";
+  }
+
+  // A struct named only inside a parameter list has prototype scope, so the
+  // cast the harness emits for it would otherwise name a distinct, incompatible
+  // type. Hoist every such tag to file scope. Redundant when the record is
+  // already declared here, but a repeat forward declaration is legal C.
+  for (const std::string &suffix : *_NeededSuffixes) {
+    if (suffix.rfind("__havoc_fwd:", 0) == 0)
+      decls += suffix.substr(std::string("__havoc_fwd:").size()) + ";\n";
   }
 
   // emit verifier externs

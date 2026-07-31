@@ -89,7 +89,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
   std::vector<std::string> includeDirs =
       headerIndex ? collectLocalIncludeDirs(path, *headerIndex) : std::vector<std::string>{};
 
-  ArgsFrontendFactory factory(output);
+  ArgsFrontendFactory factory(output, configuration.havoc);
   bool ran = runToolOnFile(path.string(), factory, includeDirs);
   output.close();
   if (!ran) {
@@ -197,6 +197,11 @@ void Transformer::parseConfig(std::string configFile) {
   PipelineConfig config = parsePipelineConfig(configFile);
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  configuration.havoc.argcMin = config.havoc.at("havocArgcMin");
+  configuration.havoc.argcMax = config.havoc.at("havocArgcMax");
+  configuration.havoc.strMax = config.havoc.at("havocStrMax");
+  configuration.havoc.arrayElems = config.havoc.at("havocArrayElems");
+  configuration.havoc.opaqueBytes = config.havoc.at("havocOpaqueBytes");
   if (!config.transformDir.empty()) {
     configuration.transformDir = config.transformDir;
   }

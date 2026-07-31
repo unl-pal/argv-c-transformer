@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "HavocPolicy.hpp"
 #include "IncludeIndex.hpp"
 
 #include <filesystem>
@@ -24,6 +25,7 @@ struct transformConfigs {
   /// Original repo tree the filtered files came from, used only to resolve
   /// quoted #includes to -I paths. Empty means no local-header resolution.
   std::string databaseDir;
+  HavocBounds havoc;        ///< Bounds emitted as __HAVOC_* macros into each benchmark.
 };
 
 /**

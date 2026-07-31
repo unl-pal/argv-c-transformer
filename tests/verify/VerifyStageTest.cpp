@@ -103,6 +103,33 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   EXPECT_NE(yml.find("data_model: LP64"), std::string::npos);
 }
 
+TEST_F(VerifyStageTest, HeaderDefinedStructIsOpaqueAndStillCompiles) {
+  // The main-file constraint, end to end. IncludeFinder strips the quoted
+  // #include as a *textual* edit after preprocessing has already run, so the
+  // AST still holds a complete definition of struct Rect while the output
+  // file will not declare it at all. Sizing the block with sizeof(struct Rect)
+  // would parse fine here and then fail to compile as a benchmark, which is
+  // why planPointer tests isInMainFile rather than isCompleteType.
+  writeFile(filterDir / "shapes.h", "struct Rect { int w; int h; };\n");
+  writeFile(filterDir / "area.c", "#include \"shapes.h\"\n"
+                                  "int tag(struct Rect *r) { return r != 0; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "area.c"));
+  std::string out = readFile(benchmarkDir / "area.c");
+
+  // The include is gone, so the definition is gone with it.
+  EXPECT_EQ(out.find("#include \"shapes.h\""), std::string::npos);
+  EXPECT_EQ(out.find("struct Rect {"), std::string::npos);
+  // Therefore the block must be the flat byte count, never sizeof.
+  EXPECT_EQ(out.find("sizeof(struct Rect)"), std::string::npos);
+  EXPECT_NE(out.find("__HAVOC_OPAQUE_BYTES"), std::string::npos);
+  // A produced benchmark means checkCompilable passed under keepCompilesOnly.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "area.i"));
+}
+
 // ---------------------------------------------------------------------------
 // selectProperties: which .prp files get attached, based on the fresh
 // per-function counts taken after transform (see CountingVisitor::Complexity).

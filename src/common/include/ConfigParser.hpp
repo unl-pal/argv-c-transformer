@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "HavocPolicy.hpp"
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -49,6 +51,16 @@ struct PipelineConfig {
   std::map<std::string, int> fileSettings = {
       {"debugLevel", 0},       {"minFileLoC", 0},        {"maxFileLoC", 9999},
       {"fileTimeoutSecs", 60}, {"keepCompilesOnly", 1},
+  };
+
+  /// Bounds on synthesized symbolic state, emitted into benchmarks as
+  /// __HAVOC_* macros. Defaults come from HavocPolicy.hpp.
+  std::map<std::string, int> havoc = {
+      {"havocArgcMin", static_cast<int>(kArgcMin)},
+      {"havocArgcMax", static_cast<int>(kArgcMax)},
+      {"havocStrMax", static_cast<int>(kStrMax)},
+      {"havocArrayElems", static_cast<int>(kArrayElems)},
+      {"havocOpaqueBytes", static_cast<int>(kOpaqueBytes)},
   };
 
   std::string databaseDir;  ///< Input tree for the filter stage ("" = unset).
@@ -200,6 +212,17 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
                     << std::endl;
           level = std::clamp(level, 0, 3);
         }
+      }
+    } else if (config.havoc.count(key)) {
+      try {
+        int parsed = std::stoi(value);
+        if (parsed < 0) {
+          std::cerr << "Warning: '" << key << "' expects a non-negative count - ignoring value '"
+                    << value << "'" << std::endl;
+        } else {
+          config.havoc.at(key) = parsed;
+        }
+      } catch (...) {
       }
     } else if (key == "databaseDir") {
       config.databaseDir = value;

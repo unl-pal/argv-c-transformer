@@ -19,6 +19,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(filter_tests
   common/ClangToolUtilsTest.cpp
   common/ConfigParserTest.cpp
+  common/HavocPolicyTest.cpp
   common/IncludeIndexTest.cpp
   filter/CountingVisitorTest.cpp
   filter/FilterFunctionsConsumerTest.cpp

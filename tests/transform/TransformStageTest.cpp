@@ -91,17 +91,20 @@ TEST_F(TransformStageTest, NestedPathFlattensWithUnderscores) {
 }
 
 TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
-  // All functions have pointer params → none can be harnessed → empty main
-  writeFile(filterDir / "ptrs_only.c",
-            "void process(int *data, int len) {\n"
-            "  for (int i = 0; i < len; i++) data[i]++;\n"
+  // Every function takes a struct by value, which has no nondet equivalent and
+  // is not a pointer either → none can be harnessed → empty main. (A pointer
+  // param would not do here any more: planPointer sizes those now.)
+  writeFile(filterDir / "aggregates_only.c",
+            "struct Point { int x; int y; };\n"
+            "int total(struct Point p) {\n"
+            "  return p.x + p.y;\n"
             "}\n");
 
   Transformer t(configPath.string());
   int count = t.run();
 
   EXPECT_EQ(count, 0);
-  EXPECT_FALSE(fs::exists(transformDir / "ptrs_only.c"));
+  EXPECT_FALSE(fs::exists(transformDir / "aggregates_only.c"));
 }
 
 TEST_F(TransformStageTest, ArgcArgvMainProducesTransformedSource) {

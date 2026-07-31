@@ -53,6 +53,35 @@ public:
 
 private:
   /**
+   * @brief A synthesized call: setup statements plus the argument list.
+   *
+   * Parameters, unlike havocked return values, are in statement position, so
+   * they can be preceded by setup. That is what makes bounded integer
+   * arguments possible.
+   */
+  struct HarnessCall {
+    std::string prologue; ///< Indented, newline-terminated statements before the call.
+    std::string args;     ///< Comma-separated argument expressions.
+    bool viable = false;  ///< False means the function cannot be harnessed at all.
+  };
+
+  /**
+   * @brief Synthesizes arguments for one call to an arbitrary function.
+   *
+   * Primitive parameters become {@code __VERIFIER_nondet_*()} calls; pointer
+   * parameters are classified by {@code planPointer} and rendered as havocked
+   * blocks. When a pointer is present, integer parameters are emitted as locals
+   * clamped to {@code __HAVOC_ARRAY_ELEMS} instead, so that any index derived
+   * from them stays inside the block handed to the callee.
+   *
+   * @param func The function to synthesize a call for.
+   * @param mgr  SourceManager, needed to tell types that survive into the
+   *             output from those defined only in a stripped header.
+   * @return The call; check {@code viable} before using it.
+   */
+  HarnessCall genCallHarness(const clang::FunctionDecl *func, const clang::SourceManager &mgr);
+
+  /**
    * @brief Builds the harness body that invokes the renamed {@code original_main}.
    *
    * Unlike an arbitrary function, {@code main}'s pointer params have a known
@@ -74,4 +103,7 @@ private:
   std::shared_ptr<std::set<std::string>> _NeededSuffixes;
   std::shared_ptr<std::set<std::string>> _NoOpFunctions;
   clang::Rewriter &_Rewriter;
+  /// Runs across every synthesized call, since all the locals they declare
+  /// share the generated main's single scope and so must not collide.
+  unsigned _LocalCounter = 0;
 };
