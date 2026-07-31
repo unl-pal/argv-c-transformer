@@ -99,7 +99,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   // harness may be empty due to unsupported transforming
   if (harnessIsEmpty(srcPath)) {
-    debugLog(2, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
+    debugLog(1, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
                     srcPath.string());
     std::filesystem::remove(srcPath);
     return false;
@@ -186,7 +186,7 @@ int Transformer::transformAll(std::filesystem::path path) {
   if (std::filesystem::is_regular_file(path)) {
     if (path.extension() == ".c")
       return transformFileIsolated(path);
-    debugLog(3, "[transform] skipped (not .c): " + path.filename().string());
+    debugLog(4, "[transform] skipped (not .c): " + path.filename().string());
     return 0;
   }
   debugLog(3, "[transform] ignored: " + path.filename().string());
@@ -219,6 +219,7 @@ void Transformer::parseConfig(std::string configFile) {
 }
 
 int Transformer::run() {
+  auto startTime = std::chrono::steady_clock::now();
   std::filesystem::path path(configuration.filterDir);
   if (!std::filesystem::exists(path)) {
     debugLog(0, "Filter directory not found: " + configuration.filterDir);
@@ -233,6 +234,8 @@ int Transformer::run() {
   std::cout << "\n=== Transform summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"
             << "  Files transformed:      " << result << "\n"
-            << "  Discarded/failed:       " << discarded << std::endl;
+            << "  Discarded/failed:       " << discarded << "\n"
+            << "  Time elapsed:           "
+            << formatElapsed(std::chrono::steady_clock::now() - startTime) << std::endl;
   return result;
 }

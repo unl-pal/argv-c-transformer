@@ -42,7 +42,7 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
     if (_NoOpFunctions->count(func->getNameAsString())) {
-      debugLog(2, "Info: " + func->getNameAsString() + " body collapsed to no-ops; not harnessed");
+      debugLog(2, "[transform] " + func->getNameAsString() + " body collapsed to no-ops; not harnessed");
       continue;
     }
     // main has a known pointer contract (argc/argv), so synthesize a real
@@ -53,7 +53,7 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     }
     if (func->isVariadic()) {
-      debugLog(2, "Warning: variadic functions unsupported; " + func->getNameAsString() +
+      debugLog(2, "[transform] variadic functions unsupported; " + func->getNameAsString() +
                       " not harnessed");
       continue;
     }
@@ -62,7 +62,7 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     // (aggregate by value, function pointer, ...): skip this function but keep
     // harnessing the rest.
     if (!call.viable) {
-      debugLog(2, "Warning: unsupported parameter type; " + func->getNameAsString() +
+      debugLog(2, "[transform] unsupported parameter type; " + func->getNameAsString() +
                       " not harnessed");
       continue;
     }

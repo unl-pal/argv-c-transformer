@@ -207,10 +207,10 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       }
       if (key == "debugLevel") {
         int &level = config.fileSettings.at(key);
-        if (level < 0 || level > 3) {
-          std::cerr << "Warning: 'debugLevel' expects 0-3 - clamping value '" << value << "'"
+        if (level < 0 || level > 4) {
+          std::cerr << "Warning: 'debugLevel' expects 0-4 - clamping value '" << value << "'"
                     << std::endl;
-          level = std::clamp(level, 0, 3);
+          level = std::clamp(level, 0, 4);
         }
       }
     } else if (config.havoc.count(key)) {
