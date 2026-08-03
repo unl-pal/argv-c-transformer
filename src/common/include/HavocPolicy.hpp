@@ -104,12 +104,15 @@ struct PointerPlan {
   std::string pointeeType;  ///< Unqualified pointee spelling; empty when Opaque.
   std::string sizeExpr;     ///< C expression for the byte size, in __HAVOC_* terms.
   std::string helper;       ///< "__havoc_cstring" or "__havoc_block".
-  /// Tag needing a file-scope forward declaration, e.g. "struct Rect"; else empty.
+  /// File-scope declaration the harness's cast needs, without the trailing
+  /// ";" — e.g. "struct Rect" or "typedef struct __havoc_Range Range". Empty
+  /// when the cast names something the output already declares.
+  ///
   /// A struct named only inside a parameter list has *prototype scope*, so a
   /// cast to it elsewhere would name a distinct, incompatible type. Emitting
   /// "struct Rect;" in the preamble hoists the tag to file scope. Legal even
   /// when a definition follows, so call sites need not check whether it is
-  /// already declared.
+  /// already declared. See @ref pointeeFwdDecl for the typedef spellings.
   std::string fwdDecl;
   unsigned elems = 0;       ///< Element count; 0 when the size is a raw byte count.
 };
@@ -139,6 +142,46 @@ inline bool recordHasPointerFields(const clang::RecordDecl *record,
         return true;
   }
   return false;
+}
+
+/**
+ * @brief The file-scope declaration a cast to @p pointee needs, or "" if none.
+ *
+ * The harness spells its cast exactly as the source did, so whatever name the
+ * source used has to exist in the output. Hoisting the struct tag covers a
+ * pointee written @c "struct Rect", but not one written through a typedef that
+ * a stripped header introduced: @c "typedef struct { ... } Range;" leaves the
+ * output casting to a @c Range that nothing declares.
+ *
+ * A typedef pointee therefore gets a typedef re-declaration rather than a bare
+ * tag. Only the *name* is needed, never the size: this path is reached only for
+ * types the output cannot size anyway, which planPointer classifies as Opaque
+ * and measures in raw bytes. An incomplete struct is thus a sufficient target,
+ * and an anonymous struct — which has no tag to reference — gets a synthesized
+ * one derived from the typedef name, so repeated calls agree on the same type.
+ *
+ * A typedef declared in the main file survives into the output on its own and
+ * must be left alone: re-declaring it against a synthesized tag would name a
+ * second, incompatible type.
+ */
+inline std::string pointeeFwdDecl(clang::QualType pointee, const clang::SourceManager &mgr) {
+  const clang::RecordDecl *record = pointee->getAsRecordDecl();
+  if (!record)
+    return "";
+  std::string kind(record->getKindName());
+  if (const auto *typedefType = pointee->getAs<clang::TypedefType>()) {
+    const clang::TypedefNameDecl *decl = typedefType->getDecl();
+    if (decl && !mgr.isInMainFile(decl->getLocation())) {
+      std::string name = decl->getName().str();
+      std::string tag = record->getName().empty() ? "__havoc_" + name : record->getName().str();
+      return "typedef " + kind + " " + tag + " " + name;
+    }
+    // Declared in the main file: it comes with its own definition.
+    return "";
+  }
+  if (record->getName().empty())
+    return ""; // anonymous and unnamed: nothing to declare, nothing names it
+  return kind + " " + record->getName().str();
 }
 
 /**
@@ -208,10 +251,8 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
 
   // Recorded before the Opaque branch below clears pointeeType: an opaque
   // record is exactly the case that needs the forward declaration most, since
-  // nothing else in the output file will ever name the tag.
-  if (const clang::RecordDecl *record = pointee->getAsRecordDecl())
-    if (!record->getName().empty())
-      plan.fwdDecl = std::string(record->getKindName()) + " " + record->getName().str();
+  // nothing else in the output file will ever name the type.
+  plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
 
   // void*, an incomplete type, or a record whose definition came from a header
   // the transform strips: no sizeof is available or will survive.

@@ -130,6 +130,54 @@ TEST_F(VerifyStageTest, HeaderDefinedStructIsOpaqueAndStillCompiles) {
   EXPECT_TRUE(fs::exists(benchmarkDir / "area.i"));
 }
 
+TEST_F(VerifyStageTest, HeaderTypedefStructIsForwardDeclaredAndStillCompiles) {
+  // Same constraint as above, but the pointee is spelled through a typedef.
+  // Hoisting the struct tag is not enough here: the anonymous struct has no
+  // tag, and the name the harness casts to is the typedef, which vanished with
+  // the include. pointeeFwdDecl must re-declare the typedef itself against a
+  // synthesized tag.
+  writeFile(filterDir / "types.h", "typedef struct { int lo; int hi; } Range;\n");
+  writeFile(filterDir / "span.c", "#include \"types.h\"\n"
+                                  "int nonEmpty(Range *r) { return r != 0; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "span.c"));
+  std::string out = readFile(benchmarkDir / "span.c");
+
+  EXPECT_EQ(out.find("#include \"types.h\""), std::string::npos);
+  // The typedef name is re-declared, so the cast below has something to name.
+  EXPECT_NE(out.find("typedef struct __havoc_Range Range;"), std::string::npos)
+      << "missing typedef forward declaration; output was:\n"
+      << out;
+  EXPECT_NE(out.find("(Range *)__havoc_block(__HAVOC_OPAQUE_BYTES)"), std::string::npos);
+  EXPECT_EQ(out.find("sizeof(Range)"), std::string::npos);
+  // A produced benchmark means checkCompilable passed under keepCompilesOnly:
+  // without the typedef the cast is an unknown type name and this file is gone.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "span.i"));
+}
+
+TEST_F(VerifyStageTest, MainFileTypedefIsNotRedeclared) {
+  // The mirror case: a typedef defined in the .c itself survives into the
+  // output on its own. Re-declaring it against a synthesized tag would name a
+  // second, incompatible type, so pointeeFwdDecl must stay quiet — and because
+  // the definition is in the main file, the block is sized with sizeof.
+  writeFile(filterDir / "local.c", "typedef struct { int lo; int hi; } Range;\n"
+                                   "int nonEmpty(Range *r) { return r->hi > r->lo; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  std::string out = readFile(benchmarkDir / "local.c");
+
+  EXPECT_EQ(out.find("__havoc_Range"), std::string::npos)
+      << "synthesized tag leaked for a main-file typedef; output was:\n"
+      << out;
+  EXPECT_NE(out.find("sizeof(Range)"), std::string::npos);
+  EXPECT_TRUE(fs::exists(benchmarkDir / "local.i"));
+}
+
 // ---------------------------------------------------------------------------
 // selectProperties: which .prp files get attached, based on the fresh
 // per-function counts taken after transform (see CountingVisitor::Complexity).
