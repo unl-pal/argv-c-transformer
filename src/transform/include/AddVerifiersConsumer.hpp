@@ -32,10 +32,15 @@ public:
    *
    * @param neededSuffixes Verifier suffixes collected by earlier consumers
    *        ({@code HavocCallsConsumer}, {@code MainGenConsumer}, {@code AssertRewriter}).
+   * @param existingIncludes Headers the output already includes, recorded by
+   *        {@code IncludeFinder}. Read so a header this consumer needs isn't
+   *        emitted twice, and written so {@code AddStdIncludesConsumer} - which
+   *        runs after this one - sees what was emitted here.
    * @param rewriter       Shared rewriter for modifying the source buffer.
    * @param havoc          Bounds to emit as the __HAVOC_* macro definitions.
    */
   AddVerifiersConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
+                       std::shared_ptr<std::set<std::string>> existingIncludes,
                        clang::Rewriter &rewriter, const HavocBounds &havoc = {});
 
   /**
@@ -47,6 +52,7 @@ public:
 
 private:
   std::shared_ptr<std::set<std::string>> _NeededSuffixes;
+  std::shared_ptr<std::set<std::string>> _ExistingIncludes;
   clang::Rewriter &_Rewriter;
   HavocBounds _Havoc;
 };

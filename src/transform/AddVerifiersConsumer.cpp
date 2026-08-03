@@ -17,8 +17,10 @@
 #include <string>
 
 AddVerifiersConsumer::AddVerifiersConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
+                                           std::shared_ptr<std::set<std::string>> existingIncludes,
                                            clang::Rewriter &rewriter, const HavocBounds &havoc)
-    : _NeededSuffixes(neededSuffixes), _Rewriter(rewriter), _Havoc(havoc) {}
+    : _NeededSuffixes(neededSuffixes), _ExistingIncludes(existingIncludes), _Rewriter(rewriter),
+      _Havoc(havoc) {}
 
 void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   if (_NeededSuffixes->empty())
@@ -54,6 +56,15 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   }
 
   std::string decls;
+
+  // A header this consumer needs may already be in the output (the source
+  // included it and IncludeFinder kept it), and AddStdIncludesConsumer runs
+  // after this one off the same set, so record what is emitted here too.
+  auto includeText = [&](const std::string &header) -> std::string {
+    if (!_ExistingIncludes->insert(header).second)
+      return "";
+    return "#include <" + header + ">\n";
+  };
 
   // Earlier consumers mark the argv harness with "__havoc_argv" and any
   // pointer havocking with "__havoc_bounds". Emit the bounds those reference as
@@ -100,7 +111,7 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   bool needCString = _NeededSuffixes->count("__havoc_cstring");
   bool needBlock = needCString || _NeededSuffixes->count("__havoc_block");
   if (needBlock) {
-    decls.insert(0, "#include <stdlib.h>\n");
+    decls.insert(0, includeText("stdlib.h"));
     if (needCString && !_NeededSuffixes->count("size_t"))
       decls += "extern size_t __VERIFIER_nondet_size_t(void);\n";
     decls += "extern void __VERIFIER_nondet_memory(void *, size_t);\n"
@@ -122,8 +133,7 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   // AssertRewriter rewrote at least one assert(cond) to reach_error()
   if (_NeededSuffixes->count("__reach_error")) {
-    decls += "#include <assert.h>\n"
-             "void reach_error(void) { assert(0); }\n";
+    decls += includeText("assert.h") + "void reach_error(void) { assert(0); }\n";
   }
 
   if (!decls.empty())

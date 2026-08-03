@@ -1,6 +1,5 @@
 #include <assert.h>
 extern int __VERIFIER_nondet_int(void);
-#include <assert.h>
 void reach_error(void) { assert(0); }
 
 int add(int a, int b) {

@@ -104,7 +104,8 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
       std::make_unique<HavocCallsConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
   tempVector.emplace_back(
       std::make_unique<MainGenConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
-  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(neededSuffixes, _Rewriter, _Havoc));
+  tempVector.emplace_back(
+      std::make_unique<AddVerifiersConsumer>(neededSuffixes, existingIncludes, _Rewriter, _Havoc));
   tempVector.emplace_back(
       std::make_unique<AddStdIncludesConsumer>(existingIncludes, _UnresolvedTypeNames, _Rewriter));
 
