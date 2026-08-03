@@ -81,7 +81,7 @@ target_link_libraries(transform_stage_tests PRIVATE
   GTest::gtest_main
 )
 
-add_executable(verify_stage_tests verify/VerifyStageTest.cpp)
+add_executable(verify_stage_tests verify/VerifyStageTest.cpp verify/HeaderClosureTest.cpp)
 
 target_include_directories(verify_stage_tests SYSTEM PRIVATE
   ${LLVM_INCLUDE_DIRS}
