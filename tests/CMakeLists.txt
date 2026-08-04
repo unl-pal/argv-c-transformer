@@ -15,6 +15,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(filter_tests
   common/ClangToolUtilsTest.cpp
+  common/ConfigParserTest.cpp
   filter/CountingVisitorTest.cpp
   filter/FilterFunctionsConsumerTest.cpp
   filter/FiltererStageTest.cpp
@@ -73,9 +74,32 @@ target_link_libraries(transform_stage_tests PRIVATE
   GTest::gtest_main
 )
 
+add_executable(verify_stage_tests verify/VerifyStageTest.cpp)
+
+target_include_directories(verify_stage_tests SYSTEM PRIVATE
+  ${LLVM_INCLUDE_DIRS}
+)
+target_include_directories(verify_stage_tests PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/verify/include
+  ${CMAKE_SOURCE_DIR}/src/verify
+  ${CMAKE_SOURCE_DIR}/src/transform/include
+  ${CMAKE_SOURCE_DIR}/src/transform
+  ${CMAKE_SOURCE_DIR}/src/filter/include
+  ${CMAKE_SOURCE_DIR}/src/common/include
+)
+
+target_link_libraries(verify_stage_tests PRIVATE
+  verify_lib
+  transform_lib
+  filter_lib
+  ${LLVM_LIBS}
+  GTest::gtest_main
+)
+
 # gtest_discover_tests registers each TEST() as a separate CTest case,
 # so `ctest` output shows individual pass/fail rather than just "filter_tests passed"
 include(GoogleTest)
 gtest_discover_tests(filter_tests)
 gtest_discover_tests(transform_tests)
 gtest_discover_tests(transform_stage_tests)
+gtest_discover_tests(verify_stage_tests)

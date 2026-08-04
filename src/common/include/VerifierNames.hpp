@@ -53,6 +53,18 @@ inline const std::unordered_map<std::string, std::string> kVerifierCTypes = {
 };
 
 /**
+ * @brief True for identifiers the pipeline itself injects (verifier nondet
+ * externs/calls and the __havoc_* helpers).
+ *
+ * The verify stage uses this to exempt generated artifacts from the metric
+ * re-check: they are scaffolding, not program logic, and stripping e.g. a
+ * __havoc_block definition would break the benchmark.
+ */
+inline bool isVerifierGenerated(const std::string &name) {
+  return name.rfind("__VERIFIER_", 0) == 0 || name.rfind("__havoc_", 0) == 0;
+}
+
+/**
  * @brief Returns the C type spelling for a verifier suffix.
  *
  * @param suffix Verifier suffix (e.g. "uint").

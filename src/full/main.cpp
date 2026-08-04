@@ -4,6 +4,7 @@
 
 #include "Filterer.hpp"
 #include "Transformer.hpp"
+#include "Verifier.hpp"
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
 #include <filesystem>
@@ -33,5 +34,10 @@ int main(int argc, char **argv) {
     transformInput = filter.getFilterDir();
   Transformer transformer(invocation->configFile, transformInput);
   transformer.run();
+
+  // Verify always reads the transform's resolved output directory, whichever
+  // of default / config / derived-from-input won.
+  Verifier verifier(invocation->configFile, transformer.getTransformDir());
+  verifier.run();
   return 0;
 }

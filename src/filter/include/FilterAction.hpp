@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "ConfigParser.hpp"
 #include "CountingVisitor.hpp"
 
 #include <clang/AST/ASTConsumer.h>

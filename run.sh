@@ -20,12 +20,13 @@ echo "=================================== CMake ================================
 cmake -B build -S . -G Ninja
 
 echo "=================================== Compiling ==================================="
-ninja -C build filter transform
+ninja -C build filter transform verify
 
 set +e
 
 echo "=================================== Reset Directories ==================================="
 rm -r filteredFiles/*
+rm -r transformedFiles/*
 rm -r benchmarks/*
 
 set -e
@@ -42,5 +43,8 @@ echo "=================================== Run Filter ===========================
 
 echo "=================================== Run Transform ==================================="
 ./build/transform "$configFile"
+
+echo "=================================== Run Verify ==================================="
+./build/verify "$configFile"
 
 # find benchmark -empty -delete

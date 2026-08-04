@@ -38,6 +38,7 @@ set(LLVM_LIBS LLVM LLVMSupport clang-cpp clang)
 
 set(HEADERS_FILTER src/filter/include)
 set(HEADERS_TRANSFORM src/transform/include)
+set(HEADERS_VERIFY src/verify/include)
 set(HEADERS_COMMON src/common/include)
 
 set(SOURCE_FILTER
@@ -62,8 +63,15 @@ set(SOURCE_TRANSFORM
   src/transform/Transformer.cpp
 )
 
-# filter_lib / transform_lib let the test binaries link the pipelines without
-# pulling in main()
+set(SOURCE_VERIFY
+  src/verify/HarnessRepairConsumer.cpp
+  src/verify/Verifier.cpp
+  src/verify/VerifyAction.cpp
+  src/verify/VerifyFunctionsConsumer.cpp
+)
+
+# filter_lib / transform_lib / verify_lib let the test binaries link the
+# pipelines without pulling in main()
 add_library(filter_lib STATIC ${SOURCE_FILTER})
 target_include_directories(filter_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_FILTER} ${HEADERS_COMMON})
 target_link_libraries(filter_lib PRIVATE ${LLVM_LIBS})
@@ -72,21 +80,31 @@ add_library(transform_lib STATIC ${SOURCE_TRANSFORM})
 target_include_directories(transform_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_COMMON})
 target_link_libraries(transform_lib PRIVATE ${LLVM_LIBS})
 
+# verify reuses the filter's counting/removal consumers, hence HEADERS_FILTER
+# and the filter_lib link
+add_library(verify_lib STATIC ${SOURCE_VERIFY})
+target_include_directories(verify_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_VERIFY} ${HEADERS_FILTER} ${HEADERS_COMMON})
+target_link_libraries(verify_lib PRIVATE filter_lib ${LLVM_LIBS})
+
 add_executable(filter src/filter/main.cpp)
 add_executable(transform src/transform/main.cpp)
+add_executable(verify src/verify/main.cpp)
 add_executable(full src/full/main.cpp)
 
 target_include_directories(filter SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_FILTER} ${HEADERS_COMMON})
 target_include_directories(transform SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_COMMON})
-target_include_directories(full SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_FILTER} ${HEADERS_COMMON})
+target_include_directories(verify SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_VERIFY} ${HEADERS_FILTER} ${HEADERS_COMMON})
+target_include_directories(full SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_VERIFY} ${HEADERS_TRANSFORM} ${HEADERS_FILTER} ${HEADERS_COMMON})
 
 target_link_libraries(filter PRIVATE filter_lib ${LLVM_LIBS})
 target_link_libraries(transform PRIVATE transform_lib ${LLVM_LIBS})
-target_link_libraries(full PRIVATE filter_lib transform_lib ${LLVM_LIBS})
+target_link_libraries(verify PRIVATE verify_lib filter_lib ${LLVM_LIBS})
+target_link_libraries(full PRIVATE filter_lib transform_lib verify_lib ${LLVM_LIBS})
 
 if(UNIX)
   set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
   set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
+  set_property(TARGET verify PROPERTY LINKER_TYPE LLD)
   set_property(TARGET full PROPERTY LINKER_TYPE LLD)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused -fcolor-diagnostics")
 endif()
@@ -94,4 +112,4 @@ endif()
 enable_testing()
 add_subdirectory(tests)
 
-install(TARGETS filter transform full)
+install(TARGETS filter transform verify full)

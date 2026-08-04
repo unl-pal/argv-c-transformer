@@ -12,14 +12,9 @@
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
-
-/**
- * @brief Three-state gate for a feature flag: whether the config requires a
- * function to have the feature present, forbids it, or doesn't care.
- */
-enum class FeatureGate { Ignore, Require, Forbid };
 
 /**
  * @brief Recursively walks the AST and counts per-function properties.
@@ -120,3 +115,35 @@ private:
   clang::SourceManager *_mgr;
   std::shared_ptr<std::unordered_map<std::string, attributes>> _allFunctions;
 };
+
+/**
+ * @brief Looks up a named field on the complexity axis, shared by the
+ * filter's threshold check and the verify stage's post-transform re-check.
+ * Throws if `name` isn't one of the known metrics — a config key typo should
+ * surface loudly, not silently no-op.
+ */
+inline int complexityField(const CountingVisitor::ComplexityCounts &c, const std::string &name) {
+  if (name == "CallFunc")
+    return c.CallFunc;
+  if (name == "ForLoops")
+    return c.ForLoops;
+  if (name == "IfStmt")
+    return c.IfStmt;
+  if (name == "Param")
+    return c.Param;
+  if (name == "WhileLoops")
+    return c.WhileLoops;
+  throw std::invalid_argument("unknown complexity metric: " + name);
+}
+
+/**
+ * @brief Looks up a named flag on the feature axis. Throws if `name` isn't
+ * one of the known features, for the same reason as complexityField above.
+ */
+inline bool featureField(const CountingVisitor::FeatureFlags &f, const std::string &name) {
+  if (name == "Concurrency")
+    return f.Concurrency;
+  if (name == "FloatingPoint")
+    return f.FloatingPoint;
+  throw std::invalid_argument("unknown feature: " + name);
+}
