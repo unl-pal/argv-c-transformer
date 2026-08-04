@@ -14,7 +14,7 @@
 namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
-// parseIniFile — every config both tools read goes through this one regex,
+// parseIniFile - every config both tools read goes through this one regex,
 // so pin down exactly which line shapes it accepts and skips.
 // ---------------------------------------------------------------------------
 
@@ -61,6 +61,12 @@ TEST_F(ParseIniFileTest, SkipsSectionHeadersAndComments) {
                  "debugLevel = 1\n");
   EXPECT_EQ(m.size(), 1u);
   EXPECT_TRUE(m.count("debugLevel"));
+}
+
+TEST_F(ParseIniFileTest, StripsInlineComment) {
+  auto m = parse("debugLevel = 2 # verbose logging\n");
+  ASSERT_TRUE(m.count("debugLevel"));
+  EXPECT_EQ(m.at("debugLevel"), "2");
 }
 
 TEST_F(ParseIniFileTest, LastDuplicateKeyWins) {

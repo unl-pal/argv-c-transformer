@@ -12,14 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-/**
- * @brief A single property entry in an SV-Comp .yml task file.
- *
- * Maps to one block under the {@code properties:} key. For now every benchmark
- * gets the same fixed set; later, {@code selectProperties} will choose based on
- * AST characteristics (loops → termination, integer arithmetic → no-overflow,
- * etc.).
- */
+/** @brief A single property entry in an SV-Comp .yml task file - one block under the {@code properties:} key. */
 struct BenchmarkProperty {
   std::string propertyFile; ///< Relative path to the .prp file (e.g. "../properties/termination.prp").
   bool expectedVerdict;     ///< {@code true} = program satisfies the property.
@@ -36,16 +29,12 @@ struct verifyConfigs {
 };
 
 /**
- * @brief Top-level orchestrator for the verify step — the third stage of the
+ * @brief Top-level orchestrator for the verify step - the third stage of the
  * pipeline (filter → transform → verify).
  *
- * Reparses each transformed file from scratch, so the fresh AST reflects
- * what the transform actually produced (transform edits are text-only and
- * invisible to the AST they were derived from). On that AST it re-applies
- * the filter's per-function thresholds — a function can fall below them
- * when havocking drops its void calls or prunes emptied control flow — and
- * repairs failures by stripping the body and unharnessing the call in the
- * generated main. A benchmark whose harness empties out is discarded.
+ * Reparses each transformed file, re-applies the filter's thresholds
+ * by stripping the body and unharnessing the call in the generated main.
+ * A benchmark whose harness empties out is discarded.
  *
  * Verify also owns benchmark finalization: the isolated compile check, the
  * .yml task file, and preprocessing to the .i the task file references.
@@ -57,17 +46,18 @@ public:
    *
    * @param configFile Path to the INI-style properties file ("" = defaults only).
    * @param inputPath  Optional directory (or single .c file) of transformed
-   *                   files to verify. When given, it overrides transformDir,
-   *                   and benchmarkDir defaults to "<name>-benchmarks" (a
-   *                   benchmarkDir set in the config still wins).
+   *                   files to verify. Overrides transformDir and derives
+   *                   benchmarkDir as "<name>-benchmarks" (unless input is
+   *                   named the default transformDir), both taking
+   *                   precedence over the config file.
    */
   Verifier(std::string configFile, std::string inputPath = "");
 
   /**
    * @brief Verifies and finalizes a single transformed C file.
    *
-   * Runs the VerifyAction re-check/repair pass, writing the (possibly
-   * repaired) source to benchmarkDir, then discards empty-harness or
+   * Runs the VerifyAction re-check/repair pass, writing the
+   * source to benchmarkDir, then discards empty-harness or
    * non-compiling results and emits the .yml + .i for survivors.
    *
    * @param path Path to the transformed C source file.
@@ -95,7 +85,7 @@ public:
   bool checkCompilable(std::filesystem::path path);
 
   /**
-   * @brief Main entry point — runs verifyAll over transformDir.
+   * @brief Main entry point - runs verifyAll over transformDir.
    *
    * @return The number of finalized benchmarks produced.
    */
@@ -104,11 +94,8 @@ public:
   /**
    * @brief Returns the set of verification properties for a benchmark.
    *
-   * Currently returns a fixed set (termination + no-overflow) for every file,
-   * ignoring the counts. Future: use the per-function counts/features from
-   * the verify pass to conditionally include properties (e.g. only
-   * termination if loops are present, only no-overflow if integer arithmetic
-   * is present, unreach-call when {@code reach_error()} guards exist).
+   * Currently a fixed set (termination + no-overflow) for every file, ignoring
+   * counts; the hook for future AST-driven property selection.
    *
    * @param counts Per-function counts from the verify pass over the final source.
    * @return Vector of properties to include in the task .yml.
@@ -140,12 +127,11 @@ public:
   bool preprocess(std::filesystem::path cPath);
 
 private:
-  /// Thresholds and feature gates re-applied post-transform — the same
+  /// Thresholds and feature gates re-applied post-transform - the same
   /// PipelineConfig structure the filter stage applies pre-transform.
   PipelineConfig config;
   /// Path settings and flags for this stage.
   struct verifyConfigs configuration;
-  /// Counts for the end-of-run summary.
+  /// Count for the end-of-run summary.
   int _totalProcessed = 0;
-  int _functionsUnharnessed = 0;
 };

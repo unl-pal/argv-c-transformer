@@ -18,11 +18,7 @@ VerifyFunctionsConsumer::VerifyFunctionsConsumer(
 
 void VerifyFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &) {
   for (const auto &[name, attr] : *_Counts) {
-    // "Program" is file scope, main is the synthesized harness, and
-    // __VERIFIER_*/__havoc_* are injected scaffolding — none are subject to
-    // the re-check. Everything else (including original_main) is program
-    // logic that must still meet the configured thresholds.
-    if (name == "Program" || name == "main" || isVerifierGenerated(name))
+    if (name == "FileScope" || name == "main" || isVerifierGenerated(name))
       continue;
 
     bool reject = false;

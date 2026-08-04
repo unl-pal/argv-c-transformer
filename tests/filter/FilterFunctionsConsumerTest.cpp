@@ -85,7 +85,7 @@ bool contains(const std::vector<std::string> &v, const std::string &name) {
 // ---------------------------------------------------------------------------
 
 TEST(FilterFunctionsConsumer, MainRemovedWhenConcurrencyForbidden) {
-  // pthread_create() called directly inside main (no helper function) — this
+  // pthread_create() called directly inside main (no helper function). This
   // is exactly the case that used to slip through filtering untouched.
   auto features = permissiveFeatureConfig();
   features["Concurrency"] = FeatureGate::Forbid;
@@ -105,7 +105,7 @@ TEST(FilterFunctionsConsumer, MainRemovedWhenConcurrencyForbidden) {
 
 TEST(FilterFunctionsConsumer, MainKeptWhenConcurrencyIgnored) {
   // Same body as above, but Concurrency=Ignore (the default) means the check
-  // is off entirely — main should survive untouched.
+  // is off entirely; main should survive untouched.
   auto r = runFilter(R"(
     typedef unsigned long pthread_t;
     int pthread_create(pthread_t *t, void *attr, void *(*fn)(void *), void *arg);
@@ -125,7 +125,7 @@ TEST(FilterFunctionsConsumer, MainKeptWhenConcurrencyIgnored) {
 // ---------------------------------------------------------------------------
 
 TEST(FilterFunctionsConsumer, MainRemovedByOrdinaryThresholdCheck) {
-  // main is no longer blanket-exempt from the general min/max ladder — a
+  // main is no longer blanket-exempt from the general min/max ladder; a
   // for-loop count over the configured max should remove it just like any
   // other function.
   auto complexity = permissiveComplexityConfig();
@@ -156,7 +156,7 @@ TEST(FilterFunctionsConsumer, MainKeptWhenThresholdsSatisfied) {
 // ---------------------------------------------------------------------------
 
 TEST(FilterFunctionsConsumer, MainNotRemovedForUnsupportedArgvParam) {
-  // char** (argv) has no __VERIFIER_nondet_* equivalent — an ordinary
+  // char** (argv) has no __VERIFIER_nondet_* equivalent; an ordinary
   // function with this param type would be removed by the trailing
   // param-type check, but main is exempt from that specific check since
   // MainGenConsumer handles argc/argv itself.

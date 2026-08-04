@@ -14,7 +14,7 @@
  * read from and where transformed files are written.
  */
 struct transformConfigs {
-  int debugLevel;           ///< Verbosity level for debug output (currently unused).
+  int debugLevel;           ///< Verbosity level for debug output (see DebugLog.hpp).
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string transformDir; ///< Output directory for transformed files (verify-stage input).
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
@@ -40,9 +40,9 @@ public:
    *
    * @param configFile Path to the INI-style properties file ("" = defaults only).
    * @param inputPath  Optional directory (or single .c file) of filtered files
-   *                   to transform. When given, it overrides filterDir, and
-   *                   transformDir defaults to "<name>-transformed" (a
-   *                   transformDir set in the config still wins).
+   *                   to transform. Overrides filterDir and derives
+   *                   transformDir as "<name>-transformed", both taking
+   *                   precedence over the config file.
    */
   Transformer(std::string configFile, std::string inputPath = "");
 
@@ -94,18 +94,6 @@ public:
   int transformAll(std::filesystem::path path);
 
   /**
-   * @brief Detects a trivial benchmark whose generated main calls nothing.
-   *
-   * When every function in a file is skipped by the harness
-   * MainGenConsumer emits an empty `main` whose body
-   * is just `return 0;` and is discarded
-   *
-   * @param path Path to the transformed C file to inspect.
-   * @return true if the generated main contains no calls.
-   */
-  bool harnessIsEmpty(std::filesystem::path path);
-
-  /**
    * @brief Parses the config file via the shared {@code parsePipelineConfig},
    * keeping the transform-relevant settings.
    *
@@ -114,7 +102,7 @@ public:
   void parseConfig(std::string configFile);
 
   /**
-   * @brief Main entry point — runs transformAll over filterDir.
+   * @brief Main entry point - runs transformAll over filterDir.
    *
    * @return The number of transformed files produced.
    */

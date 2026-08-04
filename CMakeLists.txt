@@ -47,7 +47,6 @@ set(SOURCE_FILTER
   src/filter/FilterAction.cpp
   src/filter/Filterer.cpp
   src/filter/FilterFunctionsConsumer.cpp
-  src/filter/FrontendFactoryWithArgs.cpp
   src/filter/RemoveConsumer.cpp
   src/filter/RemoveVisitor.cpp
 )
@@ -55,7 +54,6 @@ set(SOURCE_FILTER
 set(SOURCE_TRANSFORM
   src/transform/AddStdIncludesConsumer.cpp
   src/transform/AddVerifiersConsumer.cpp
-  src/transform/ArgsFrontendActionFactory.cpp
   src/transform/MainGenConsumer.cpp
   src/transform/HavocCallsVisitor.cpp
   src/transform/HavocCallsConsumer.cpp
@@ -89,27 +87,29 @@ target_link_libraries(verify_lib PRIVATE filter_lib ${LLVM_LIBS})
 add_executable(filter src/filter/main.cpp)
 add_executable(transform src/transform/main.cpp)
 add_executable(verify src/verify/main.cpp)
-add_executable(full src/full/main.cpp)
+# full binary that runs the entire pipeline:
+add_executable(argv-c src/full/main.cpp)
 
 target_include_directories(filter SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_FILTER} ${HEADERS_COMMON})
 target_include_directories(transform SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_COMMON})
 target_include_directories(verify SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_VERIFY} ${HEADERS_FILTER} ${HEADERS_COMMON})
-target_include_directories(full SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_VERIFY} ${HEADERS_TRANSFORM} ${HEADERS_FILTER} ${HEADERS_COMMON})
+target_include_directories(argv-c SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_VERIFY} ${HEADERS_TRANSFORM} ${HEADERS_FILTER} ${HEADERS_COMMON})
 
 target_link_libraries(filter PRIVATE filter_lib ${LLVM_LIBS})
 target_link_libraries(transform PRIVATE transform_lib ${LLVM_LIBS})
 target_link_libraries(verify PRIVATE verify_lib filter_lib ${LLVM_LIBS})
-target_link_libraries(full PRIVATE filter_lib transform_lib verify_lib ${LLVM_LIBS})
+target_link_libraries(argv-c PRIVATE filter_lib transform_lib verify_lib ${LLVM_LIBS})
 
 if(UNIX)
   set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
   set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
   set_property(TARGET verify PROPERTY LINKER_TYPE LLD)
-  set_property(TARGET full PROPERTY LINKER_TYPE LLD)
+  set_property(TARGET argv-c PROPERTY LINKER_TYPE LLD)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused -fcolor-diagnostics")
 endif()
 
 enable_testing()
 add_subdirectory(tests)
 
-install(TARGETS filter transform verify full)
+# Only argv-c is meant for a normal user's install
+install(TARGETS argv-c)

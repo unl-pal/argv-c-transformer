@@ -18,7 +18,7 @@ CountingVisitor::CountingVisitor(
     clang::ASTContext *C,
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> allFunctions)
     : _C(C), _mgr(&(C->getSourceManager())), _allFunctions(allFunctions) {
-  _allFunctions->try_emplace("Program");
+  _allFunctions->try_emplace("FileScope");
 }
 
 std::string CountingVisitor::getDeclParentFuncName(const clang::Decl &D) {
@@ -28,7 +28,7 @@ std::string CountingVisitor::getDeclParentFuncName(const clang::Decl &D) {
       return FD->getNameAsString();
     }
   }
-  return "Program";
+  return "FileScope";
 }
 
 std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
@@ -37,7 +37,7 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
   clang::DynTypedNodeList parents = _C->getParents(S);
   if (parents.size()) {
     for (const clang::DynTypedNode &parent : parents) {
-      // DynTypedNode is type-erased — try each possible parent kind
+      // DynTypedNode is type-erased - try each possible parent kind
       if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>())
         return fd->getNameAsString();
       if (const clang::Stmt *s = parent.get<clang::Stmt>())
@@ -46,7 +46,7 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
         return getDeclParentFuncName(*d);
     }
   }
-  return "Program";
+  return "FileScope";
 }
 
 bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
@@ -69,8 +69,9 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
     clang::QualType argType = arg->getType();
     if (argType->isPointerType())
       argType = argType->getPointeeType();
-    auto info = stdHeaderForType(argType.getUnqualifiedType().getAsString());
-    if (info && info->category == HeaderCategory::Concurrency) {
+    auto it = StdHeaders.find(argType.getUnqualifiedType().getAsString());
+    if (it != StdHeaders.end() &&
+        (it->second == "pthread.h" || it->second == "threads.h" || it->second == "semaphore.h")) {
       _allFunctions->at(getStmtParentFuncName(*CE)).Features.Concurrency = true;
       break;
     }
@@ -86,8 +87,9 @@ bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
     if (varType->isFloatingType())
       _allFunctions->at(getDeclParentFuncName(*VD)).Features.FloatingPoint = true;
     // check for concurrency
-    auto info = stdHeaderForType(varType.getUnqualifiedType().getAsString());
-    if (info && info->category == HeaderCategory::Concurrency)
+    auto it = StdHeaders.find(varType.getUnqualifiedType().getAsString());
+    if (it != StdHeaders.end() &&
+        (it->second == "pthread.h" || it->second == "threads.h" || it->second == "semaphore.h"))
       _allFunctions->at(getDeclParentFuncName(*VD)).Features.Concurrency = true;
   }
   return true;
@@ -95,10 +97,8 @@ bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
 
 bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
   if (_mgr->isInMainFile(FD->getLocation())) {
-    if (!_allFunctions->count(FD->getNameAsString())) {
+    if (!_allFunctions->count(FD->getNameAsString()))
       _allFunctions->try_emplace(FD->getNameAsString());
-      _allFunctions->at("Program").Complexity.Functions++;
-    }
     attributes &entry = _allFunctions->at(FD->getNameAsString());
     entry.Complexity.Param = FD->getNumParams();
     if (FD->getReturnType()->isFloatingType())
@@ -122,5 +122,27 @@ bool CountingVisitor::VisitForStmt(clang::ForStmt *F) {
 bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
   if (_mgr->isInMainFile(W->getWhileLoc()))
     _allFunctions->at(getStmtParentFuncName(*W)).Complexity.WhileLoops++;
+  return true;
+}
+
+bool CountingVisitor::VisitBinaryOperator(clang::BinaryOperator *B) {
+  // Only signed overlfow is UB
+  if (_mgr->isInMainFile(B->getOperatorLoc()) && B->getType()->isSignedIntegerType()) {
+    clang::BinaryOperator::Opcode op =
+        B->isCompoundAssignmentOp()
+            ? clang::BinaryOperator::getOpForCompoundAssignment(B->getOpcode())
+            : B->getOpcode();
+    if (clang::BinaryOperator::isMultiplicativeOp(op) || clang::BinaryOperator::isAdditiveOp(op) ||
+        clang::BinaryOperator::isShiftOp(op))
+      _allFunctions->at(getStmtParentFuncName(*B)).Complexity.Operations++;
+  }
+  return true;
+}
+
+bool CountingVisitor::VisitUnaryOperator(clang::UnaryOperator *U) {
+  if (_mgr->isInMainFile(U->getOperatorLoc()) && U->getType()->isSignedIntegerType()) {
+    if (U->canOverflow())
+      _allFunctions->at(getStmtParentFuncName(*U)).Complexity.Operations++;
+  }
   return true;
 }

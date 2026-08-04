@@ -27,10 +27,10 @@ namespace fs = std::filesystem;
 // ---------------------------------------------------------------------------
 //
 // Each test case is a pair of files in tests/transform/cases/:
-//   <name>.input.c     — source fed through the full TransformAction pipeline
+//   <name>.input.c     - source fed through the full TransformAction pipeline
 //                        (include stripping -> call havocking -> main
 //                        generation -> verifier extern injection)
-//   <name>.expected.c  — the exact output the pipeline must produce
+//   <name>.expected.c  - the exact output the pipeline must produce
 //
 // Support headers (plain .h files) live alongside the cases and resolve
 // through the real filesystem, so #include "..." behaves as in the real

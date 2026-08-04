@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "include/Filterer.hpp"
-#include "FrontendFactoryWithArgs.hpp"
+#include "FilterAction.hpp"
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
@@ -18,23 +18,20 @@
 #include <iostream>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
-#include <sstream>
 #include <string>
 
 const std::string defaultFilterDir = "filteredFiles";
-const std::string defaultDatabaseDir = "database";
+const std::string defaultDatabaseDir = "repos";
 
 Filterer::Filterer(std::string configFile, std::string inputPath) {
-  // When an input path is given on the command line, derived directories act
-  // as defaults (a config file can still override filterDir), but the input
-  // itself always wins over any databaseDir in the config.
-  configuration.filterDir =
-      inputPath.empty() ? defaultFilterDir : inputBaseName(inputPath) + "-filtered";
+  configuration.filterDir = defaultFilterDir;
   configuration.databaseDir = defaultDatabaseDir;
   if (!configFile.empty())
     parseConfigFile(configFile);
-  if (!inputPath.empty())
+  if (!inputPath.empty()) {
     configuration.databaseDir = inputPath;
+    configuration.filterDir = inputBaseName(inputPath) + "-filtered";
+  }
 };
 
 void Filterer::parseConfigFile(std::string configFile) {
@@ -43,13 +40,10 @@ void Filterer::parseConfigFile(std::string configFile) {
   if (!config.databaseDir.empty()) {
     configuration.databaseDir = config.databaseDir;
     if (!std::filesystem::exists(config.databaseDir))
-      std::cerr << "Database directory not found: " << config.databaseDir << std::endl;
+      debugLog(0, "Database directory not found: " + config.databaseDir);
   }
-  if (!config.filterDir.empty()) {
+  if (!config.filterDir.empty())
     configuration.filterDir = config.filterDir;
-    if (!std::filesystem::exists(config.filterDir))
-      std::filesystem::create_directory(config.filterDir);
-  }
 
   globalDebugLevel() = config.fileSettings.at("debugLevel");
 
@@ -71,7 +65,7 @@ void Filterer::parseConfigFile(std::string configFile) {
 bool Filterer::checkPotentialFile(std::string fileName) {
   std::ifstream file(fileName);
   if (!file.is_open()) {
-    std::cerr << "Failed to open file: " << fileName << std::endl;
+    debugLog(0, "Failed to open file: " + fileName);
     return false;
   }
 
@@ -98,13 +92,13 @@ bool Filterer::checkPotentialFile(std::string fileName) {
 int Filterer::getAllCFiles(std::filesystem::path pathObject,
                            std::vector<std::string> &filesToFilter, int numFiles) {
   if (!std::filesystem::exists(pathObject)) {
-    debugLog(2, "[filter] path does not exist: " + pathObject.string());
+    debugLog(1, "[filter] path does not exist: " + pathObject.string());
     return 0;
   }
   if (std::filesystem::is_regular_file(pathObject)) {
     if (pathObject.has_extension()) {
       if (pathObject.extension() == ".c") {
-        debugLog(2, "[filter] queued: " + pathObject.filename().string());
+        debugLog(3, "[filter] queued: " + pathObject.filename().string());
         filesToFilter.push_back(pathObject.string());
         return 1;
       } else {
@@ -135,7 +129,6 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   return 0;
 }
 
-/// Main driver for the Filter System
 int Filterer::run() {
   std::filesystem::path pathObject(configuration.databaseDir);
   std::vector<std::string> filesToFilter;
@@ -146,7 +139,10 @@ int Filterer::run() {
   debugLog(1, "[filter] found " + std::to_string(filesFound) + " .c file(s)");
 
   int passed = 0;
+  int i = 0;
   for (const std::string &fileName : filesToFilter) {
+    std::cout << "\r[filter] " << ++i << "/" << filesFound << std::flush;
+    debugLog(1, "[filter] file: " + fileName);
     if (!checkPotentialFile(fileName))
       continue;
     passed++;
@@ -162,7 +158,7 @@ int Filterer::run() {
 
     // Hard guard: never write over the source, whatever the path arithmetic.
     if (std::filesystem::weakly_canonical(oldPath) == std::filesystem::weakly_canonical(newPath)) {
-      std::cerr << "Refusing to overwrite source file: " << oldPath.string() << std::endl;
+      debugLog(0, "Refusing to overwrite source file: " + oldPath.string());
       continue;
     }
 
@@ -170,26 +166,21 @@ int Filterer::run() {
     std::error_code ec;
     llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
     if (ec) {
-      std::cerr << "Cannot open output file " << newPath.string() << ": " << ec.message()
-                << std::endl;
+      debugLog(0, "Cannot open output file " + newPath.string() + ": " + ec.message());
       continue;
     }
 
     FrontendFactoryWithArgs factory(&config.complexity, &config.features, output);
     bool ran = runToolOnFile(oldPath.string(), factory);
     output.close();
-    if (!ran)
+    if (!ran) {
+      debugLog(1, "[filter] clang tool failed on: " + oldPath.string());
       continue;
-
-    if (globalDebugLevel() >= 2 && std::filesystem::exists(newPath)) {
-      std::ifstream outFile(newPath.string());
-      if (outFile.is_open()) {
-        std::stringstream contents;
-        contents << outFile.rdbuf();
-        debugLog(2, "[filter] output for " + newPath.string() + ":\n" + contents.str());
-      }
     }
+
   }
+  if (filesFound > 0)
+    std::cout << std::endl;
 
   std::cout << "\n=== Filter summary ===\n"
             << "  Files found:            " << filesFound << "\n"

@@ -24,30 +24,27 @@ const std::string defaultTransformDir = "transformedFiles";
 const std::string defaultBenchmarkDir = "benchmarks";
 
 Verifier::Verifier(std::string configFile, std::string inputPath) : configuration() {
-  // Apply defaults; the config file overrides any keys it sets. When an
-  // input path is given on the command line, the derived benchmarkDir acts
-  // as a default (a config file can still override it), but the input itself
-  // always wins over any transformDir in the config.
   config = parsePipelineConfig(configFile);
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
-  if (!config.benchmarkDir.empty())
-    configuration.benchmarkDir = config.benchmarkDir;
-  else if (!inputPath.empty() && inputBaseName(inputPath) != defaultTransformDir)
-    configuration.benchmarkDir = inputBaseName(inputPath) + "-benchmarks";
-  else
-    configuration.benchmarkDir = defaultBenchmarkDir;
-  if (!inputPath.empty())
+  configuration.benchmarkDir =
+      config.benchmarkDir.empty() ? defaultBenchmarkDir : config.benchmarkDir;
+  if (!inputPath.empty()) {
     configuration.transformDir = inputPath;
+    if (inputBaseName(inputPath) != defaultTransformDir)
+      configuration.benchmarkDir = inputBaseName(inputPath) + "-benchmarks";
+  }
   globalDebugLevel() = configuration.debugLevel;
 }
 
 bool Verifier::verifyFile(std::filesystem::path path) {
-  debugLog(1, "Verifying: " + path.string());
-  if (!std::filesystem::exists(path))
+  debugLog(1, "[verify] file " + std::to_string(_totalProcessed) + ": " + path.string());
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[verify] path does not exist: " + path.string());
     return false;
+  }
 
   // Transform output is already flat, so the benchmark keeps the filename.
   std::filesystem::path outPath =
@@ -57,30 +54,25 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   std::filesystem::create_directories(outPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(outPath.string()), ec);
   if (ec) {
-    std::cerr << "Cannot open output file " << outPath.string() << ": " << ec.message()
-              << std::endl;
+    debugLog(0, "Cannot open output file " + outPath.string() + ": " + ec.message());
     return false;
   }
 
   // Shared state the driver reads back after the tool run: fresh counts (for
-  // property selection), the rejected names, and the harness census.
+  // property selection) and the rejected names.
   auto counts = std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
   auto toRemove = std::make_shared<std::vector<std::string>>();
-  auto result = std::make_shared<VerifyResult>();
 
-  VerifyActionFactory factory(&config.complexity, &config.features, counts, toRemove, result,
-                              output);
+  VerifyActionFactory factory(&config.complexity, &config.features, counts, toRemove, output);
   bool ran = runToolOnFile(path.string(), factory);
   output.close();
   if (!ran) {
+    debugLog(1, "[verify] clang tool failed on: " + path.string());
     std::filesystem::remove(outPath);
     return false;
   }
-  _functionsUnharnessed += result->removedCalls;
 
-  // Nothing left worth verifying: every harnessed function was repaired away
-  // (or the harness was empty to begin with).
-  if (result->harnessCalls == 0) {
+  if (harnessIsEmpty(outPath)) {
     debugLog(1, "[verify] discarded (harness empty after re-check): " + outPath.string());
     std::filesystem::remove(outPath);
     return false;
@@ -89,16 +81,18 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   // Drop the output if it doesn't compile and we're keeping compiles only
   if (!checkCompilable(outPath)) {
     if (configuration.keepCompilesOnly) {
+      debugLog(1, "[verify] discarded (fails compile check): " + outPath.string());
       std::filesystem::remove(outPath);
       return false;
     }
     // Kept for inspection, but not a benchmark: no task file, no .i.
+    debugLog(1, "[verify] kept but not a benchmark (fails compile check): " + outPath.string());
     return false;
   }
 
   writeBenchmarkTask(outPath, *counts);
   if (!preprocess(outPath)) {
-    std::cerr << "Preprocessing failed, discarding: " << outPath.string() << std::endl;
+    debugLog(0, "Preprocessing failed, discarding: " + outPath.string());
     std::filesystem::path ymlPath = outPath;
     ymlPath.replace_extension(".yml");
     std::filesystem::remove(outPath);
@@ -109,8 +103,10 @@ bool Verifier::verifyFile(std::filesystem::path path) {
 }
 
 int Verifier::verifyAll(std::filesystem::path path) {
-  if (!std::filesystem::exists(path))
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[verify] path does not exist: " + path.string());
     return 0;
+  }
   if (std::filesystem::is_directory(path)) {
     int successes = 0;
     for (const std::filesystem::directory_entry &entry :
@@ -119,10 +115,17 @@ int Verifier::verifyAll(std::filesystem::path path) {
     }
     return successes;
   }
-  if (std::filesystem::is_regular_file(path) && path.extension() == ".c") {
-    _totalProcessed++;
-    return verifyFile(path) ? 1 : 0;
+  if (std::filesystem::is_regular_file(path)) {
+    if (path.extension() == ".c") {
+      _totalProcessed++;
+      if (globalDebugLevel() == 0)
+        std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
+      return verifyFile(path) ? 1 : 0;
+    }
+    debugLog(3, "[verify] skipped (not .c): " + path.filename().string());
+    return 0;
   }
+  debugLog(3, "[verify] ignored: " + path.filename().string());
   return 0;
 }
 
@@ -172,14 +175,23 @@ bool Verifier::checkCompilable(std::filesystem::path path) {
 
 std::vector<BenchmarkProperty> Verifier::selectProperties(
     const std::unordered_map<std::string, CountingVisitor::attributes> &counts) {
-  // TODO(you): use the per-function counts/features to conditionally include
-  // properties (loops → termination, int arithmetic → no-overflow, etc.).
-  // For now, every benchmark gets both.
-  (void)counts;
-  return {
-      {"../properties/no-overflow.prp", true},
-      {"../properties/termination.prp", true},
-  };
+  std::vector<BenchmarkProperty> properties;
+  bool loopsPresent = false;
+  bool intArithPresent = false;
+  for (const auto &[name, attr] : counts) {
+    if (!loopsPresent && (attr.Complexity.ForLoops || attr.Complexity.WhileLoops)) {
+      loopsPresent = true;
+      properties.push_back({"../properties/termination.prp", true});
+    }
+    if (!intArithPresent && attr.Complexity.Operations) {
+      // The operations check is pretty naive as it counts any/all binary and unary operations with side effects
+      intArithPresent = true;
+      properties.push_back({"../properties/no-overflow.prp", true});
+    }
+    if (loopsPresent && intArithPresent)
+      break;
+  }
+  return properties;
 }
 
 void Verifier::writeBenchmarkTask(
@@ -193,7 +205,7 @@ void Verifier::writeBenchmarkTask(
 
   std::ofstream out(ymlPath);
   if (!out) {
-    std::cerr << "Failed to write task file: " << ymlPath.string() << std::endl;
+    debugLog(0, "Failed to write task file: " + ymlPath.string());
     return;
   }
 
@@ -227,7 +239,7 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
 int Verifier::run() {
   std::filesystem::path path(configuration.transformDir);
   if (!std::filesystem::exists(path)) {
-    std::cerr << "Transform directory not found: " << configuration.transformDir << std::endl;
+    debugLog(0, "Transform directory not found: " + configuration.transformDir);
     return 0;
   }
   int result = verifyAll(path);
@@ -235,7 +247,6 @@ int Verifier::run() {
   std::cout << "\n=== Verify summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"
             << "  Benchmarks produced:    " << result << "\n"
-            << "  Discarded/failed:       " << discarded << "\n"
-            << "  Functions unharnessed:  " << _functionsUnharnessed << std::endl;
+            << "  Discarded/failed:       " << discarded << std::endl;
   return result;
 }

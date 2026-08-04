@@ -26,23 +26,23 @@
  * {@code false} from any {@code Visit*} stops the entire walk.
  *
  * Results are written into the {@code _allFunctions} map passed at construction
- * — the same map that {@code FilterFunctionsConsumer} reads next in the
- * pipeline. The special key {@code "Program"} accumulates counts for anything
+ * - the same map that {@code FilterFunctionsConsumer} reads next in the
+ * pipeline. The special key {@code "FileScope"} accumulates counts for anything
  * declared at file scope rather than inside a function.
  */
 class CountingVisitor : public clang::RecursiveASTVisitor<CountingVisitor> {
 public:
-  /** @brief Per-function structural complexity counts — the "how much" axis. */
+  /** @brief Per-function structural complexity counts - the "how much" axis. */
   struct ComplexityCounts {
     int CallFunc = 0;
     int ForLoops = 0;
-    int Functions = 0;
     int IfStmt = 0;
     int Param = 0;
     int WhileLoops = 0;
+    int Operations = 0; // ops w/side-effects on signed types (for UB/no-overflow property detection)
   };
 
-  /** @brief Per-function feature presence flags — the "what kind" axis. */
+  /** @brief Per-function feature presence flags - the "what kind" axis. */
   struct FeatureFlags {
     bool Concurrency = false;
     bool FloatingPoint = false;
@@ -55,7 +55,7 @@ public:
   };
 
   /**
-   * @brief Constructs the visitor and seeds the map with the "Program" entry.
+   * @brief Constructs the visitor and seeds the map with the "FileScope" entry.
    *
    * @param C             AST context, used for parent-map lookups.
    * @param allFunctions  Output map shared with downstream consumers.
@@ -66,14 +66,11 @@ public:
 
   /**
    * @brief Walks up the parent chain of a {@code Stmt} to find its enclosing
-   * function name.
-   *
-   * {@code Stmt} has no direct {@code getParentFunctionOrMethod()} so this
-   * recursively climbs via {@code ASTContext::getParents()} until it reaches a
-   * {@code FunctionDecl} or falls back to {@code getDeclParentFuncName}.
+   * function name, via {@code ASTContext::getParents()} ({@code Stmt} has no
+   * direct {@code getParentFunctionOrMethod()}).
    *
    * @param S  Statement whose enclosing function to find.
-   * @return   Function name, or {@code "Program"} if at file scope.
+   * @return   Function name, or {@code "FileScope"} if at file scope.
    */
   std::string getStmtParentFuncName(const clang::Stmt &S);
 
@@ -84,7 +81,7 @@ public:
    * {@code Decl} nodes.
    *
    * @param D  Declaration whose enclosing function to find.
-   * @return   Function name, or {@code "Program"} if at file scope.
+   * @return   Function name, or {@code "FileScope"} if at file scope.
    */
   std::string getDeclParentFuncName(const clang::Decl &D);
 
@@ -110,6 +107,12 @@ public:
   /** @brief Counts while-loop occurrences per function. */
   bool VisitWhileStmt(clang::WhileStmt *W);
 
+  /** @brief Counts signed binary operations per function. */
+  bool VisitBinaryOperator(clang::BinaryOperator *BO);
+
+  /** @brief Counts signed unary operations per function. */
+  bool VisitUnaryOperator(clang::UnaryOperator *UO);
+
 private:
   clang::ASTContext *_C;
   clang::SourceManager *_mgr;
@@ -119,7 +122,7 @@ private:
 /**
  * @brief Looks up a named field on the complexity axis, shared by the
  * filter's threshold check and the verify stage's post-transform re-check.
- * Throws if `name` isn't one of the known metrics — a config key typo should
+ * Throws if `name` isn't one of the known metrics; a config key typo should
  * surface loudly, not silently no-op.
  */
 inline int complexityField(const CountingVisitor::ComplexityCounts &c, const std::string &name) {
@@ -133,6 +136,8 @@ inline int complexityField(const CountingVisitor::ComplexityCounts &c, const std
     return c.Param;
   if (name == "WhileLoops")
     return c.WhileLoops;
+  if (name == "Operations")
+    return c.Operations;
   throw std::invalid_argument("unknown complexity metric: " + name);
 }
 

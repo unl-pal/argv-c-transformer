@@ -7,6 +7,7 @@
 #include "Verifier.hpp"
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
+#include "ConfigParser.hpp"
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -14,9 +15,10 @@
 
 int main(int argc, char **argv) {
   checkClangVersion();
+  checkRuntimeClangVersion();
   std::optional<CliInvocation> invocation = parseCliArgs(argc, argv);
   if (!invocation) {
-    printUsage("full");
+    printUsage("argv-c");
     return 1;
   }
   if (!invocation->configFile.empty() && !std::filesystem::exists(invocation->configFile)) {
@@ -39,5 +41,13 @@ int main(int argc, char **argv) {
   // of default / config / derived-from-input won.
   Verifier verifier(invocation->configFile, transformer.getTransformDir());
   verifier.run();
+
+  // cleanup if user didn't specify intermediate dirs
+  PipelineConfig rawConfig = parsePipelineConfig(invocation->configFile);
+  if (rawConfig.filterDir.empty() && rawConfig.transformDir.empty()) {
+    std::error_code ec;
+    std::filesystem::remove_all(filter.getFilterDir(), ec);
+    std::filesystem::remove_all(transformer.getTransformDir(), ec);
+  }
   return 0;
 }

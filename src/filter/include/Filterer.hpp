@@ -14,7 +14,7 @@
  * @brief Runtime configuration loaded from the INI-style config file.
  *
  * Holds the path settings and flags that live outside the per-function
- * config maps — i.e. things that are not per-function complexity ranges or
+ * config maps - i.e. things that are not per-function complexity ranges or
  * feature gates.
  */
 struct filterConfigs {
@@ -37,9 +37,9 @@ public:
    *
    * @param configFile Path to the INI-style properties file ("" = defaults only).
    * @param inputPath  Optional directory or .c file to filter. When given, it
-   *                   overrides databaseDir, and filterDir defaults to
-   *                   "<name>-filtered" (a filterDir set in the config still
-   *                   wins over the derived name).
+   *                   overrides databaseDir and sets filterDir to
+   *                   "<name>-filtered", both taking precedence over
+   *                   whatever the config file sets for those keys.
    */
   Filterer(std::string configFile, std::string inputPath = "");
 
@@ -78,7 +78,7 @@ public:
                    int numFiles = 0);
 
   /**
-   * @brief Main entry point — collects files, pre-filters, and runs the AST pipeline.
+   * @brief Main entry point - collects files, pre-filters, and runs the AST pipeline.
    *
    * For each .c file that passes {@code checkPotentialFile}, builds a Clang
    * tool invocation and runs the full filter consumer chain (count → filter →

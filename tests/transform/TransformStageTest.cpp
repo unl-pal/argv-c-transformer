@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 #include <sstream>
 #include <string>
+#include <unistd.h>
 
 namespace fs = std::filesystem;
 
@@ -56,7 +57,7 @@ protected:
     cfg << "[File Locations]\n"
         << "filterDir = " << filterDir.string() << "\n"
         << "transformDir = " << transformDir.string() << "\n"
-        << "[Debugging Flags]\n"
+        << "[Debug]\n"
         << "debugLevel = 0\n";
   }
 

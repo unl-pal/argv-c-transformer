@@ -4,6 +4,7 @@
 
 #include "include/HavocCallsVisitor.hpp"
 
+#include "DebugLog.hpp"
 #include "VerifierNames.hpp"
 
 #include <clang/AST/DeclBase.h>
@@ -17,6 +18,14 @@
 
 namespace {
 
+// Formats a source location as "file:line" for per-decision debug logging.
+std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
+  clang::PresumedLoc presumed = mgr.getPresumedLoc(loc);
+  if (!presumed.isValid())
+    return "<unknown>";
+  return std::string(presumed.getFilename()) + ":" + std::to_string(presumed.getLine());
+}
+
 // Returns the VarDecl behind an expression if it's a plain variable
 // reference, else null.
 const clang::VarDecl *referencedVar(const clang::Expr *E) {
@@ -29,7 +38,7 @@ const clang::VarDecl *referencedVar(const clang::Expr *E) {
 
 // Conservative purity check used to decide whether an `if` condition can be
 // dropped along with its (now no-op) branches. Anything not explicitly
-// recognized here — calls, overloaded operators, volatile accesses, etc. —
+// recognized here - calls, overloaded operators, volatile accesses, etc. -
 // is treated as side-effecting, so we only ever prune conditionals we can
 // prove are safe to remove.
 //
@@ -102,13 +111,17 @@ std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
 // side-effect-free, since the variable it introduces cannot be observed
 // outside the loop.
 bool isInitSideEffectFree(const clang::Stmt *init) {
+  std::set<const clang::VarDecl *> mutableVars = loopLocalVars(init);
   if (!init)
     return true;
   if (const auto *declStmt = clang::dyn_cast<clang::DeclStmt>(init)) {
-    if (!declStmt->isSingleDecl())
-      return false;
-    const auto *VD = clang::dyn_cast<clang::VarDecl>(declStmt->getSingleDecl());
-    return VD && isSideEffectFree(VD->getInit());
+    for (const auto *D: declStmt->decls()) {
+      if (const auto *varDecl = clang::dyn_cast<clang::VarDecl>(D)) {
+        if (!isSideEffectFree(varDecl->getInit(), mutableVars))
+          return false;
+      }
+    }
+    return true;
   }
   if (const auto *E = clang::dyn_cast<clang::Expr>(init))
     return isSideEffectFree(E);
@@ -122,10 +135,6 @@ HavocCallsVisitor::HavocCallsVisitor(clang::ASTContext *C,
                                      clang::Rewriter &rewriter)
     : _C(C), _NeededSuffixes(neededSuffixes), _Rewriter(rewriter) {};
 
-// Havoc every call to a function from this file so each function body is
-// self-contained (intraprocedural): the call's value is replaced by a fresh
-// nondet of its return type. Library calls (callee declared in a header,
-// e.g. the C standard library) are kept as-is.
 bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   clang::SourceManager &mgr = _C->getSourceManager();
   clang::SourceLocation loc = E->getExprLoc();
@@ -150,9 +159,12 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     // A void call yields no value to havoc; drop it (the statement's
     // semicolon stays behind, leaving an empty statement). Mark it a no-op so
     // an enclosing if-branch made up only of dropped calls can be pruned too.
+    debugLog(3, "[transform] " + locString(mgr, loc) + ": dropped void call");
     _Rewriter.ReplaceText(E->getSourceRange(), "");
     _NoOpStmts.insert(E);
   } else if (std::optional<std::string> suffix = verifierSuffixForType(returnType)) {
+    debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked call -> __VERIFIER_nondet_" +
+                    *suffix + "()");
     _Rewriter.ReplaceText(E->getSourceRange(), "__VERIFIER_nondet_" + *suffix + "()");
     _NeededSuffixes->emplace(*suffix);
   } else if (returnType->isAnyPointerType() && !returnType->isFunctionPointerType()) {
@@ -162,6 +174,8 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     // emits the helper definitions when it sees these markers.
     bool isCharPtr = returnType->getPointeeType()->isAnyCharacterType();
     std::string helper = isCharPtr ? "__havoc_cstring" : "__havoc_block";
+    debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked pointer call -> " + helper +
+                    "(128)");
     // The helpers return char* / void*; cast back to the call's actual
     // return type so e.g. unsigned char* or a struct pointer doesn't end up
     // assigned from an incompatible pointer type.
@@ -190,23 +204,15 @@ bool HavocCallsVisitor::VisitCompoundStmt(clang::CompoundStmt *S) {
   return true;
 }
 
-// Shared prune rule for if/while/do/for: if every branch/body is already a
-// no-op and every controlling expression (condition, plus a for-loop's init
-// and increment) is side-effect-free, erase the whole statement and mark it
-// a no-op so the pruning can propagate to an enclosing statement. `init` and
-// `inc` are unused (default null, trivially side-effect-free) outside
+// `init`/`inc` are unused (default null, trivially side-effect-free) outside
 // VisitForStmt.
 //
-// For `if`, this can never change whether the program terminates — dropping
-// a dead branch doesn't create or remove divergence. For loops it can: an
-// empty body spinning on a side-effect-free condition (`while (n > 0);`) may
-// hang, and pruning it turns that hang into termination. That's intentional
-// here — such loops are havoc artifacts, not meaningful termination-
-// benchmark content. A condition/increment with a real side effect (e.g.
-// `while (x-- > 0);`) is kept regardless, since `x` may be observed after
-// the loop — except mutations of variables declared in the for-loop's own
-// init clause (`for (int i = 0; i < n; i++)`), which die with the loop and
-// are therefore unobservable.
+// For `if`, pruning a dead branch can never change termination. For loops it
+// can: an empty body spinning on a side-effect-free condition
+// (`while (n > 0);`) may hang, and pruning turns that hang into termination -
+// intentional, since such loops are havoc artifacts, not meaningful
+// termination-benchmark content. A condition/increment with a real side
+// effect is kept, since it may be observed after the loop.
 bool HavocCallsVisitor::pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc,
                                     std::initializer_list<const clang::Stmt *> branches,
                                     const clang::Expr *cond, const clang::Stmt *init,
@@ -222,6 +228,7 @@ bool HavocCallsVisitor::pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc
   if (!isSideEffectFree(cond, mutableVars) || !isInitSideEffectFree(init) ||
       !isSideEffectFree(inc, mutableVars))
     return false;
+  debugLog(3, "[transform] " + locString(mgr, keyLoc) + ": pruned no-op statement");
   _Rewriter.ReplaceText(S->getSourceRange(), "");
   _NoOpStmts.insert(S);
   return true;

@@ -44,7 +44,7 @@ inline std::optional<CliInvocation> parseCliArgs(int argc, char **argv) {
     std::string &slot = isInput ? invocation.inputPath : invocation.configFile;
     if (!slot.empty()) {
       std::cerr << "Both '" << slot << "' and '" << arg << "' look like "
-                << (isInput ? "inputs" : "config files") << " — give at most one of each."
+                << (isInput ? "inputs" : "config files") << ". Give at most one of each."
                 << std::endl;
       return std::nullopt;
     }
@@ -61,16 +61,17 @@ inline std::optional<CliInvocation> parseCliArgs(int argc, char **argv) {
 inline void printUsage(const std::string &toolName) {
   std::cerr << "Usage: " << toolName << " [<input>] [<config-file>]\n"
             << "  <input>       directory of C files, or a single .c file\n"
-            << "  <config-file> INI-style properties file (see properties.config)\n"
+            << "  <config-file> INI-style config file (see settings.config)\n"
             << "At least one argument is required; with only an input, built-in\n"
             << "defaults are used and output goes to <name>-filtered/ etc. in the\n"
-            << "working directory. If both are given input supercedes a repo\n"
-            << "defined in the properties file."
+            << "working directory. If both are given, the input path always wins\n"
+            << "over the config file's directory settings, both the repo it\n"
+            << "reads from and the derived <name>-filtered/ etc. output name."
             << "Examples:\n"
             << "  ./build/" << toolName << " path/to/repo\n"
             << "  ./build/" << toolName << " foo.c\n"
-            << "  ./build/" << toolName << " properties.config\n"
-            << "  ./build/" << toolName << " path/to/repo properties.config" << std::endl;
+            << "  ./build/" << toolName << " settings.config\n"
+            << "  ./build/" << toolName << " path/to/repo settings.config" << std::endl;
 }
 
 /**
@@ -78,13 +79,10 @@ inline void printUsage(const std::string &toolName) {
  *
  * A directory yields its final component ("path/to/redis" → "redis"), a file
  * its stem ("src/foo.c" → "foo"). A trailing "-filtered" or "-transformed"
- * stage suffix is stripped so e.g. the verify step run on "redis-transformed"
- * still names its output "redis-benchmarks" rather than
- * "redis-transformed-benchmarks".
+ * stage suffix is stripped, so chaining stages doesn't compound the suffix.
  *
  * @param inputPath Directory or .c file path as given on the command line.
- * @return The base name to build "<name>-filtered" / "<name>-transformed" /
- *         "<name>-benchmarks" from.
+ * @return The base name to build "<name>-filtered" / "-transformed" / "-benchmarks" from.
  */
 inline std::string inputBaseName(const std::string &inputPath) {
   // lexically_normal drops a trailing slash so "repo/" still yields "repo".
@@ -93,8 +91,7 @@ inline std::string inputBaseName(const std::string &inputPath) {
   if (name.empty() || name == ".")
     name = std::filesystem::absolute(path).parent_path().filename().string();
   for (const std::string suffix : {"-filtered", "-transformed"}) {
-    if (name.size() > suffix.size() &&
-        name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+    if (name.ends_with(suffix)) {
       name = name.substr(0, name.size() - suffix.size());
       break;
     }

@@ -11,6 +11,7 @@
 #include <clang/Lex/PPCallbacks.h>
 #include <clang/Lex/Token.h>
 #include <clang/Rewrite/Core/Rewriter.h>
+#include <clang/Tooling/Tooling.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
@@ -23,7 +24,7 @@
  * System headers (C stdlib and platform headers) are kept; project-local
  * includes are removed from the output, since every function they declare is
  * havocked by HavocCallsConsumer anyway. A file that uses types or macros
- * from a local header will no longer compile after stripping — those outputs
+ * from a local header will no longer compile after stripping; those outputs
  * are weeded out by keepCompilesOnly (header type/macro handling is a future
  * feature).
  */
@@ -41,17 +42,11 @@ public:
   /**
    * @brief Called by the preprocessor for each #include/#import directive.
    *
-   * @param HashLoc         Location of the '#' that begins the directive.
-   * @param IncludeTok      The "include"/"import" token.
-   * @param FileName        Name of the included file as written in the source.
-   * @param IsAngled        True for <...> includes, false for "..." includes.
-   * @param FilenameRange   Source range of the filename text.
-   * @param File            The resolved file, if Clang found it.
-   * @param SearchPath      Directory in which the file was found.
-   * @param RelativePath    Path of the file relative to SearchPath.
-   * @param SuggestedModule Module suggested for the include, if any.
-   * @param ModuleImported  Whether the include was treated as a module import.
-   * @param FileType        Characteristic kind (system/user) of the included file.
+   * @param HashLoc       Location of the '#' that begins the directive.
+   * @param FileName      Name of the included file as written in the source.
+   * @param IsAngled      True for <...> includes, false for "..." includes.
+   * @param FilenameRange Source range of the filename text.
+   * @param FileType      Characteristic kind (system/user) of the included file.
    */
   void InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &IncludeTok,
                           llvm::StringRef FileName, bool IsAngled,
@@ -113,4 +108,34 @@ public:
 private:
   llvm::raw_ostream &_Output;
   clang::Rewriter _Rewriter;
+};
+
+/**
+ * @brief Carries the output stream into Clang's tool runner.
+ *
+ * Clang's {@code ClangTool::run()} only knows how to call {@code create()} on
+ * a {@code FrontendActionFactory}. This subclass stores the output stream so
+ * that each {@code TransformAction} it creates can write the rewritten source
+ * without that stream being a global.
+ */
+class ArgsFrontendFactory : public clang::tooling::FrontendActionFactory {
+public:
+  /**
+   * @brief Constructs the factory, binding the output stream.
+   *
+   * @param output Reference to the output stream for the transformed file.
+   */
+  ArgsFrontendFactory(llvm::raw_ostream &output);
+
+  /**
+   * @brief Called by {@code ClangTool} once per source file to create the action.
+   *
+   * Returns a new {@code TransformAction} loaded with the output stream.
+   *
+   * @return Owning pointer to the created action.
+   */
+  std::unique_ptr<clang::FrontendAction> create() override;
+
+private:
+  llvm::raw_ostream &_Output;
 };

@@ -31,15 +31,19 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   // the file when there are no decls at all.
   clang::SourceLocation loc;
   clang::Decl *firstNode = nullptr;
+  clang::SourceLocation firstNodeBegin;
   for (clang::Decl *decl : TD->decls()) {
-    if (mgr.isInMainFile(decl->getLocation()) && !mgr.isMacroBodyExpansion(decl->getLocation())) {
+    // macro-expanded return types cause wrong location, so normalize using the expansion location
+    clang::SourceLocation begin = mgr.getExpansionLoc(decl->getBeginLoc());
+    if (mgr.isInMainFile(decl->getLocation()) && !mgr.isMacroBodyExpansion(begin)) {
       firstNode = decl;
+      firstNodeBegin = begin;
       break;
     }
   }
   if (firstNode) {
     loc = mgr.translateLineCol(mgr.getMainFileID(),
-                               mgr.getSpellingLineNumber(firstNode->getLocation()), 1);
+                               mgr.getExpansionLineNumber(firstNodeBegin), 1);
     // If the first node has a doc comment, insert before the comment instead
     if (clang::RawComment *comment = Context.getRawCommentForDeclNoCache(firstNode))
       loc = comment->getBeginLoc();

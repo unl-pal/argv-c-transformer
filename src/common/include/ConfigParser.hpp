@@ -24,17 +24,15 @@ enum class FeatureGate { Ignore, Require, Forbid };
  * @brief Everything the INI-style properties file can configure, parsed once
  * and shared by all three stages (filter, transform, verify).
  *
- * The complexity thresholds and feature gates are applied per function by the
- * filter stage and re-applied by the verify stage after transformation. Path
- * fields are left empty when the config doesn't set them; each stage driver
- * applies its own defaults (and CLI overrides) on top.
+ * Path fields are left empty when the config doesn't set them; each stage
+ * driver applies its own defaults (and CLI overrides) on top.
  */
 struct PipelineConfig {
   /// Per-function complexity thresholds: metric name → [min, max]. Defaults
   /// to {0, 9999}, meaning no filtering unless explicitly configured.
   std::map<std::string, std::pair<int, int>> complexity = {
       {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}}, {"IfStmt", {0, 9999}},
-      {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}},
+      {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}}, {"Operations", {0,9999}},
   };
 
   /// Per-function feature gates: feature name → ignore|require|forbid.
@@ -69,14 +67,12 @@ inline std::string trim(const std::string &s) {
 /**
  * @brief Parses an INI-style config file and returns raw key/value string pairs.
  *
- * Lines that do not match the {@code key = value} pattern (comments, blank
- * lines, section headers) are silently skipped. Each tool is responsible for
- * interpreting its own keys from the returned map; unknown keys are not
- * reported here.
+ * Lines that do not match {@code key = value} (comments, blank lines,
+ * section headers) are silently skipped. A trailing {@code # ...} is
+ * stripped as an inline comment before matching.
  *
  * @param configFile Path to the INI-style properties file.
- * @return Map of key to raw string value for every matched line, or an empty
- *         map if the file does not exist or cannot be opened.
+ * @return Map of key to raw string value, or empty if the file is missing.
  */
 inline std::map<std::string, std::string> parseIniFile(const std::string &configFile) {
   std::map<std::string, std::string> result;
@@ -89,8 +85,11 @@ inline std::map<std::string, std::string> parseIniFile(const std::string &config
   std::string line;
   std::smatch match;
   while (std::getline(file, line)) {
+    size_t hash = line.find('#');
+    if (hash != std::string::npos)
+      line = line.substr(0, hash);
     if (std::regex_search(line, match, pattern))
-      result[match[1]] = match[2];
+      result[match[1]] = trim(match[2]);
   }
   return result;
 }
@@ -125,11 +124,9 @@ inline std::optional<std::pair<int, int>> parseComplexityValue(const std::string
  * @brief Parses the INI-style properties file into a PipelineConfig.
  *
  * All keys any stage understands are interpreted here, so a typo'd key warns
- * exactly once regardless of which binary runs. Downloader.py-only keys are
- * recognised and skipped. A missing file warns and returns the defaults.
- *
- * Path existence checks and directory creation are left to the stage
- * drivers, which know which paths they read vs. write.
+ * exactly once regardless of which binary runs. Downloader.py-only keys
+ * (`[Downloader]`'s `csv`, `projectCount`, etc.) are not recognised here and
+ * will warn as unknown; Downloader.py reads its own section separately.
  *
  * @param configFile Path to the INI-style properties file ("" = defaults only).
  * @return The parsed configuration.
@@ -139,22 +136,34 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
   if (configFile.empty())
     return config;
   if (!std::filesystem::exists(configFile)) {
-    std::cerr << "Config file not found: " << configFile << " — using defaults" << std::endl;
+    std::cerr << "Config file not found: " << configFile << " - using defaults" << std::endl;
     return config;
   }
 
   for (const auto &[key, value] : parseIniFile(configFile)) {
-    if (config.complexity.count(key)) {
+    if (key == "FileLoC") {
+      std::optional<std::pair<int, int>> range = parseComplexityValue(value);
+      if (range && range->first > range->second) {
+        std::cerr << "Warning: 'FileLoC' has min (" << range->first << ") greater than max ("
+                  << range->second << ") - ignoring value '" << value << "'" << std::endl;
+      } else if (range) {
+        config.fileSettings.at("minFileLoC") = range->first;
+        config.fileSettings.at("maxFileLoC") = range->second;
+      } else {
+        std::cerr << "Warning: 'FileLoC' expects 'min,max', 'min', or ',max' - ignoring value '"
+                  << value << "'" << std::endl;
+      }
+    } else if (config.complexity.count(key)) {
       std::optional<std::pair<int, int>> range = parseComplexityValue(value);
       if (range && range->first > range->second) {
         std::cerr << "Warning: complexity key '" << key << "' has min (" << range->first
-                  << ") greater than max (" << range->second << ") — ignoring value '" << value
+                  << ") greater than max (" << range->second << ") - ignoring value '" << value
                   << "'" << std::endl;
       } else if (range) {
         config.complexity.at(key) = *range;
       } else {
         std::cerr << "Warning: complexity key '" << key
-                  << "' expects 'min,max', 'min', or ',max' — ignoring value '" << value << "'"
+                  << "' expects 'min,max', 'min', or ',max' - ignoring value '" << value << "'"
                   << std::endl;
       }
     } else if (config.features.count(key)) {
@@ -168,7 +177,7 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
         config.features.at(key) = FeatureGate::Ignore;
       } else {
         std::cerr << "Warning: unrecognised gate '" << value << "' for feature '" << key
-                  << "' — ignoring" << std::endl;
+                  << "' - ignoring" << std::endl;
       }
     } else if (config.fileSettings.count(key)) {
       try {
@@ -180,6 +189,14 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       } else if (value == "true" || value == "True") {
         config.fileSettings.at(key) = 1;
       }
+      if (key == "debugLevel") {
+        int &level = config.fileSettings.at(key);
+        if (level < 0 || level > 3) {
+          std::cerr << "Warning: 'debugLevel' expects 0-3 - clamping value '" << value << "'"
+                    << std::endl;
+          level = std::clamp(level, 0, 3);
+        }
+      }
     } else if (key == "databaseDir") {
       config.databaseDir = value;
     } else if (key == "filterDir") {
@@ -188,14 +205,6 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       config.transformDir = value;
     } else if (key == "benchmarkDir") {
       config.benchmarkDir = value;
-    } else if (key == "csv" || key == "downloadDir" || key == "language" ||
-               key == "projectCount" || key == "minNumStars" || key == "minRepoLoc" ||
-               key == "stars" || key == "size") {
-      // consumed by Downloader.py; not a pipeline key
-    } else if (key == "wipeOldBenchmarks" || key == "useNonStdHeaders") {
-      std::cerr << "Config key '" << key << "' has been removed — ignoring" << std::endl;
-    } else if (key == "debug") {
-      // silently ignored: replaced by debugLevel
     } else {
       std::cerr << "Unknown config key: " << key << std::endl;
     }

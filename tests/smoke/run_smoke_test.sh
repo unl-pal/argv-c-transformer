@@ -43,19 +43,26 @@ echo
 echo "=================================== Run: default config (Concurrency=ignore) ==================================="
 cat > "$WORK/default.config" <<EOF
 [File Locations]
+databaseDir=$SAMPLES_DIR
 filterDir=$WORK/filtered-default
 transformDir=$WORK/transformed-default
 benchmarkDir=$WORK/bench-default
 EOF
 
-"$FILTER_BIN" "$SAMPLES_DIR" "$WORK/default.config"
-"$TRANSFORM_BIN" "$WORK/filtered-default" "$WORK/default.config"
-"$VERIFY_BIN" "$WORK/transformed-default" "$WORK/default.config"
+# Config-file-only invocation ("classic" style, see CLAUDE.md): passing
+# SAMPLES_DIR as a positional input path would take precedence over
+# filterDir/transformDir/benchmarkDir above (see Filterer.cpp's/
+# Transformer.cpp's/Verifier.cpp's documented input-path-wins precedence),
+# silently redirecting output to a derived <name>-filtered/ etc. in the
+# current directory instead of $WORK.
+"$FILTER_BIN" "$WORK/default.config"
+"$TRANSFORM_BIN" "$WORK/default.config"
+"$VERIFY_BIN" "$WORK/default.config"
 
 echo
 echo "--- Assertion: baseline file produces a benchmark ---"
 if [ ! -f "$WORK/bench-default/clean_ok.c" ]; then
-  echo "FAIL: clean_ok.c did not produce a benchmark — pipeline itself is broken on this platform"
+  echo "FAIL: clean_ok.c did not produce a benchmark; pipeline itself is broken on this platform"
   fail=1
 else
   echo "OK"
@@ -83,6 +90,7 @@ echo
 echo "=================================== Run: Concurrency=forbid ==================================="
 cat > "$WORK/forbid.config" <<EOF
 [File Locations]
+databaseDir=$SAMPLES_DIR
 filterDir=$WORK/filtered-forbid
 transformDir=$WORK/transformed-forbid
 benchmarkDir=$WORK/bench-forbid
@@ -91,9 +99,9 @@ benchmarkDir=$WORK/bench-forbid
 Concurrency = forbid
 EOF
 
-"$FILTER_BIN" "$SAMPLES_DIR" "$WORK/forbid.config"
-"$TRANSFORM_BIN" "$WORK/filtered-forbid" "$WORK/forbid.config"
-"$VERIFY_BIN" "$WORK/transformed-forbid" "$WORK/forbid.config"
+"$FILTER_BIN" "$WORK/forbid.config"
+"$TRANSFORM_BIN" "$WORK/forbid.config"
+"$VERIFY_BIN" "$WORK/forbid.config"
 
 echo
 echo "--- Assertion: no live pthread/semaphore call survives Concurrency=forbid ---"

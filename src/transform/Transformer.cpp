@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "include/Transformer.hpp"
-#include "ArgsFrontendActionFactory.hpp"
+#include "TransformAction.hpp"
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
 #include "ConfigParser.hpp"
@@ -11,11 +11,9 @@
 #include <csignal>
 #include <ctime>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
-#include <sstream>
 #include <string>
 #include <system_error>
 #include <sys/wait.h>
@@ -28,19 +26,16 @@ const std::string defaultTransformDir = "transformedFiles";
 const int defaultFileTimeoutSecs = 60;
 
 Transformer::Transformer(std::string configFile, std::string inputPath) : configuration() {
-  // Apply defaults; parseConfig overrides any keys present in configFile.
-  // When an input path is given on the command line, the derived transformDir
-  // acts as a default (a config file can still override it), but the input
-  // itself always wins over any filterDir in the config.
   configuration.debugLevel = defaultDebugLevel;
   configuration.filterDir = defaultFilterDir;
-  configuration.transformDir =
-      inputPath.empty() ? defaultTransformDir : inputBaseName(inputPath) + "-transformed";
+  configuration.transformDir = defaultTransformDir;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   if (!configFile.empty())
     parseConfig(configFile);
-  if (!inputPath.empty())
+  if (!inputPath.empty()) {
     configuration.filterDir = inputPath;
+    configuration.transformDir = inputBaseName(inputPath) + "-transformed";
+  }
   globalDebugLevel() = configuration.debugLevel;
 }
 
@@ -67,9 +62,11 @@ std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path pat
 }
 
 bool Transformer::transformFile(std::filesystem::path path) {
-  debugLog(1, "Transforming: " + path.string());
-  if (!std::filesystem::exists(path))
+  debugLog(1, "[transform] file " + std::to_string(_totalProcessed) + ": " + path.string());
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[transform] path does not exist: " + path.string());
     return false;
+  }
 
   std::filesystem::path srcPath = flattenedOutputPath(path);
 
@@ -78,19 +75,22 @@ bool Transformer::transformFile(std::filesystem::path path) {
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
   if (ec) {
-    std::cerr << "Cannot open output file " << srcPath.string() << ": " << ec.message()
-              << std::endl;
+    debugLog(0, "Cannot open output file " + srcPath.string() + ": " + ec.message());
     return false;
   }
 
   ArgsFrontendFactory factory(output);
   bool ran = runToolOnFile(path.string(), factory);
   output.close();
-  if (!ran)
+  if (!ran) {
+    debugLog(1, "[transform] clang tool failed on: " + path.string());
     return false;
+  }
 
   // harness may be empty due to unsupported transforming
   if (harnessIsEmpty(srcPath)) {
+    debugLog(2, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
+                    srcPath.string());
     std::filesystem::remove(srcPath);
     return false;
   }
@@ -104,16 +104,17 @@ bool Transformer::transformFile(std::filesystem::path path) {
 // child, translating its fate into the success count.
 int Transformer::transformFileIsolated(std::filesystem::path path) {
   _totalProcessed++;
+  if (globalDebugLevel() == 0)
+    std::cout << "\r[transform] " << _totalProcessed << " processed" << std::flush;
   pid_t pid = fork();
   if (pid < 0) {
-    std::cerr << "fork failed, transforming in-process: " << path.string() << std::endl;
+    debugLog(0, "fork failed, transforming in-process: " + path.string());
     return transformFile(path) ? 1 : 0;
   }
 
   if (pid == 0) {
     // Child: do the work and report 1/0 through the exit status. _exit skips
-    // C++ stream flushing, so flush explicitly first (stdout may be fully
-    // buffered when redirected, e.g. under benchexec).
+    // C++ stream flushing, so flush explicitly first
     int produced = transformFile(path) ? 1 : 0;
     std::cout.flush();
     std::cerr.flush();
@@ -128,11 +129,11 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
     if (done == pid)
       break;
     if (done < 0) {
-      std::cerr << "waitpid failed for " << path.string() << std::endl;
+      debugLog(0, "waitpid failed for " + path.string());
       return 0;
     }
     if (time(nullptr) >= deadline) {
-      std::cerr << "Timeout, killing transform of: " << path.string() << std::endl;
+      debugLog(0, "Timeout, killing transform of: " + path.string());
       kill(pid, SIGKILL);
       waitpid(pid, &status, 0);
       cleanupPartialOutput(path);
@@ -146,8 +147,8 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
     return WEXITSTATUS(status) == 1 ? 1 : 0;
   // WIFSIGNALED: segfault, OOM-kill, etc. The child may have left a partial
   // .c behind; harnessIsEmpty never ran, so clean up.
-  std::cerr << "Transform crashed (signal " << WTERMSIG(status) << "), skipping: "
-            << path.string() << std::endl;
+  debugLog(0, "Transform crashed (signal " + std::to_string(WTERMSIG(status)) + "), skipping: " +
+                  path.string());
   cleanupPartialOutput(path);
   return 0;
 }
@@ -160,8 +161,10 @@ void Transformer::cleanupPartialOutput(std::filesystem::path path) {
 }
 
 int Transformer::transformAll(std::filesystem::path path) {
-  if (!std::filesystem::exists(path))
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[transform] path does not exist: " + path.string());
     return 0;
+  }
   if (std::filesystem::is_directory(path)) {
     int successes = 0;
     for (const std::filesystem::directory_entry &entry :
@@ -170,24 +173,14 @@ int Transformer::transformAll(std::filesystem::path path) {
     }
     return successes;
   }
-  if (std::filesystem::is_regular_file(path) && path.extension() == ".c")
-    return transformFileIsolated(path);
+  if (std::filesystem::is_regular_file(path)) {
+    if (path.extension() == ".c")
+      return transformFileIsolated(path);
+    debugLog(3, "[transform] skipped (not .c): " + path.filename().string());
+    return 0;
+  }
+  debugLog(3, "[transform] ignored: " + path.filename().string());
   return 0;
-}
-
-bool Transformer::harnessIsEmpty(std::filesystem::path path) {
-  std::ifstream in(path);
-  if (!in)
-    return false;
-  std::stringstream buffer;
-  buffer << in.rdbuf();
-  std::string content = buffer.str();
-
-  // MainGenConsumer builds the entry point as
-  //   "\nint main(void) {\n" + harness + "  return 0;\n}\n"
-  // so when no function could be harnessed (harness is empty), this exact
-  // block appears verbatim. Coupled to that format string in MainGenConsumer.
-  return content.find("int main(void) {\n  return 0;\n}") != std::string::npos;
 }
 
 void Transformer::parseConfig(std::string configFile) {
@@ -196,20 +189,16 @@ void Transformer::parseConfig(std::string configFile) {
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
   if (!config.transformDir.empty()) {
     configuration.transformDir = config.transformDir;
-    if (!std::filesystem::exists(config.transformDir))
-      std::filesystem::create_directory(config.transformDir);
   }
   if (!config.filterDir.empty()) {
     configuration.filterDir = config.filterDir;
-    if (!std::filesystem::exists(config.filterDir))
-      std::cerr << "Filter directory not found: " << config.filterDir << std::endl;
   }
 }
 
 int Transformer::run() {
   std::filesystem::path path(configuration.filterDir);
   if (!std::filesystem::exists(path)) {
-    std::cerr << "Filter directory not found: " << configuration.filterDir << std::endl;
+    debugLog(0, "Filter directory not found: " + configuration.filterDir);
     return 0;
   }
   int result = transformAll(path);

@@ -12,12 +12,12 @@
 #include <clang/AST/Expr.h>
 #include <clang/AST/Stmt.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Lex/Lexer.h>
 #include <llvm/Support/Casting.h>
 
 HarnessRepairConsumer::HarnessRepairConsumer(clang::Rewriter &rewriter,
-                                             std::shared_ptr<std::vector<std::string>> toRemove,
-                                             std::shared_ptr<VerifyResult> result)
-    : _Rewriter(rewriter), _ToRemove(toRemove), _Result(result) {}
+                                             std::shared_ptr<std::vector<std::string>> toRemove)
+    : _Rewriter(rewriter), _ToRemove(toRemove) {}
 
 void HarnessRepairConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   clang::SourceManager &mgr = context.getSourceManager();
@@ -35,9 +35,7 @@ void HarnessRepairConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   if (!mainDecl)
     return;
 
-  // Every harness call is a top-level statement of main's body (the
-  // original_main path also nests __havoc_cstring inside a for loop, but
-  // that's a generated helper, exempt either way).
+  // Every harness call is a top-level statement of main's body
   const auto *body = llvm::dyn_cast<clang::CompoundStmt>(mainDecl->getBody());
   if (!body)
     return;
@@ -52,13 +50,15 @@ void HarnessRepairConsumer::HandleTranslationUnit(clang::ASTContext &context) {
     if (isVerifierGenerated(name) || name == "abort")
       continue;
     if (std::find(_ToRemove->begin(), _ToRemove->end(), name) != _ToRemove->end()) {
-      // Erasing just the call expression leaves the trailing semicolon as an
-      // empty statement, same as HavocCallsVisitor's void-call drops.
-      _Rewriter.ReplaceText(call->getSourceRange(), "");
-      _Result->removedCalls++;
-      debugLog(1, "[verify] unharnessed (failed post-transform re-check): " + name);
-    } else {
-      _Result->harnessCalls++;
+      // Erase the whole line -- indent, call, semicolon, trailing newline
+      clang::SourceLocation begin = call->getBeginLoc();
+      clang::SourceLocation lineStart =
+          mgr.translateLineCol(mgr.getFileID(begin), mgr.getSpellingLineNumber(begin), 1);
+      clang::SourceLocation afterSemi = clang::Lexer::findLocationAfterToken(
+          call->getEndLoc(), clang::tok::semi, mgr, context.getLangOpts(),
+          /*SkipTrailingWhitespaceAndNewLine=*/true);
+      _Rewriter.RemoveText(clang::CharSourceRange::getCharRange(lineStart, afterSemi));
+      debugLog(2, "[verify] unharnessed (failed post-transform re-check): " + name);
     }
   }
 }

@@ -1,28 +1,17 @@
 # Build
 build/
-build-*/
-cmake-build-*/
 
 # Pipeline I/O defaults
-/database
-/filteredFiles
-/benchmarks
-
-# Clang artifacts
-*.ast
-
-# Local
-## nat
-argc-benchmarks/update-benches.sh
-/notes/
-CLAUDE.md
-filtered-files/
-source-files/
-transformed-files/
-ARG-V_Survey_Report.html
+repos/
 repos-filtered/
 repos-transformed/
+repos-benchmarks/
 
-## IDEs
-.idea/
-compile_commands.json
+# Tutorial I/O (docs/tutorial/Tutorial.md)
+docs/tutorial/source-files/
+docs/tutorial/filtered-files/
+docs/tutorial/transformed-files/
+docs/tutorial/benchmark-files/
+
+# AI artifacts
+CLAUDE.md

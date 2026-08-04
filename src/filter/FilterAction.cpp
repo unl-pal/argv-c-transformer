@@ -51,3 +51,12 @@ bool FilterAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
 void FilterAction::EndSourceFileAction() {
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }
+
+FrontendFactoryWithArgs::FrontendFactoryWithArgs(
+    std::map<std::string, std::pair<int, int>> *complexityConfig,
+    std::map<std::string, FeatureGate> *featureConfig, llvm::raw_fd_ostream &output)
+    : _ComplexityConfig(complexityConfig), _FeatureConfig(featureConfig), _Output(output) {}
+
+std::unique_ptr<clang::FrontendAction> FrontendFactoryWithArgs::create() {
+  return std::make_unique<FilterAction>(_ComplexityConfig, _FeatureConfig, _Output);
+}

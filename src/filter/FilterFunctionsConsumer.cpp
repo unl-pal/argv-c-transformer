@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "CountingVisitor.hpp"
+#include "DebugLog.hpp"
 #include "FilterFunctionsConsumer.hpp"
 #include "VerifierNames.hpp"
 
@@ -41,13 +42,16 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
   for (const std::pair<const std::string, CountingVisitor::attributes> &func : *_ToFilter) {
     std::string key = func.first;
     const CountingVisitor::attributes &attr = func.second;
-    if (key == "Program")
+    if (key == "FileScope")
       continue;
 
     bool reject = false;
     for (const auto &[name, range] : *_ComplexityConfig) {
       int value = complexityField(attr.Complexity, name);
       if (value < range.first || value > range.second) {
+        debugLog(2, "[filter] " + key + ": " + name + " = " + std::to_string(value) +
+                        " outside [" + std::to_string(range.first) + "," +
+                        std::to_string(range.second) + "]");
         reject = true;
         break;
       }
@@ -57,6 +61,7 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
         bool present = featureField(attr.Features, name);
         if ((gate == FeatureGate::Require && !present) ||
             (gate == FeatureGate::Forbid && present)) {
+          debugLog(2, "[filter] " + key + ": feature gate '" + name + "' violated");
           reject = true;
           break;
         }
@@ -67,7 +72,7 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
       continue;
     }
 
-    // All threshold checks passed — now check whether every parameter has a
+    // All threshold checks passed; now check whether every parameter has a
     // nondet equivalent. If any param type is unsupported (pointer, struct,
     // etc.), strip the body so HavocCallsVisitor can still use the return
     // type from the remaining declaration. main is exempt here: its argc/argv
@@ -75,6 +80,7 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
     if (key != "main" && declByName.contains(key)) {
       for (auto parm : declByName.at(key)->parameters()) {
         if (!verifierSuffixForType(parm->getOriginalType())) {
+          debugLog(2, "[filter] " + key + ": unsupported parameter type, body stripped");
           _ToRemove->push_back(key);
           break;
         }
