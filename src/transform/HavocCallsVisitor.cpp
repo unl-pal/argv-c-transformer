@@ -247,7 +247,6 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     debugLog(4, "[transform] " + where + ": dropped void call");
     eraseStmt(E);
     return true;
-  }
 
   // Overwriting the whole call also overwrites the replacement text of any
   // call nested in its arguments, so those calls stop owing suffixes too.
