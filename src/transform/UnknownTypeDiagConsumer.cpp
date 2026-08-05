@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "UnknownTypeDiagConsumer.hpp"
+#include "DebugLog.hpp"
 
 #include <clang/AST/DeclarationName.h>
 #include <clang/Basic/DiagnosticSema.h>
@@ -23,17 +24,18 @@ void UnknownTypeDiagConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level,
   if (!isUnknownTypename && !isUndeclaredVarUse)
     return;
 
-  // Guarded rather than asserted: a future Clang version
-  // streaming either differently should silently miss the recovery rather
-  // than crash a whole batch run, consistent with this consumer's
-  // best-effort, compile-check-backstopped nature.
+  // Guarded against a future Clang version diagnostic change
   if (isUnknownTypename) {
-    if (Info.getArgKind(0) != clang::DiagnosticsEngine::ak_identifierinfo)
-      return;
+    if (Info.getArgKind(0) != clang::DiagnosticsEngine::ak_identifierinfo){
+      debugLog(0, "ERROR: Potential Clang Version Issue in UnknownTypeDiag recovery");
+      exit(-1);
+    }
     _UnresolvedTypeNames->insert(Info.getArgIdentifier(0)->getName().str());
   } else {
-    if (Info.getArgKind(0) != clang::DiagnosticsEngine::ak_declarationname)
-      return;
+    if (Info.getArgKind(0) != clang::DiagnosticsEngine::ak_declarationname) {
+      debugLog(0, "ERROR: Potential Clang Version Issue in UnknownTypeDiag recovery");
+      exit(-1);
+    }
     clang::DeclarationName name = clang::DeclarationName::getFromOpaqueInteger(Info.getRawArg(0));
     _UnresolvedTypeNames->insert(name.getAsString());
   }

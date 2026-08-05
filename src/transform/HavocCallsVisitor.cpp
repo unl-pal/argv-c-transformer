@@ -157,14 +157,6 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   clang::QualType returnType = E->getCallReturnType(*_C);
   if (returnType.isNull() || returnType.getTypePtrOrNull() == nullptr)
     return true;
-  bool parentIsExpr = false;
-  clang::DynTypedNodeList parents = _C->getParents(*E);
-  for (clang::DynTypedNode parent: parents) {
-    if (const clang::Stmt *parentStmt = parent.get<clang::Stmt>()) {
-      if (clang::isa<clang::Expr>(parentStmt)) {
-        parentIsExpr = true;
-    }
-  }
 
   if (returnType->isVoidType()) {
     // A void call yields no value to havoc; drop it (the statement's

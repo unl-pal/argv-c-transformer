@@ -13,17 +13,18 @@
 #include <unordered_map>
 #include <vector>
 
+/** IncludeIndex is a fallback utility for finding header files when they aren't
+ * within the source's directory tree. Without a compile_commands.json we must
+ * find the correct headers and use a nearness heuristic for disambuguation.
+ */
+
 /**
  * @brief Maps header basenames to every directory under a root tree that
  * contains a file with that name.
- *
- * Built once per pipeline run (over databaseDir) and reused across every file
- * being filtered/transformed, so resolving one file's #includes doesn't
- * re-walk the whole tree.
  */
 class HeaderIndex {
 public:
-  /** @brief Recursively scans `root` for .h files. A missing/empty root leaves the index empty. */
+  /** @brief Scans `root` for .h files (missing/empty root -> empty index). */
   explicit HeaderIndex(const std::filesystem::path &root) {
     if (root.empty() || !std::filesystem::exists(root))
       return;
@@ -42,7 +43,7 @@ public:
     }
   }
 
-  /** @brief Directories under root containing a file named `basename`, or nullptr if none. */
+  /** @brief Directories containing a file named `basename`, or nullptr if none. */
   const std::vector<std::filesystem::path> *find(const std::string &basename) const {
     auto it = _byBasename.find(basename);
     return it == _byBasename.end() ? nullptr : &it->second;
@@ -52,7 +53,7 @@ private:
   std::unordered_map<std::string, std::vector<std::filesystem::path>> _byBasename;
 };
 
-/** @brief Extracts the filenames named by quoted `#include "..."` directives (angle-bracket includes are assumed to be system/library headers and are skipped). */
+/** @brief Extracts the text of every quoted `#include "..."`*/
 inline std::vector<std::string> extractQuotedIncludes(const std::filesystem::path &filePath) {
   static const std::regex quoted(R"re(^\s*#\s*include\s*"([^"]+)")re");
   std::vector<std::string> includes;
@@ -67,23 +68,21 @@ inline std::vector<std::string> extractQuotedIncludes(const std::filesystem::pat
 }
 
 /**
- * @brief Strips `includeSpec`'s own subdirectory components off the end of
- * `candidateDir` (the directory a matching header actually lives in), giving
- * the -I root that would make `includeSpec` resolve to that header.
+ * @brief Turns a header hit into the -I root that would make `includeQuote`
+ * resolve to it
  *
- * E.g. includeSpec "nested/mytypes.h" against candidateDir
- * "repo/include/nested" rebases to "repo/include" - the -I flag has to name
- * the directory the quoted path is relative to, not the header's own parent.
- * Returns nullopt if candidateDir doesn't structurally end with those
- * components (the basename match was coincidental).
+ * E.g. includeQuote "nested/mytypes.h" against candidateDir
+ * "repo/include/nested" rebases to "repo/include". Returns nullopt if
+ * candidateDir doesn't structurally end with those components - i.e. the
+ * basename match was coincidental (an unrelated file of the same name).
  */
 inline std::optional<std::filesystem::path> rebaseToIncludeRoot(std::filesystem::path candidateDir,
-                                                                 const std::string &includeSpec) {
-  std::filesystem::path specDir = std::filesystem::path(includeSpec).parent_path();
+                                                                 const std::string &includeQuote) {
+  std::filesystem::path quoteDir = std::filesystem::path(includeQuote).parent_path();
   std::vector<std::string> parts;
-  for (const std::filesystem::path &part : specDir)
+  for (const std::filesystem::path &part : quoteDir)
     parts.push_back(part.string());
-  // specDir's components read left-to-right ("a/b"), but they need to be
+  // quoteDir's components read left-to-right ("a/b"), but they need to be
   // peeled off candidateDir's end innermost-first, i.e. "b" then "a".
   for (auto part = parts.rbegin(); part != parts.rend(); ++part) {
     if (candidateDir.filename() != *part)
@@ -94,61 +93,50 @@ inline std::optional<std::filesystem::path> rebaseToIncludeRoot(std::filesystem:
 }
 
 /**
- * @brief Picks the -I directory for one quoted #include spec out of a
- * HeaderIndex's basename candidates.
+ * @brief Picks the -I directory for one quoted #include out of a
+ * HeaderIndex's basename candidates, via `rebaseToIncludeRoot`.
  *
- * Candidates are first rebased with `rebaseToIncludeRoot`: for a spec with
- * subdirectory components (e.g. "sub/foo.h") only directories that
- * structurally agree with those components count - anything else is a
- * same-basename false positive (e.g. an unrelated vendored copy) and is
- * dropped rather than risk pointing -I at the wrong tree.
+ * Note this is for the case a quoted include does *not* resolve against the
+ * including file's own directory. Picks a header with the shortest
+ * `sourceDir`-relative path, i.e. structurally nearest the including file
  *
- * TODO(you): once rebasing narrows things down, more than one confident
- * candidate can still remain (e.g. the header spec has no subdirectory at
- * all, or the same relative suffix exists under two different subtrees).
- * This placeholder just takes the first one, ignoring everything else about
- * the include site. Replace it with real disambiguation - e.g. prefer the
- * candidate closest to `sourceDir` (the .c file's own directory) by path
- * distance, or shortest path, or first found; there's no single right
- * answer, pick one and leave a one-line note why. Returning `nullopt`
- * instead (no -I added for this include) is always safe: a skipped include
- * just stays unresolved, same as today's behavior.
- *
- * @param includeSpec Text of the quoted include, e.g. "sub/foo.h".
- * @param index       Prebuilt index of headers under the tree being searched.
- * @param sourceDir   Directory containing the file that has this #include.
- * @return The directory to pass as -I, or nullopt if no confident match.
+ * @param includeQuote Text of the quoted include, e.g. "sub/foo.h".
+ * @param index        Prebuilt index of headers under the tree being searched.
+ * @param sourceDir    Directory containing the file that has this #include.
+ * @return The directory to pass as -I, or nullopt if no candidate at all.
  */
-inline std::optional<std::filesystem::path> resolveIncludeDir(const std::string &includeSpec,
+inline std::optional<std::filesystem::path> resolveIncludeDir(const std::string &includeQuote,
                                                                const HeaderIndex &index,
                                                                const std::filesystem::path &sourceDir) {
-  (void)sourceDir;
-  std::string basename = std::filesystem::path(includeSpec).filename().string();
+  std::string basename = std::filesystem::path(includeQuote).filename().string();
   const std::vector<std::filesystem::path> *candidates = index.find(basename);
   if (!candidates || candidates->empty())
     return std::nullopt;
 
-  std::vector<std::filesystem::path> rebased;
+  std::optional<std::filesystem::path> best;
+  std::size_t bestDistance = 0;
   for (const std::filesystem::path &candidate : *candidates) {
-    std::optional<std::filesystem::path> root = rebaseToIncludeRoot(candidate, includeSpec);
-    if (root)
-      rebased.push_back(*root);
+    std::optional<std::filesystem::path> root = rebaseToIncludeRoot(candidate, includeQuote);
+    if (!root)
+      continue;
+    std::error_code ec;
+    std::filesystem::path rel = std::filesystem::relative(*root, sourceDir, ec);
+    std::size_t distance = ec ? std::string::npos : std::distance(rel.begin(), rel.end());
+    if (!best || distance < bestDistance) {
+      best = root;
+      bestDistance = distance;
+    }
   }
-  if (rebased.empty())
-    return std::nullopt;
-  return rebased.front();
+  return best;
 }
 
-/**
- * @brief Resolves every quoted #include in `filePath` to a -I directory via
- * `resolveIncludeDir`, deduplicated and in first-seen order.
- */
+/** @brief Resolves every quoted #include in `filePath` to a -I dir via `resolveIncludeDir`, deduplicated, first-seen order. */
 inline std::vector<std::string> collectLocalIncludeDirs(const std::filesystem::path &filePath,
                                                          const HeaderIndex &index) {
   std::vector<std::string> dirs;
-  for (const std::string &spec : extractQuotedIncludes(filePath)) {
+  for (const std::string &quote : extractQuotedIncludes(filePath)) {
     std::optional<std::filesystem::path> dir =
-        resolveIncludeDir(spec, index, filePath.parent_path());
+        resolveIncludeDir(quote, index, filePath.parent_path());
     if (!dir)
       continue;
     std::string s = dir->string();

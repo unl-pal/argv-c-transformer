@@ -134,9 +134,7 @@ Filter and Transform resolve each file's quoted `#include "..."` directives agai
 `extraIncludeDirs`) so project-local headers actually parse instead of just being
 stripped later. Basename collisions across the tree are disambiguated only by rebasing
 the include's own subdirectory components onto the candidate directory; a spec with no
-subdirectory that still matches more than one candidate just takes the first - a known,
-flagged TODO (`resolveIncludeDir` in `IncludeIndex.hpp`), safe by construction since an
-unresolved include just falls back to today's stripped behavior.
+subdirectory that still matches more than one candidate just takes the closest one.
 
 ### Preprocessor-Gated Code
 
