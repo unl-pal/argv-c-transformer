@@ -109,9 +109,7 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
   return std::nullopt;
 }
 
-// Variables declared in a for-loop's init clause are scoped to the loop and
-// die with it, so mutating them (e.g. the classic `i++` increment) is not an
-// observable side effect.
+// Returns the set of loop-local variable declarations.
 std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
   std::set<const clang::VarDecl *> vars;
   if (const auto *declStmt = clang::dyn_cast_or_null<clang::DeclStmt>(init)) {
@@ -138,16 +136,11 @@ void eatTrailingSemicolon(clang::ASTContext *C, clang::Rewriter &rewriter, const
 
 } // namespace
 
-// Conservative purity check used to decide whether an expression can be
-// deleted - either an `if` condition dropped along with its (now no-op)
-// branches, or a whole expression statement we hollowed out. Anything not
-// explicitly recognized here - un-havocked calls, overloaded operators,
-// volatile accesses, etc. - is treated as side-effecting, so we only ever
-// remove what we can prove is safe to remove.
-//
-// `mutableVars` lists variables whose mutation is unobservable (a for-loop's
-// init-declared variables, which die with the loop): increments/decrements
-// and assignments targeting them are allowed. Everywhere else it's empty.
+// Conservative purity check to decide if an expression - an `if` condition
+// dropped with its no-op branches, or a hollowed-out expression statement -
+// can be deleted. Anything not explicitly recognized is treated as
+// side-effecting. `mutableVars` lists variables whose mutation is allowed
+// (a for-loop's init-declared variables, which die with the loop).
 bool HavocCallsVisitor::isSideEffectFree(
     const clang::Expr *E, const std::set<const clang::VarDecl *> &mutableVars) const {
   if (!E)
@@ -222,26 +215,21 @@ bool HavocCallsVisitor::containsHavocedCall(const clang::Stmt *S) const {
 }
 
 // A `for` loop's init clause is a statement, not an expression: either a
-// bare expression-statement or a declaration (`for (int i = 0; ...)`). A
-// loop-scoped declaration with a side-effect-free initializer is itself
-// side-effect-free, since the variable it introduces cannot be observed
-// outside the loop.
+// declaration (`for (int i = 0; ...)`, checked via `mutableVars` - the
+// caller already derived it from this same `init` via loopLocalVars) or a
+// bare expression-statement. `dyn_cast_or_null` folds the null-init case
+// (no init clause at all) into the same side-effect-free fallthrough as an
+// unreachable non-DeclStmt/non-Expr init - Clang's AST never produces the
+// latter for a ForStmt, so the permissive default is never actually hit.
 bool HavocCallsVisitor::isInitSideEffectFree(
     const clang::Stmt *init, const std::set<const clang::VarDecl *> &mutableVars) const {
-  if (!init)
-    return true;
-  if (const auto *declStmt = clang::dyn_cast<clang::DeclStmt>(init)) {
-    for (const auto *D: declStmt->decls()) {
-      if (const auto *varDecl = clang::dyn_cast<clang::VarDecl>(D)) {
-        if (!isSideEffectFree(varDecl->getInit(), mutableVars))
-          return false;
-      }
-    }
-    return true;
+  for (const clang::VarDecl *varDecl : mutableVars) {
+    if (!isSideEffectFree(varDecl->getInit(), mutableVars))
+      return false;
   }
-  if (const auto *E = clang::dyn_cast<clang::Expr>(init))
+  if (const auto *E = clang::dyn_cast_or_null<clang::Expr>(init))
     return isSideEffectFree(E, mutableVars);
-  return false;
+  return true;
 }
 
 HavocCallsVisitor::HavocCallsVisitor(clang::ASTContext *C,
