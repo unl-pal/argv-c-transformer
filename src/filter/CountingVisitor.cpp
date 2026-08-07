@@ -25,7 +25,10 @@ std::string CountingVisitor::getDeclParentFuncName(const clang::Decl &D) {
   if (const clang::DeclContext *parentFuncContext = D.getParentFunctionOrMethod()) {
     if (parentFuncContext->isFunctionOrMethod()) {
       const clang::FunctionDecl *FD = clang::dyn_cast<clang::FunctionDecl>(parentFuncContext);
-      return FD->getNameAsString();
+      std::string name = FD->getNameAsString();
+      // guarantee function entry exists, may add harmless irrelevant entries
+      _allFunctions->try_emplace(name);
+      return name;
     }
   }
   return "FileScope";
@@ -38,8 +41,11 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
   if (parents.size()) {
     for (const clang::DynTypedNode &parent : parents) {
       // DynTypedNode is type-erased - try each possible parent kind
-      if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>())
-        return fd->getNameAsString();
+      if (const clang::FunctionDecl *fd = parent.get<clang::FunctionDecl>()) {
+        std::string name = fd->getNameAsString();
+        _allFunctions->try_emplace(name); // see getDeclParentFuncName
+        return name;
+      }
       if (const clang::Stmt *s = parent.get<clang::Stmt>())
         return getStmtParentFuncName(*s);
       if (const clang::Decl *d = parent.get<clang::Decl>())
@@ -50,14 +56,10 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
 }
 
 bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
-  // Only count direct CallExpr, not subclasses, to match the original
-  // getStmtClass()-based tally.
-  if (!_mgr->isInMainFile(CE->getBeginLoc()))
+  // Only count direct CallExpr, not subclasses
+  if (!_mgr->isInMainFile(_mgr->getExpansionLoc(CE->getBeginLoc())))
     return true;
-  // Verifier nondet / havoc-helper calls stand in for code the transform
-  // removed; they are not complexity of the function's own logic, so they
-  // never count toward CallFunc (matters when the verify stage re-counts a
-  // havocked file).
+  // don't count Verifier nondet / havoc-helper / reach_error / asserts
   if (const clang::FunctionDecl *callee = CE->getDirectCallee()) {
     if (callee->getIdentifier() && isVerifierGenerated(callee->getNameAsString()))
       return true;
@@ -76,27 +78,19 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
       break;
     }
   }
-  return true;
-}
-
-bool CountingVisitor::VisitVarDecl(clang::VarDecl *VD) {
-  if (_mgr->isInMainFile(VD->getLocation())) {
-    clang::QualType varType = VD->getType();
-    if (varType->isPointerType())
-      varType = varType->getPointeeType();
-    if (varType->isFloatingType())
-      _allFunctions->at(getDeclParentFuncName(*VD)).Features.FloatingPoint = true;
-    // check for concurrency
-    auto it = StdHeaders.find(varType.getUnqualifiedType().getAsString());
-    if (it != StdHeaders.end() &&
-        (it->second == "pthread.h" || it->second == "threads.h" || it->second == "semaphore.h"))
-      _allFunctions->at(getDeclParentFuncName(*VD)).Features.Concurrency = true;
+  if (const clang::FunctionDecl *callee = CE->getDirectCallee()) {
+    if (!callee->getIdentifier() || !_mgr->isInSystemHeader(callee->getBeginLoc())) return true;
+    if (callee->getNameAsString() == "free") {
+      _allFunctions->at(getStmtParentFuncName(*CE)).Features.MemFree = true;
+    } else if (isMemoryFunction(callee->getNameAsString())) {
+      _allFunctions->at(getStmtParentFuncName(*CE)).Features.MemAlloc = true;
+    }
   }
   return true;
 }
 
 bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
-  if (_mgr->isInMainFile(FD->getLocation())) {
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(FD->getLocation()))) {
     if (!_allFunctions->count(FD->getNameAsString()))
       _allFunctions->try_emplace(FD->getNameAsString());
     attributes &entry = _allFunctions->at(FD->getNameAsString());
@@ -108,26 +102,27 @@ bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
 }
 
 bool CountingVisitor::VisitIfStmt(clang::IfStmt *If) {
-  if (_mgr->isInMainFile(If->getIfLoc()))
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(If->getIfLoc())))
     _allFunctions->at(getStmtParentFuncName(*If)).Complexity.IfStmt++;
   return true;
 }
 
 bool CountingVisitor::VisitForStmt(clang::ForStmt *F) {
-  if (_mgr->isInMainFile(F->getForLoc()))
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(F->getForLoc())))
     _allFunctions->at(getStmtParentFuncName(*F)).Complexity.ForLoops++;
   return true;
 }
 
 bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
-  if (_mgr->isInMainFile(W->getWhileLoc()))
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(W->getWhileLoc())))
     _allFunctions->at(getStmtParentFuncName(*W)).Complexity.WhileLoops++;
   return true;
 }
 
 bool CountingVisitor::VisitBinaryOperator(clang::BinaryOperator *B) {
   // Only signed overlfow is UB
-  if (_mgr->isInMainFile(B->getOperatorLoc()) && B->getType()->isSignedIntegerType()) {
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(B->getOperatorLoc())) &&
+      B->getType()->isSignedIntegerType()) {
     clang::BinaryOperator::Opcode op =
         B->isCompoundAssignmentOp()
             ? clang::BinaryOperator::getOpForCompoundAssignment(B->getOpcode())
@@ -140,9 +135,46 @@ bool CountingVisitor::VisitBinaryOperator(clang::BinaryOperator *B) {
 }
 
 bool CountingVisitor::VisitUnaryOperator(clang::UnaryOperator *U) {
-  if (_mgr->isInMainFile(U->getOperatorLoc()) && U->getType()->isSignedIntegerType()) {
-    if (U->canOverflow())
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(U->getOperatorLoc()))) {
+    if (U->canOverflow() && U->getType()->isSignedIntegerType())
       _allFunctions->at(getStmtParentFuncName(*U)).Complexity.Operations++;
+    if (U->getOpcode() == clang::UO_Deref)
+      _allFunctions->at(getStmtParentFuncName(*U)).Features.PointerDeref = true;
+  }
+  return true;
+}
+
+bool CountingVisitor::VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE) {
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(ASE->getBeginLoc())))
+    _allFunctions->at(getStmtParentFuncName(*ASE)).Features.PointerDeref = true;
+  return true;
+}
+
+bool CountingVisitor::VisitMemberExpr(clang::MemberExpr *ME) {
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(ME->getExprLoc())) && ME->isArrow())
+    _allFunctions->at(getStmtParentFuncName(*ME)).Features.PointerDeref = true;
+  return true;
+}
+
+bool CountingVisitor::VisitStringLiteral(clang::StringLiteral *SL) {
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(SL->getBeginLoc())))
+    _allFunctions->at(getStmtParentFuncName(*SL)).Features.PointerOrArray = true;
+  return true;
+}
+
+bool CountingVisitor::VisitDeclRefExpr(clang::DeclRefExpr *DRE) {
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(DRE->getLocation()))) {
+    clang::QualType type = DRE->getType();
+    if (type->isPointerType() || type->isArrayType())
+      _allFunctions->at(getStmtParentFuncName(*DRE)).Features.PointerOrArray = true;
+    if (type->isPointerType())
+      type = type->getPointeeType();
+    if (type->isFloatingType())
+      _allFunctions->at(getStmtParentFuncName(*DRE)).Features.FloatingPoint = true;
+    auto it = StdHeaders.find(type.getUnqualifiedType().getAsString());
+    if (it != StdHeaders.end() &&
+        (it->second == "pthread.h" || it->second == "threads.h" || it->second == "semaphore.h"))
+      _allFunctions->at(getStmtParentFuncName(*DRE)).Features.Concurrency = true;
   }
   return true;
 }

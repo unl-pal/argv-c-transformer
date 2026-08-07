@@ -16,10 +16,12 @@
  *
  * Runs last in the transform consumer chain. For every verifier suffix recorded
  * by earlier consumers (havoc calls, main generation), inserts an
- * {@code extern <type> __VERIFIER_nondet_<suffix>(void);} declaration at the top
- * of the main file, skipping any that the filter step already injected. Also emits
+ * {@code extern <type> __VERIFIER_nondet_<suffix>(void);} declaration. Also emits
  * helper definitions for {@code __havoc_block} and {@code __havoc_cstring} when
- * those markers are present in the suffix set.
+ * those markers are present in the suffix set, the {@code __HAVOC_*} bound
+ * macros when {@code MainGenConsumer} recorded the "__havoc_argv" marker, and a
+ * {@code reach_error()} definition (plus its own {@code #include <assert.h>})
+ * when {@code AssertRewriter} recorded the "__reach_error" marker.
  */
 class AddVerifiersConsumer : public clang::ASTConsumer {
 public:
@@ -27,7 +29,7 @@ public:
    * @brief Constructs the consumer with the shared pipeline state.
    *
    * @param neededSuffixes Verifier suffixes collected by earlier consumers
-   *        ({@code HavocCallsConsumer}, {@code MainGenConsumer}).
+   *        ({@code HavocCallsConsumer}, {@code MainGenConsumer}, {@code AssertRewriter}).
    * @param rewriter       Shared rewriter for modifying the source buffer.
    */
   AddVerifiersConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,

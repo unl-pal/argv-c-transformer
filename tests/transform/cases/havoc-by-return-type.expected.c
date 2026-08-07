@@ -1,15 +1,18 @@
+#include <stdlib.h>
 extern float __VERIFIER_nondet_float(void);
 extern int __VERIFIER_nondet_int(void);
-extern void __VERIFIER_nondet_memory(void *, unsigned long);
-extern void *malloc(unsigned long);
-static void *__havoc_block(unsigned long size) {
+extern size_t __VERIFIER_nondet_size_t(void);
+extern void __VERIFIER_nondet_memory(void *, size_t);
+static void *__havoc_block(size_t size) {
   void *block = malloc(size);
   __VERIFIER_nondet_memory(block, size);
   return block;
 }
-static char *__havoc_cstring(unsigned long size) {
+static char *__havoc_cstring(size_t size) {
   char *s = __havoc_block(size);
-  s[size - 1] = '\0';
+  size_t len = __VERIFIER_nondet_size_t();
+  if (len >= size) abort();
+  s[len] = '\0';
   return s;
 }
 

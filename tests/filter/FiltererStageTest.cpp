@@ -137,6 +137,33 @@ TEST_F(FiltererStageTest, AcceptsNonStdHeader) {
   EXPECT_TRUE(fs::exists(filterDir / "uses_local.c"));
 }
 
+TEST_F(FiltererStageTest, HeaderSplicedSignatureDoesNotCrash) {
+  // A function whose signature is spliced in from an #include'd header but
+  // whose body is written directly in the main file (legal, if unusual, C -
+  // the parser doesn't care about file boundaries mid-declaration).
+  // FunctionDecl::getLocation() (the name token) resolves into the header, so
+  // it's never registered in _allFunctions - but the body's statements are
+  // genuinely in the main file, so CountingVisitor's per-node gates still let
+  // them through, and getStmtParentFuncName's structural parent-walk still
+  // (correctly) resolves them to "foo". Before CountingVisitor guaranteed the
+  // resolved name always has a map entry, this crashed with
+  // unordered_map::at and silently dropped the whole file from the run.
+  writeConfig();
+  writeFile(databaseDir / "signature.h", "void foo(void)\n");
+  writeFile(databaseDir / "spliced.c", "#include \"signature.h\"\n"
+                                        "{\n"
+                                        "  int *p = 0;\n"
+                                        "  (void)p;\n"
+                                        "}\n"
+                                        "\n"
+                                        "int main(void) { foo(); return 0; }\n");
+
+  Filterer f(configPath.string());
+  f.run();
+
+  EXPECT_TRUE(fs::exists(filterDir / "spliced.c"));
+}
+
 TEST_F(FiltererStageTest, StripsFunctionFailingComplexityThreshold) {
   // ForLoops = 1,9999 requires at least one for loop per function: `plain`
   // fails and is stripped to a bare declaration; `loopy` keeps its body.

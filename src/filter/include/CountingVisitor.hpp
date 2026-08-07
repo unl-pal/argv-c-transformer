@@ -46,6 +46,10 @@ public:
   struct FeatureFlags {
     bool Concurrency = false;
     bool FloatingPoint = false;
+    bool PointerOrArray = false; // coarse gate: pointer/array VarDecl|ParmVarDecl, string literal
+    bool PointerDeref = false;   // valid-deref signal: array subscript, *p, p->field
+    bool MemAlloc = false;       // valid-memtrack signal: malloc/calloc/realloc/strdup
+    bool MemFree = false;        // valid-free signal: free
   };
 
   /** @brief Per-function AST property counts, split across the two axes. */
@@ -86,13 +90,10 @@ public:
   std::string getDeclParentFuncName(const clang::Decl &D);
 
   /** @brief Counts function calls ({@code CallFunc}) and checks call
-   * arguments for characteristics (just concurrency for now), marking the
-   * enclosing function accordingly. */
+   * arguments/callee for characteristics (concurrency / memsafety), marking
+   * the enclosing function accordingly.
+  */
   bool VisitCallExpr(clang::CallExpr *CE);
-
-  /** @brief Counts variable declarations per function; flags floating-point
-   * and concurrency types. */
-  bool VisitVarDecl(clang::VarDecl *VD);
 
   /** @brief Registers each function in {@code _allFunctions}, increments the
    * file-level function count, and flags a floating-point return type. */
@@ -110,8 +111,22 @@ public:
   /** @brief Counts signed binary operations per function. */
   bool VisitBinaryOperator(clang::BinaryOperator *BO);
 
-  /** @brief Counts signed unary operations per function. */
+  /** @brief Counts signed unary operations per function and flags dereferences. */
   bool VisitUnaryOperator(clang::UnaryOperator *UO);
+
+  /** @brief flag FeatureFlags::PointerDeref on the enclosing function.
+   * `a[i]` is a dereference regardless of whether `a` is pointer- or array-typed. */
+  bool VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE);
+
+  /** @brief flag FeatureFlags::PointerDeref on the enclosing function when {@code ME->isArrow()} */
+  bool VisitMemberExpr(clang::MemberExpr *ME);
+
+  /** @brief flag FeatureFlags::PointerOrArray on the enclosing function */
+  bool VisitStringLiteral(clang::StringLiteral *SL);
+
+  /** @brief flag PointerOrArray, FloatingPoint, and Concurrency on the
+   * enclosing function based on a referenced declaration's type. */
+  bool VisitDeclRefExpr(clang::DeclRefExpr *DRE);
 
 private:
   clang::ASTContext *_C;
@@ -122,8 +137,7 @@ private:
 /**
  * @brief Looks up a named field on the complexity axis, shared by the
  * filter's threshold check and the verify stage's post-transform re-check.
- * Throws if `name` isn't one of the known metrics; a config key typo should
- * surface loudly, not silently no-op.
+ * Throws if `name` isn't one of the known metrics.
  */
 inline int complexityField(const CountingVisitor::ComplexityCounts &c, const std::string &name) {
   if (name == "CallFunc")
@@ -143,12 +157,20 @@ inline int complexityField(const CountingVisitor::ComplexityCounts &c, const std
 
 /**
  * @brief Looks up a named flag on the feature axis. Throws if `name` isn't
- * one of the known features, for the same reason as complexityField above.
+ * one of the known features.
  */
 inline bool featureField(const CountingVisitor::FeatureFlags &f, const std::string &name) {
   if (name == "Concurrency")
     return f.Concurrency;
   if (name == "FloatingPoint")
     return f.FloatingPoint;
+  if (name == "PointerOrArray")
+    return f.PointerOrArray;
+  if (name == "PointerDeref")
+    return f.PointerDeref;
+  if (name == "MemAlloc")
+    return f.MemAlloc;
+  if (name == "MemFree")
+    return f.MemFree;
   throw std::invalid_argument("unknown feature: " + name);
 }

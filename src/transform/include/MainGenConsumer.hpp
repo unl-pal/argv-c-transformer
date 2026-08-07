@@ -57,9 +57,12 @@ private:
    *
    * Unlike an arbitrary function, {@code main}'s pointer params have a known
    * contract, so instead of skipping it we synthesize a realistic call: a nondet
-   * {@code argc} bounded to [0, 7] via {@code abort()}, and an {@code argv}
-   * array of havocked, null-terminated C strings (via {@code __havoc_cstring}).
-   * Registers any verifier helpers it uses in {@code _NeededSuffixes}.
+   * {@code argc} bounded to [{@code __HAVOC_ARGC_MIN}, {@code __HAVOC_ARGC_MAX}]
+   * via {@code abort()}, and a fixed-extent {@code argv} array of havocked,
+   * null-terminated C strings (via {@code __havoc_cstring}). The bounds come
+   * from {@code HavocPolicy.hpp} and are emitted as macros by
+   * {@code AddVerifiersConsumer}. Registers any verifier helpers it uses in
+   * {@code _NeededSuffixes}.
    *
    * @param mainFn The original {@code main} FunctionDecl (already renamed in
    *               the rewriter output).

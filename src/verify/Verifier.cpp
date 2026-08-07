@@ -20,8 +20,9 @@
 #include <string>
 #include <system_error>
 
-const std::string defaultTransformDir = "transformedFiles";
-const std::string defaultBenchmarkDir = "benchmarks";
+// Mirrors Transformer's own fallback default, so a bare Verifier invocation
+// lines up with the rest of the "repos" -> "repos-benchmarks" chain.
+const std::string defaultTransformDir = "repos-transformed";
 
 Verifier::Verifier(std::string configFile, std::string inputPath) : configuration() {
   config = parsePipelineConfig(configFile);
@@ -29,13 +30,11 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
-  configuration.benchmarkDir =
-      config.benchmarkDir.empty() ? defaultBenchmarkDir : config.benchmarkDir;
-  if (!inputPath.empty()) {
+  if (!inputPath.empty())
     configuration.transformDir = inputPath;
-    if (inputBaseName(inputPath) != defaultTransformDir)
-      configuration.benchmarkDir = inputBaseName(inputPath) + "-benchmarks";
-  }
+  configuration.benchmarkDir = config.benchmarkDir.empty()
+                                    ? inputBaseName(configuration.transformDir) + "-benchmarks"
+                                    : config.benchmarkDir;
   globalDebugLevel() = configuration.debugLevel;
 }
 
@@ -150,7 +149,6 @@ void __VERIFIER_nondet_memory(void *mem, size_t size) {
   unsigned char *p = (unsigned char *)mem;
   for (size_t i = 0; i < size; i++) p[i] = __VERIFIER_nondet_uchar();
 }
-void reach_error(void) {}
 )";
 
 // NOTE: cmd is passed to std::system (shell-interpreted), and path/verifierPath
@@ -176,8 +174,11 @@ bool Verifier::checkCompilable(std::filesystem::path path) {
 std::vector<BenchmarkProperty> Verifier::selectProperties(
     const std::unordered_map<std::string, CountingVisitor::attributes> &counts) {
   std::vector<BenchmarkProperty> properties;
+  if (counts.count("reach_error"))
+    properties.push_back({"../properties/unreach-call.prp", true});
   bool loopsPresent = false;
   bool intArithPresent = false;
+  bool memsafetyPresent = false;
   for (const auto &[name, attr] : counts) {
     if (!loopsPresent && (attr.Complexity.ForLoops || attr.Complexity.WhileLoops)) {
       loopsPresent = true;
@@ -188,7 +189,13 @@ std::vector<BenchmarkProperty> Verifier::selectProperties(
       intArithPresent = true;
       properties.push_back({"../properties/no-overflow.prp", true});
     }
-    if (loopsPresent && intArithPresent)
+    // valid-memsafety.prp bundles deref/free/memtrack CHECKs in one file
+    if (!memsafetyPresent &&
+        (attr.Features.PointerDeref || attr.Features.MemAlloc || attr.Features.MemFree)) {
+      memsafetyPresent = true;
+      properties.push_back({"../properties/valid-memsafety.prp", true});
+    }
+    if (loopsPresent && intArithPresent && memsafetyPresent)
       break;
   }
   return properties;
@@ -222,6 +229,8 @@ void Verifier::writeBenchmarkTask(
       << "options:\n"
       << "  language: C\n"
       << "  data_model: LP64\n";
+  if (properties.empty())
+    debugLog(1, "[verify] WARN: no properties found for " + cPath.string());
 }
 
 // NOTE: same std::system/unescaped-path caveat as checkCompilable above.

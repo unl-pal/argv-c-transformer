@@ -39,6 +39,10 @@ struct PipelineConfig {
   std::map<std::string, FeatureGate> features = {
       {"Concurrency", FeatureGate::Ignore},
       {"FloatingPoint", FeatureGate::Ignore},
+      {"PointerOrArray", FeatureGate::Ignore},
+      {"PointerDeref", FeatureGate::Ignore},
+      {"MemAlloc", FeatureGate::Ignore},
+      {"MemFree", FeatureGate::Ignore},
   };
 
   /// File-level integer settings (booleans are stored as 0/1).

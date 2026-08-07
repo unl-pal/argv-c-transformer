@@ -246,7 +246,7 @@ const char *kPthreadStubs = R"(
 
 TEST(CountingVisitor, ConcurrencyFlaggedForLocalPthreadVariable) {
   // A pthread_mutex_t declared and locked entirely inside the function should
-  // flag it via the VisitVarDecl path.
+  // flag it via the VisitDeclRefExpr path (the `&m` references in each call).
   auto r = runCounter(std::string(kPthreadStubs) + R"(
     void worker() {
       pthread_mutex_t m;
@@ -259,9 +259,12 @@ TEST(CountingVisitor, ConcurrencyFlaggedForLocalPthreadVariable) {
 }
 
 TEST(CountingVisitor, ConcurrencyFlaggedByCallArgumentAlone) {
-  // The pthread_mutex_t lives at file scope ("Program"), never as a VarDecl
-  // inside the function; only the call argument's type can catch this, so
-  // this isolates the VisitCallExpr path from the VisitVarDecl path.
+  // The pthread_mutex_t lives at file scope ("Program"), so referencing it as
+  // a call argument (`&global_lock`) is now caught twice over: once by
+  // VisitCallExpr's own argument-type check, and independently by
+  // VisitDeclRefExpr on the `global_lock` reference itself. Kept as a
+  // regression check that the call-argument path still works even though
+  // it's no longer the only path that would catch this case.
   auto r = runCounter(std::string(kPthreadStubs) + R"(
     pthread_mutex_t global_lock;
     void worker() {
@@ -274,7 +277,8 @@ TEST(CountingVisitor, ConcurrencyFlaggedByCallArgumentAlone) {
 
 TEST(CountingVisitor, ConcurrencyFlaggedForPointerTypedLocal) {
   // A pointer-typed local (pthread_mutex_t *) with no call at all should
-  // still be flagged; VisitVarDecl strips the pointer before the lookup.
+  // still be flagged; VisitDeclRefExpr strips one level of pointer before the
+  // lookup, matched on the `m` reference in `alias`'s initializer.
   auto r = runCounter(std::string(kPthreadStubs) + R"(
     void worker(pthread_mutex_t *m) {
       pthread_mutex_t *alias = m;
@@ -316,15 +320,27 @@ TEST(CountingVisitor, ConcurrencyIsolatedPerFunction) {
 // ---------------------------------------------------------------------------
 
 TEST(CountingVisitor, FloatingPointFlaggedForLocalFloatVariable) {
-  auto r = runCounter("void foo() { float x = 1.0f; }");
+  // Detection is usage-based, not declaration-based (see
+  // FloatingPointNotSetForUnusedFloatVariable below) - the variable must
+  // actually be referenced somewhere for its type to count.
+  auto r = runCounter("void foo() { float x = 1.0f; (void)x; }");
   ASSERT_TRUE(r.funcs->count("foo"));
   EXPECT_TRUE(r.funcs->at("foo").Features.FloatingPoint);
 }
 
 TEST(CountingVisitor, FloatingPointFlaggedForDoubleParam) {
-  auto r = runCounter("void foo(double x) {}");
+  auto r = runCounter("void foo(double x) { (void)x; }");
   ASSERT_TRUE(r.funcs->count("foo"));
   EXPECT_TRUE(r.funcs->at("foo").Features.FloatingPoint);
+}
+
+TEST(CountingVisitor, FloatingPointNotSetForUnusedFloatVariable) {
+  // A declared-but-never-referenced pointer/float/concurrency-typed variable
+  // flags nothing: nothing in the function actually does anything with it,
+  // so there's no real floating-point/pointer/concurrency behavior to report.
+  auto r = runCounter("void foo() { float x = 1.0f; }");
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_FALSE(r.funcs->at("foo").Features.FloatingPoint);
 }
 
 TEST(CountingVisitor, FloatingPointFlaggedForFloatReturnType) {
@@ -341,7 +357,7 @@ TEST(CountingVisitor, FloatingPointNotSetForIntOnlyFunction) {
 
 TEST(CountingVisitor, FloatingPointIsolatedPerFunction) {
   auto r = runCounter(R"(
-    void withFloat() { float x = 1.0f; }
+    void withFloat() { float x = 1.0f; (void)x; }
     int clean(int x) { return x + 1; }
   )");
   ASSERT_TRUE(r.funcs->count("withFloat"));

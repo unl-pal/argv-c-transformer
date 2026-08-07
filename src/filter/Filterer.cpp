@@ -20,14 +20,14 @@
 #include <llvm/Support/raw_ostream.h>
 #include <string>
 
-const std::string defaultFilterDir = "filteredFiles";
 const std::string defaultDatabaseDir = "repos";
 
 Filterer::Filterer(std::string configFile, std::string inputPath) {
-  configuration.filterDir = defaultFilterDir;
   configuration.databaseDir = defaultDatabaseDir;
   if (!configFile.empty())
     parseConfigFile(configFile);
+  if (configuration.filterDir.empty())
+    configuration.filterDir = inputBaseName(configuration.databaseDir) + "-filtered";
   if (!inputPath.empty()) {
     configuration.databaseDir = inputPath;
     configuration.filterDir = inputBaseName(inputPath) + "-filtered";
