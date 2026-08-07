@@ -4,11 +4,6 @@
 #define __HAVOC_OPAQUE_BYTES 128
 extern int __VERIFIER_nondet_int(void);
 extern void __VERIFIER_nondet_memory(void *, size_t);
-static void *__havoc_block(size_t size) {
-  void *block = malloc(size);
-  __VERIFIER_nondet_memory(block, size);
-  return block;
-}
 
 int takesPtr(int *p) {
   return *p;
@@ -23,7 +18,9 @@ int plain(int a) {
 }
 
 int main(void) {
-  takesPtr((int *)__havoc_block(sizeof(int) * __HAVOC_ARRAY_ELEMS));
+  int __h0[__HAVOC_ARRAY_ELEMS];
+  __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+  takesPtr(__h0);
   plain(__VERIFIER_nondet_int());
   return 0;
 }

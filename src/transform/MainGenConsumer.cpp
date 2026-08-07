@@ -57,7 +57,7 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
                       " not harnessed");
       continue;
     }
-    HarnessCall call = genCallHarness(func, mgr);
+    HarnessCall call = genCallHarness(func, Context);
     // A parameter with neither a nondet equivalent nor a viable pointer plan
     // (aggregate by value, function pointer, ...): skip this function but keep
     // harnessing the rest.
@@ -76,8 +76,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 }
 
 MainGenConsumer::HarnessCall
-MainGenConsumer::genCallHarness(const clang::FunctionDecl *func,
-                                const clang::SourceManager &mgr) {
+MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTContext &Context) {
+  const clang::SourceManager &mgr = Context.getSourceManager();
   HarnessCall call;
   // Markers stay local until the whole list is known to be harnessable, so a
   // function that turns out to be unsupported leaves no unused externs behind.
@@ -110,9 +110,19 @@ MainGenConsumer::genCallHarness(const clang::FunctionDecl *func,
 
     std::optional<std::string> suffix = verifierSuffixForType(declared);
     if (!suffix) {
-      // Cast to the parameter's decayed type, which is what the call expects.
-      call.args += renderPointerExpr(plans[i], parm->getType().getAsString());
-      markers.insert(plans[i].helper);
+      // Parameters are in statement position, so the pointer is havocked as
+      // stack storage rather than a heap block: no free obligation, no
+      // allocator to model. The storage decays to the parameter's type at the
+      // call, so no cast is needed except on the opaque byte buffer.
+      std::string local = "__h" + std::to_string(counter++);
+      PointerStorage store = renderPointerStorage(plans[i], declared, local,
+                                                  parm->getType().getAsString(),
+                                                  Context.getPrintingPolicy());
+      call.prologue += store.decls;
+      call.args += store.arg;
+      markers.insert("__havoc_mem");
+      if (store.cstring)
+        markers.insert("__havoc_str");
       markers.insert("__havoc_bounds");
       if (!plans[i].fwdDecl.empty())
         markers.insert("__havoc_fwd:" + plans[i].fwdDecl);
@@ -159,14 +169,25 @@ std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   std::string body;
   body += "  int argc = __VERIFIER_nondet_int();\n";
   body += "  if (argc < __HAVOC_ARGC_MIN || argc > __HAVOC_ARGC_MAX) abort();\n";
+  // Backing storage for the strings lives in main's frame, so every argv[i]
+  // stays valid until the program exits - no per-argument heap allocation to
+  // leak. Each row is nondet-filled and given an in-bounds terminator, the same
+  // string invariant renderPointerStorage plants for a char* parameter.
+  body += "  char __argv_buf[__HAVOC_ARGC_MAX][__HAVOC_STR_MAX];\n";
   body += "  char *argv[__HAVOC_ARGC_MAX + 1];\n";
-  body += "  for (int i = 0; i < argc; i++)\n";
-  body += "    argv[i] = __havoc_cstring(__HAVOC_STR_MAX);\n";
+  body += "  for (int i = 0; i < argc; i++) {\n";
+  body += "    __VERIFIER_nondet_memory(__argv_buf[i], __HAVOC_STR_MAX);\n";
+  body += "    size_t len = __VERIFIER_nondet_size_t();\n";
+  body += "    if (len >= __HAVOC_STR_MAX) abort();\n";
+  body += "    __argv_buf[i][len] = '\\0';\n";
+  body += "    argv[i] = __argv_buf[i];\n";
+  body += "  }\n";
   body += "  argv[argc] = 0;\n";
   body += "  original_main(argc, argv);\n";
 
   _NeededSuffixes->insert("int");
-  _NeededSuffixes->insert("__havoc_cstring");
+  _NeededSuffixes->insert("__havoc_mem");
+  _NeededSuffixes->insert("__havoc_str");
   _NeededSuffixes->insert("__havoc_argv");
   return body;
 }

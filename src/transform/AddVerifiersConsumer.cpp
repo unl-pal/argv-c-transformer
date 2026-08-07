@@ -103,32 +103,20 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     decls += "extern " + *cType + " " + name + "(void);\n";
   }
 
-  // HavocCallsVisitor marks pointer-returning call replacements with the
-  // helper names; emit the helper definitions they rely on. The helpers
-  // hand out valid havocked blocks per the SV-COMP __VERIFIER_nondet_memory
-  // contract (an arbitrary nondet pointer value must never be dereferenced).
-  // <stdlib.h> supplies malloc, abort and size_t
-  bool needCString = _NeededSuffixes->count("__havoc_cstring");
-  bool needBlock = needCString || _NeededSuffixes->count("__havoc_block");
-  if (needBlock) {
+  // Pointer havocking fills stack storage with __VERIFIER_nondet_memory (an
+  // arbitrary nondet pointer *value* must never be dereferenced, so a filled
+  // block is the only safe form). Both sites - harnessed parameters
+  // (MainGenConsumer) and pointer-returning calls (HavocCallsVisitor) - inline
+  // the storage and mark it "__havoc_mem"; a cstring additionally needs
+  // nondet_size_t and abort and marks "__havoc_str". <stdlib.h> supplies size_t
+  // (in the nondet_memory signature) and abort.
+  bool needMemory = _NeededSuffixes->count("__havoc_mem");
+  bool needSizeNondet = _NeededSuffixes->count("__havoc_str");
+  if (needMemory) {
     decls.insert(0, includeText("stdlib.h"));
-    if (needCString && !_NeededSuffixes->count("size_t"))
+    if (needSizeNondet && !_NeededSuffixes->count("size_t"))
       decls += "extern size_t __VERIFIER_nondet_size_t(void);\n";
-    decls += "extern void __VERIFIER_nondet_memory(void *, size_t);\n"
-             "static void *__havoc_block(size_t size) {\n"
-             "  void *block = malloc(size);\n"
-             "  __VERIFIER_nondet_memory(block, size);\n"
-             "  return block;\n"
-             "}\n";
-  }
-  if (needCString) {
-    decls += "static char *__havoc_cstring(size_t size) {\n"
-             "  char *s = __havoc_block(size);\n"
-             "  size_t len = __VERIFIER_nondet_size_t();\n"
-             "  if (len >= size) abort();\n"
-             "  s[len] = '\\0';\n"
-             "  return s;\n"
-             "}\n";
+    decls += "extern void __VERIFIER_nondet_memory(void *, size_t);\n";
   }
 
   // AssertRewriter rewrote at least one assert(cond) to reach_error()

@@ -6,18 +6,6 @@ struct Point;
 extern int __VERIFIER_nondet_int(void);
 extern size_t __VERIFIER_nondet_size_t(void);
 extern void __VERIFIER_nondet_memory(void *, size_t);
-static void *__havoc_block(size_t size) {
-  void *block = malloc(size);
-  __VERIFIER_nondet_memory(block, size);
-  return block;
-}
-static char *__havoc_cstring(size_t size) {
-  char *s = __havoc_block(size);
-  size_t len = __VERIFIER_nondet_size_t();
-  if (len >= size) abort();
-  s[len] = '\0';
-  return s;
-}
 
 struct Point {
   int x;
@@ -49,13 +37,26 @@ int point_x(struct Point *p) { return p->x; }
 int unbounded(int n) { return n + 1; }
 
 int main(void) {
-  int __h0 = __VERIFIER_nondet_int();
-  if (__h0 < 0 || __h0 > __HAVOC_ARRAY_ELEMS) abort();
-  sum((int *)__havoc_block(sizeof(int) * __HAVOC_ARRAY_ELEMS), __h0);
-  third((int *)__havoc_block(sizeof(int) * 3));
-  first_char((const char *)__havoc_cstring(__HAVOC_STR_MAX));
-  opaque((void *)__havoc_block(__HAVOC_OPAQUE_BYTES));
-  point_x((struct Point *)__havoc_block(sizeof(struct Point) * __HAVOC_ARRAY_ELEMS));
+  int __h0[__HAVOC_ARRAY_ELEMS];
+  __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+  int __h1 = __VERIFIER_nondet_int();
+  if (__h1 < 0 || __h1 > __HAVOC_ARRAY_ELEMS) abort();
+  sum(__h0, __h1);
+  int __h2[3];
+  __VERIFIER_nondet_memory(__h2, sizeof(__h2));
+  third(__h2);
+  char __h3[__HAVOC_STR_MAX];
+  __VERIFIER_nondet_memory(__h3, sizeof(__h3));
+  size_t __h3_len = __VERIFIER_nondet_size_t();
+  if (__h3_len >= __HAVOC_STR_MAX) abort();
+  __h3[__h3_len] = '\0';
+  first_char(__h3);
+  _Alignas(16) unsigned char __h4[__HAVOC_OPAQUE_BYTES];
+  __VERIFIER_nondet_memory(__h4, sizeof(__h4));
+  opaque((void *)__h4);
+  struct Point __h5[__HAVOC_ARRAY_ELEMS];
+  __VERIFIER_nondet_memory(__h5, sizeof(__h5));
+  point_x(__h5);
   unbounded(__VERIFIER_nondet_int());
   return 0;
 }

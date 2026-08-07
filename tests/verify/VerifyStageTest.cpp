@@ -151,7 +151,10 @@ TEST_F(VerifyStageTest, HeaderTypedefStructIsForwardDeclaredAndStillCompiles) {
   EXPECT_NE(out.find("typedef struct __havoc_Range Range;"), std::string::npos)
       << "missing typedef forward declaration; output was:\n"
       << out;
-  EXPECT_NE(out.find("(Range *)__havoc_block(__HAVOC_OPAQUE_BYTES)"), std::string::npos);
+  // Opaque: an aligned byte buffer, nondet-filled on the stack, cast to Range*
+  // at the call. No sizeof(Range) — the type has no definition in the output.
+  EXPECT_NE(out.find("(Range *)__h"), std::string::npos);
+  EXPECT_NE(out.find("unsigned char __h"), std::string::npos);
   EXPECT_EQ(out.find("sizeof(Range)"), std::string::npos);
   // A produced benchmark means checkCompilable passed under keepCompilesOnly:
   // without the typedef the cast is an unknown type name and this file is gone.
@@ -174,7 +177,12 @@ TEST_F(VerifyStageTest, MainFileTypedefIsNotRedeclared) {
   EXPECT_EQ(out.find("__havoc_Range"), std::string::npos)
       << "synthesized tag leaked for a main-file typedef; output was:\n"
       << out;
-  EXPECT_NE(out.find("sizeof(Range)"), std::string::npos);
+  // Sized with the real type: the harness declares typed Range storage, not the
+  // opaque `unsigned char[...]` byte buffer a header-only type would get. (The
+  // __HAVOC_OPAQUE_BYTES *macro* is always defined alongside the other bounds,
+  // so its presence is not the signal — the buffer declaration is.)
+  EXPECT_NE(out.find("Range __h"), std::string::npos);
+  EXPECT_EQ(out.find("unsigned char __h"), std::string::npos);
   EXPECT_TRUE(fs::exists(benchmarkDir / "local.i"));
 }
 
@@ -372,5 +380,6 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
 
   std::string src = readFile(benchmarkDir / "withmain.c");
   EXPECT_NE(src.find("original_main(argc, argv);"), std::string::npos);
-  EXPECT_NE(src.find("__havoc_cstring"), std::string::npos);
+  // argv strings come from a stack buffer filled with nondet_memory, no heap.
+  EXPECT_NE(src.find("__argv_buf"), std::string::npos);
 }

@@ -69,17 +69,20 @@ private:
    * @brief Synthesizes arguments for one call to an arbitrary function.
    *
    * Primitive parameters become {@code __VERIFIER_nondet_*()} calls; pointer
-   * parameters are classified by {@code planPointer} and rendered as havocked
-   * blocks. When a pointer is present, integer parameters are emitted as locals
-   * clamped to {@code __HAVOC_ARRAY_ELEMS} instead, so that any index derived
-   * from them stays inside the block handed to the callee.
+   * parameters are classified by {@code planPointer} and rendered by
+   * {@code renderPointerStorage} as stack storage filled with
+   * {@code __VERIFIER_nondet_memory}. When a pointer is present, integer
+   * parameters are emitted as locals clamped to {@code __HAVOC_ARRAY_ELEMS}
+   * instead, so that any index derived from them stays inside the block handed
+   * to the callee.
    *
-   * @param func The function to synthesize a call for.
-   * @param mgr  SourceManager, needed to tell types that survive into the
-   *             output from those defined only in a stripped header.
+   * @param func    The function to synthesize a call for.
+   * @param Context The AST context, for the SourceManager (telling types that
+   *                survive into the output from those defined only in a stripped
+   *                header) and the PrintingPolicy (spelling storage declarations).
    * @return The call; check {@code viable} before using it.
    */
-  HarnessCall genCallHarness(const clang::FunctionDecl *func, const clang::SourceManager &mgr);
+  HarnessCall genCallHarness(const clang::FunctionDecl *func, clang::ASTContext &Context);
 
   /**
    * @brief Builds the harness body that invokes the renamed {@code original_main}.
@@ -88,8 +91,9 @@ private:
    * contract, so instead of skipping it we synthesize a realistic call: a nondet
    * {@code argc} bounded to [{@code __HAVOC_ARGC_MIN}, {@code __HAVOC_ARGC_MAX}]
    * via {@code abort()}, and a fixed-extent {@code argv} array of havocked,
-   * null-terminated C strings (via {@code __havoc_cstring}). The bounds come
-   * from {@code HavocPolicy.hpp} and are emitted as macros by
+   * null-terminated C strings backed by a stack buffer (filled with
+   * {@code __VERIFIER_nondet_memory}, no heap). The bounds come from
+   * {@code HavocPolicy.hpp} and are emitted as macros by
    * {@code AddVerifiersConsumer}. Registers any verifier helpers it uses in
    * {@code _NeededSuffixes}.
    *

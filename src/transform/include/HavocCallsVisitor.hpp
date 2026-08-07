@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "HavocPolicy.hpp"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
@@ -18,10 +20,12 @@
 /**
  * @brief Havocs every in-file function call so bodies become intraprocedural.
  *
- * Primitive returns -> {@code __VERIFIER_nondet_<type>()}; pointer returns ->
- * {@code __havoc_block(128)} / {@code __havoc_cstring(128)}; void returns
- * dropped; aggregate returns left as-is. Dropped calls are marked no-op, and
- * enclosing loops/branches that become side-effect-free no-ops are pruned.
+ * Primitive returns -> {@code __VERIFIER_nondet_<type>()} inline; pointer
+ * returns -> stack storage filled with {@code __VERIFIER_nondet_memory},
+ * hoisted above the enclosing statement (see {@code renderPointerStorage}); void
+ * and discarded pointer returns dropped; aggregate returns left as-is. Dropped
+ * calls are marked no-op, and enclosing loops/branches that become
+ * side-effect-free no-ops are pruned.
  */
 class HavocCallsVisitor : public clang::RecursiveASTVisitor<HavocCallsVisitor> {
 public:
@@ -160,6 +164,38 @@ private:
   void pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc);
 
   /**
+   * @brief Havocs a pointer-returning call by hoisting stack storage above the
+   *        enclosing statement and substituting it for the call.
+   *
+   * A pointer cannot be synthesized as a bare expression the way a primitive
+   * nondet can, so the storage (@ref renderPointerStorage) is emitted as
+   * statements before the call's enclosing statement, and the call is replaced
+   * by a reference to it. A call whose value is discarded needs no storage and
+   * is dropped like a void call; a call with no block to hoist into (not inside
+   * a compound statement) is left as-is, the only compilable fallback.
+   *
+   * @param E     The pointer-returning call.
+   * @param plan  Its viable pointer plan.
+   * @param where Preformatted "file:line" for debug logging.
+   * @return true to continue traversal.
+   */
+  bool havocPointerReturn(clang::CallExpr *E, const PointerPlan &plan, const std::string &where);
+
+  /**
+   * @brief The statement a pointer call's storage must be hoisted above.
+   *
+   * Walks parents to the nearest node that is a direct child of a compound
+   * statement. Sets @p discarded when the call is that statement's whole value
+   * (a bare expression statement), meaning the value is unused.
+   *
+   * @param E         The call to locate.
+   * @param discarded Out: true if the call's return value is unused.
+   * @return The enclosing statement, or nullptr if the call is not inside a
+   *         compound statement (no safe place to hoist).
+   */
+  const clang::Stmt *hoistAnchor(const clang::CallExpr *E, bool &discarded) const;
+
+  /**
    * @brief Computes statement-level vacuity structurally; isNoOp memoizes it.
    * @param S The statement to classify; never null.
    */
@@ -174,4 +210,6 @@ private:
   std::set<const clang::Stmt *> _ErasedStmts;
   /** Suffixes owed by each havocked call, held until the call is known to survive. */
   std::map<const clang::Expr *, std::set<std::string>> _PendingSuffixes;
+  /** Names every hoisted pointer-return stub across the TU, keeping them unique. */
+  unsigned _StubCounter = 0;
 };

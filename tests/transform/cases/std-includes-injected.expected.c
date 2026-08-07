@@ -11,18 +11,6 @@ extern int __VERIFIER_nondet_int(void);
 extern unsigned int __VERIFIER_nondet_uint(void);
 extern size_t __VERIFIER_nondet_size_t(void);
 extern void __VERIFIER_nondet_memory(void *, size_t);
-static void *__havoc_block(size_t size) {
-  void *block = malloc(size);
-  __VERIFIER_nondet_memory(block, size);
-  return block;
-}
-static char *__havoc_cstring(size_t size) {
-  char *s = __havoc_block(size);
-  size_t len = __VERIFIER_nondet_size_t();
-  if (len >= size) abort();
-  s[len] = '\0';
-  return s;
-}
 
 size_t measure(const char *s) {
   size_t i = 0;
@@ -39,7 +27,12 @@ uint32_t mask(uint32_t x) {
 }
 
 int main(void) {
-  measure((const char *)__havoc_cstring(__HAVOC_STR_MAX));
+  char __h0[__HAVOC_STR_MAX];
+  __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+  size_t __h0_len = __VERIFIER_nondet_size_t();
+  if (__h0_len >= __HAVOC_STR_MAX) abort();
+  __h0[__h0_len] = '\0';
+  measure(__h0);
   check(__VERIFIER_nondet_int());
   mask(__VERIFIER_nondet_uint());
   return 0;

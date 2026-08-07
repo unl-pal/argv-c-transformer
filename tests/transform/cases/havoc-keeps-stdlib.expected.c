@@ -6,24 +6,17 @@
 #define __HAVOC_OPAQUE_BYTES 128
 extern size_t __VERIFIER_nondet_size_t(void);
 extern void __VERIFIER_nondet_memory(void *, size_t);
-static void *__havoc_block(size_t size) {
-  void *block = malloc(size);
-  __VERIFIER_nondet_memory(block, size);
-  return block;
-}
-static char *__havoc_cstring(size_t size) {
-  char *s = __havoc_block(size);
-  size_t len = __VERIFIER_nondet_size_t();
-  if (len >= size) abort();
-  s[len] = '\0';
-  return s;
-}
 
 int uses_stdlib(const char *s) {
   return (int)strlen(s);
 }
 
 int main(void) {
-  uses_stdlib((const char *)__havoc_cstring(__HAVOC_STR_MAX));
+  char __h0[__HAVOC_STR_MAX];
+  __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+  size_t __h0_len = __VERIFIER_nondet_size_t();
+  if (__h0_len >= __HAVOC_STR_MAX) abort();
+  __h0[__h0_len] = '\0';
+  uses_stdlib(__h0);
   return 0;
 }

@@ -22,29 +22,18 @@
 
 namespace {
 
-// Formats a source location as "file:line" for per-decision debug logging.
-std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
-  clang::PresumedLoc presumed = mgr.getPresumedLoc(loc);
-  if (!presumed.isValid())
-    return "<unknown>";
-  return std::string(presumed.getFilename()) + ":" + std::to_string(presumed.getLine());
-}
-
-// Returns the VarDecl behind an expression if it's a plain variable
-// reference, else null.
-const clang::VarDecl *referencedVar(const clang::Expr *E) {
-  if (!E)
-    return nullptr;
-  if (const auto *DRE = clang::dyn_cast<clang::DeclRefExpr>(E->IgnoreParenCasts()))
-    return clang::dyn_cast<clang::VarDecl>(DRE->getDecl());
-  return nullptr;
-}
-
-// What a call becomes when havocked: the text that replaces it (empty means
-// erase outright) and the verifier/helper markers the output then owes.
+// What a call becomes when havocked. One of three modes:
+//   Erase   - void return: drop the call.
+//   Inline  - primitive return: replace with a __VERIFIER_nondet_* expression.
+//   Pointer - pointer return: hoist stack storage and substitute it (the caller
+//             renders and places it; a pointer cannot be a bare expression).
+// `suffixes` carries the markers an Inline replacement owes; pointer markers are
+// added by the caller, which also knows whether the value is used.
 struct HavocAction {
-  std::string replacement;
-  std::set<std::string> suffixes;
+  enum class Mode { Erase, Inline, Pointer } mode;
+  std::string replacement;         // Inline only.
+  PointerPlan plan;                // Pointer only.
+  std::set<std::string> suffixes;  // Inline only.
 };
 
 // Decides whether a call is havocked, and into what. Returns nullopt for every
@@ -79,29 +68,25 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
 
   // A void call yields no value to havoc, so it is erased rather than replaced.
   if (returnType->isVoidType())
-    return HavocAction{"", {}};
+    return HavocAction{HavocAction::Mode::Erase, "", {}, {}};
 
   if (std::optional<std::string> suffix = verifierSuffixForType(returnType))
-    return HavocAction{"__VERIFIER_nondet_" + *suffix + "()", {*suffix}};
+    return HavocAction{HavocAction::Mode::Inline, "__VERIFIER_nondet_" + *suffix + "()", {},
+                       {*suffix}};
 
   if (returnType->isAnyPointerType()) {
     // Pointer returns get a havocked-but-valid block (SV-COMP
-    // __VERIFIER_nondet_memory). planPointer decides the size from the pointee
-    // rather than guessing; the helpers return char*/void*, so the cast back to
-    // the call's actual return type keeps e.g. an unsigned char* result from
-    // being an incompatible assignment. AddVerifiersConsumer emits the helper
-    // definitions when it sees these markers.
+    // __VERIFIER_nondet_memory over stack storage). planPointer decides the
+    // shape and size from the pointee rather than guessing; the storage and its
+    // placement are the caller's job, since a pointer cannot be a bare
+    // expression the way a primitive nondet can.
     //
     // A non-viable plan (function pointer, or a record whose fields the callee
     // could not legally dereference after a bulk havoc) leaves the call alone.
     PointerPlan plan = planPointer(returnType, mgr);
     if (!plan.viable)
       return std::nullopt;
-    HavocAction action{renderPointerExpr(plan, returnType.getAsString()),
-                       {plan.helper, "__havoc_bounds"}};
-    if (!plan.fwdDecl.empty())
-      action.suffixes.emplace("__havoc_fwd:" + plan.fwdDecl);
-    return action;
+    return HavocAction{HavocAction::Mode::Pointer, "", plan, {}};
   }
 
   // Aggregate returns (structs, unions) have no expression-position nondet
@@ -121,6 +106,15 @@ std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
   return vars;
 }
 
+// Returns the VarDecl behind an expression if it's a plain variable reference, else null.
+const clang::VarDecl *referencedVar(const clang::Expr *E) {
+  if (!E)
+    return nullptr;
+  if (const auto *DRE = clang::dyn_cast<clang::DeclRefExpr>(E->IgnoreParenCasts()))
+    return clang::dyn_cast<clang::VarDecl>(DRE->getDecl());
+  return nullptr;
+}
+
 // Consumes a `;` immediately following `S`, if there is one. Used to clean up
 // a no-op statement that's a direct child of a block: erasing just the
 // statement's own text (a dropped call, or a fully-pruned if/while/do/for
@@ -132,6 +126,14 @@ void eatTrailingSemicolon(clang::ASTContext *C, clang::Rewriter &rewriter, const
       clang::Lexer::findNextToken(S->getEndLoc(), C->getSourceManager(), C->getLangOpts());
   if (next && next->is(clang::tok::semi))
     rewriter.RemoveText(next->getLocation(), next->getLength());
+}
+
+// Formats a source location as "file:line" for per-decision debug logging.
+std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
+  clang::PresumedLoc presumed = mgr.getPresumedLoc(loc);
+  if (!presumed.isValid())
+    return "<unknown>";
+  return std::string(presumed.getFilename()) + ":" + std::to_string(presumed.getLine());
 }
 
 } // namespace
@@ -155,17 +157,28 @@ bool HavocCallsVisitor::isSideEffectFree(
   case clang::Stmt::GNUNullExprClass:
   case clang::Stmt::UnaryExprOrTypeTraitExprClass: // sizeof / alignof
     return true;
-  case clang::Stmt::CallExprClass:
+  case clang::Stmt::CallExprClass: {
     // A havocked call is pure by construction: the transform is
     // intraprocedural, so the callee's writes to globals and out-parameters
     // are already discarded, leaving the return value as its only
     // contribution. Deleting it where that value is unused therefore changes
-    // nothing. That covers the pointer helpers too - a bare
-    // `__havoc_block(...)` cannot orphan a live block, since the only handle
-    // on a block is the value being discarded here. A call we do *not* havoc
-    // (system call, aggregate return, non-viable pointer plan) is a real call
-    // to a real function and stays side-effecting.
-    return classifyCall(clang::cast<clang::CallExpr>(E), *_C).has_value();
+    // nothing. A call we do *not* havoc (system call, aggregate return,
+    // non-viable pointer plan) is a real call and stays side-effecting.
+    //
+    // A pointer return is the exception: havocking it hoists stack storage
+    // above the enclosing statement, so that statement must survive - it is
+    // pure only when its value is discarded and the call is dropped outright.
+    const auto *CE = clang::cast<clang::CallExpr>(E);
+    std::optional<HavocAction> action = classifyCall(CE, *_C);
+    if (!action)
+      return false;
+    if (action->mode == HavocAction::Mode::Pointer) {
+      bool discarded = false;
+      hoistAnchor(CE, discarded);
+      return discarded;
+    }
+    return true;
+  }
   case clang::Stmt::UnaryOperatorClass: {
     const auto *UO = clang::cast<clang::UnaryOperator>(E);
     if (UO->isIncrementDecrementOp())
@@ -243,18 +256,86 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     return true;
 
   std::string where = locString(_C->getSourceManager(), E->getExprLoc());
-  if (action->replacement.empty()) {
+  if (action->mode == HavocAction::Mode::Erase) {
     debugLog(4, "[transform] " + where + ": dropped void call");
     eraseStmt(E);
     return true;
+  }
+  if (action->mode == HavocAction::Mode::Pointer)
+    return havocPointerReturn(E, action->plan, where);
 
-  // Overwriting the whole call also overwrites the replacement text of any
-  // call nested in its arguments, so those calls stop owing suffixes too.
+  // Inline primitive nondet. Overwriting the whole call also overwrites the
+  // replacement text of any call nested in its arguments, so those calls stop
+  // owing suffixes too.
   for (const clang::Stmt *child : E->children())
     dropPendingIn(child);
   debugLog(4, "[transform] " + where + ": havocked call -> " + action->replacement);
   _Rewriter.ReplaceText(E->getSourceRange(), action->replacement);
   _PendingSuffixes[E] = action->suffixes;
+  return true;
+}
+
+const clang::Stmt *HavocCallsVisitor::hoistAnchor(const clang::CallExpr *E, bool &discarded) const {
+  discarded = false;
+  clang::DynTypedNode node = clang::DynTypedNode::create(*E);
+  while (true) {
+    clang::DynTypedNodeList parents = _C->getParents(node);
+    if (parents.empty())
+      return nullptr;
+    const clang::DynTypedNode &parent = parents[0];
+    if (parent.get<clang::CompoundStmt>()) {
+      // `node` is a direct child of a block: the statement to hoist above.
+      const clang::Stmt *anchor = node.get<clang::Stmt>();
+      if (!anchor)
+        return nullptr;
+      // The call is the whole statement (a bare expression statement) when the
+      // anchor, stripped of parens and implicit conversions, is the call itself.
+      if (const auto *asExpr = clang::dyn_cast<clang::Expr>(anchor))
+        discarded = asExpr->IgnoreParenImpCasts() == E;
+      return anchor;
+    }
+    node = parent;
+  }
+}
+
+bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan &plan,
+                                           const std::string &where) {
+  bool discarded = false;
+  const clang::Stmt *anchor = hoistAnchor(E, discarded);
+  if (discarded) {
+    // No handle survives on the block, so nothing needs synthesizing.
+    debugLog(4, "[transform] " + where + ": dropped discarded pointer call");
+    eraseStmt(E);
+    return true;
+  }
+  if (!anchor) {
+    // Not inside a block (e.g. a global initializer): nowhere to hoist. Leaving
+    // the call is the only compilable option - the callee is defined in-file.
+    debugLog(2, "[transform] " + where + ": pointer call has no statement to hoist above; left as-is");
+    return true;
+  }
+
+  clang::QualType returnType = E->getCallReturnType(*_C);
+  std::string stub = "__hret" + std::to_string(_StubCounter++);
+  PointerStorage store = renderPointerStorage(plan, returnType, stub, returnType.getAsString(),
+                                              _C->getPrintingPolicy(), /*indent=*/"");
+
+  // The stub replaces the whole call, discarding any calls nested in its
+  // arguments along with the suffixes they owed.
+  for (const clang::Stmt *child : E->children())
+    dropPendingIn(child);
+  // indentNewLines matches the hoisted lines to the anchor statement's column.
+  _Rewriter.InsertText(anchor->getBeginLoc(), store.decls, /*InsertAfter=*/false,
+                       /*indentNewLines=*/true);
+  _Rewriter.ReplaceText(E->getSourceRange(), store.arg);
+
+  std::set<std::string> markers{"__havoc_mem", "__havoc_bounds"};
+  if (store.cstring)
+    markers.insert("__havoc_str");
+  if (!plan.fwdDecl.empty())
+    markers.insert("__havoc_fwd:" + plan.fwdDecl);
+  _PendingSuffixes[E] = markers;
+  debugLog(4, "[transform] " + where + ": havocked pointer call -> stack " + stub);
   return true;
 }
 

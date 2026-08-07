@@ -25,6 +25,7 @@ namespace {
 struct Parsed {
   std::unique_ptr<clang::ASTUnit> ast;
   PointerPlan plan;
+  clang::QualType declared; ///< The parameter's pre-decay type the plan was built from.
 };
 
 // Parses `code`, finds the first parameter of the function named `func`, and
@@ -43,7 +44,8 @@ Parsed planFirstParam(const std::string &code, const std::string &func = "f") {
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!fn || fn->getNameAsString() != func || fn->param_empty())
       continue;
-    p.plan = planPointer(fn->getParamDecl(0)->getOriginalType(), ctx.getSourceManager());
+    p.declared = fn->getParamDecl(0)->getOriginalType();
+    p.plan = planPointer(p.declared, ctx.getSourceManager());
     return p;
   }
   ADD_FAILURE() << "no function named " << func << " with a parameter";
@@ -60,8 +62,6 @@ TEST(PlanPointer, CharPointerIsCString) {
   auto p = planFirstParam("void f(char *s) {}");
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::CString);
-  EXPECT_EQ(p.plan.helper, "__havoc_cstring");
-  EXPECT_EQ(p.plan.sizeExpr, "__HAVOC_STR_MAX");
 }
 
 TEST(PlanPointer, ConstCharPointerIsStillCString) {
@@ -77,8 +77,6 @@ TEST(PlanPointer, ScalarPointerIsBlockSizedByPointee) {
   auto p = planFirstParam("void f(int *a) {}");
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Block);
-  EXPECT_EQ(p.plan.helper, "__havoc_block");
-  EXPECT_EQ(p.plan.sizeExpr, "sizeof(int) * __HAVOC_ARRAY_ELEMS");
 }
 
 TEST(PlanPointer, ArrayParamKeepsDeclaredBound) {
@@ -88,14 +86,12 @@ TEST(PlanPointer, ArrayParamKeepsDeclaredBound) {
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Array);
   EXPECT_EQ(p.plan.elems, 3u);
-  EXPECT_EQ(p.plan.sizeExpr, "sizeof(int) * 3");
 }
 
 TEST(PlanPointer, VoidPointerIsOpaqueByteCount) {
   auto p = planFirstParam("void f(void *p) {}");
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
-  EXPECT_EQ(p.plan.sizeExpr, "__HAVOC_OPAQUE_BYTES");
 }
 
 TEST(PlanPointer, IncompleteRecordPointerIsOpaque) {
@@ -104,14 +100,13 @@ TEST(PlanPointer, IncompleteRecordPointerIsOpaque) {
   auto p = planFirstParam("struct Hidden; void f(struct Hidden *p) {}");
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
-  EXPECT_EQ(p.plan.sizeExpr, "__HAVOC_OPAQUE_BYTES");
 }
 
-TEST(PlanPointer, PointerFreeRecordIsSizedBySizeof) {
+TEST(PlanPointer, PointerFreeRecordIsSizedByType) {
   auto p = planFirstParam("struct Point { int x; int y; };\n"
                           "void f(struct Point *p) {}");
   EXPECT_TRUE(p.plan.viable);
-  EXPECT_EQ(p.plan.sizeExpr, "sizeof(struct Point) * __HAVOC_ARRAY_ELEMS");
+  EXPECT_EQ(p.plan.shape, PointerShape::Record);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,16 +148,53 @@ TEST(PlanPointer, FunctionPointerIsNotViable) {
 }
 
 // ---------------------------------------------------------------------------
-// Rendering
+// Rendering: stack storage filled with __VERIFIER_nondet_memory, no heap.
 // ---------------------------------------------------------------------------
 
-TEST(RenderPointerExpr, CastsBlockToRequestedType) {
+TEST(RenderPointerStorage, BlockDeclaresTypedArrayAndPassesIt) {
   auto p = planFirstParam("void f(int *a) {}");
-  EXPECT_EQ(renderPointerExpr(p.plan, "int *"),
-            "(int *)__havoc_block(sizeof(int) * __HAVOC_ARRAY_ELEMS)");
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *",
+                                          p.ast->getASTContext().getPrintingPolicy());
+  EXPECT_EQ(s.arg, "__h0");
+  EXPECT_FALSE(s.cstring);
+  EXPECT_EQ(s.decls, "  int __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }
 
-TEST(RenderPointerExpr, CStringUsesStringHelper) {
+TEST(RenderPointerStorage, ArrayUsesDeclaredBound) {
+  auto p = planFirstParam("void f(int a[3]) {}");
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *",
+                                          p.ast->getASTContext().getPrintingPolicy());
+  EXPECT_EQ(s.decls, "  int __h0[3];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+}
+
+TEST(RenderPointerStorage, CStringPlantsInBoundsTerminator) {
   auto p = planFirstParam("void f(char *s) {}");
-  EXPECT_EQ(renderPointerExpr(p.plan, "char *"), "(char *)__havoc_cstring(__HAVOC_STR_MAX)");
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "char *",
+                                          p.ast->getASTContext().getPrintingPolicy());
+  EXPECT_TRUE(s.cstring);
+  EXPECT_EQ(s.arg, "__h0");
+  EXPECT_EQ(s.decls, "  char __h0[__HAVOC_STR_MAX];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n"
+                     "  size_t __h0_len = __VERIFIER_nondet_size_t();\n"
+                     "  if (__h0_len >= __HAVOC_STR_MAX) abort();\n"
+                     "  __h0[__h0_len] = '\\0';\n");
+}
+
+TEST(RenderPointerStorage, OpaqueUsesAlignedByteBufferAndCasts) {
+  auto p = planFirstParam("void f(void *p) {}");
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "void *",
+                                          p.ast->getASTContext().getPrintingPolicy());
+  EXPECT_EQ(s.arg, "(void *)__h0");
+  EXPECT_EQ(s.decls, "  _Alignas(16) unsigned char __h0[__HAVOC_OPAQUE_BYTES];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+}
+
+TEST(RenderPointerStorage, IndentParameterPrefixesEveryLine) {
+  auto p = planFirstParam("void f(int *a) {}");
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *",
+                                          p.ast->getASTContext().getPrintingPolicy(), "");
+  EXPECT_EQ(s.decls, "int __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "__VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }

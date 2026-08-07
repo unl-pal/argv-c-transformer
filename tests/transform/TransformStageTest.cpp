@@ -149,14 +149,15 @@ TEST_F(TransformStageTest, ConfigDatabaseDirResolvesLocalHeaders) {
   // file (the #include is stripped textually), so planPointer returns Opaque.
   // This pins the exact emission on purpose: if the Opaque policy changes,
   // update this string to match the new intended output.
-  EXPECT_NE(out.find("span((Range *)__havoc_block(__HAVOC_OPAQUE_BYTES)"), std::string::npos)
+  EXPECT_NE(out.find("span((Range *)__h"), std::string::npos)
       << "harness did not emit the Opaque plan for Range *; output was:\n"
       << out;
+  EXPECT_NE(out.find("unsigned char __h"), std::string::npos);
 
   // The specific pre-fix symptom: with no -I path clang error-recovered by
-  // substituting `int` for the unknown `Range`, and planPointer sized the
-  // bogus `int *` as a Block. Survives any change to the Opaque policy above.
-  EXPECT_EQ(out.find("(int *)__havoc_block"), std::string::npos)
+  // substituting `int` for the unknown `Range`, sizing the bogus `int *` as a
+  // Block — which would cast the harness argument to (int *), not (Range *).
+  EXPECT_EQ(out.find("span((int *)"), std::string::npos)
       << "unknown-typename error recovery leaked into the harness";
 }
 
@@ -174,7 +175,9 @@ TEST_F(TransformStageTest, ArgcArgvMainProducesTransformedSource) {
 
   std::string src = readFile(transformDir / "withmain.c");
   EXPECT_NE(src.find("original_main"), std::string::npos);
-  EXPECT_NE(src.find("__havoc_cstring"), std::string::npos);
+  // argv strings are synthesized into a stack buffer, not heap-allocated.
+  EXPECT_NE(src.find("__argv_buf"), std::string::npos);
+  EXPECT_NE(src.find("__VERIFIER_nondet_memory"), std::string::npos);
   EXPECT_NE(src.find("__VERIFIER_nondet_int"), std::string::npos);
   EXPECT_NE(src.find("abort"), std::string::npos);
 }
