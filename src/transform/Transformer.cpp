@@ -7,6 +7,7 @@
 #include "CliArgs.hpp"
 #include "ConfigParser.hpp"
 #include "DebugLog.hpp"
+#include "IncludeIndex.hpp"
 
 #include <csignal>
 #include <ctime>
@@ -16,6 +17,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <string>
 #include <system_error>
+#include <vector>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -81,8 +83,14 @@ bool Transformer::transformFile(std::filesystem::path path) {
     return false;
   }
 
+  // The filtered file still carries its original quoted #includes, but only
+  // the source repo has the headers they name, so they resolve against that
+  // tree. An unset databaseDir leaves the index empty and the list empty.
+  std::vector<std::string> includeDirs =
+      headerIndex ? collectLocalIncludeDirs(path, *headerIndex) : std::vector<std::string>{};
+
   ArgsFrontendFactory factory(output);
-  bool ran = runToolOnFile(path.string(), factory);
+  bool ran = runToolOnFile(path.string(), factory, includeDirs);
   output.close();
   if (!ran) {
     debugLog(1, "[transform] clang tool failed on: " + path.string());
@@ -195,6 +203,14 @@ void Transformer::parseConfig(std::string configFile) {
   if (!config.filterDir.empty()) {
     configuration.filterDir = config.filterDir;
   }
+  // The filtered tree holds only .c files, so quoted #includes still have to
+  // resolve against the original repo. argv-c injects this via
+  // setDatabaseDir(); a standalone `transform` run only has the config.
+  if (!config.databaseDir.empty()) {
+    configuration.databaseDir = config.databaseDir;
+    if (!std::filesystem::exists(config.databaseDir))
+      debugLog(0, "Database directory not found: " + config.databaseDir);
+  }
 }
 
 int Transformer::run() {
@@ -203,6 +219,10 @@ int Transformer::run() {
     debugLog(0, "Filter directory not found: " + configuration.filterDir);
     return 0;
   }
+  // Built once over the original repo tree, before any file is transformed;
+  // transformFile runs in a forked child, which inherits the index as-is.
+  headerIndex.emplace(configuration.databaseDir);
+
   int result = transformAll(path);
   int discarded = _totalProcessed - result;
   std::cout << "\n=== Transform summary ===\n"

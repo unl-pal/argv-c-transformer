@@ -59,6 +59,7 @@ set(SOURCE_TRANSFORM
   src/transform/HavocCallsConsumer.cpp
   src/transform/TransformAction.cpp
   src/transform/Transformer.cpp
+  src/transform/UnknownTypeDiagConsumer.cpp
 )
 
 set(SOURCE_VERIFY

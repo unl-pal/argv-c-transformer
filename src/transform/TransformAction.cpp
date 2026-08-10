@@ -8,6 +8,7 @@
 #include "DebugLog.hpp"
 #include "HavocCallsConsumer.hpp"
 #include "MainGenConsumer.hpp"
+#include "UnknownTypeDiagConsumer.hpp"
 
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/MultiplexConsumer.h>
@@ -76,7 +77,9 @@ AssertRewriter::AssertRewriter(clang::SourceManager &SM, clang::Rewriter &rewrit
                                const clang::LangOptions &langOpts)
     : _Mgr(SM), _Rewriter(rewriter), _NeededSuffixes(neededSuffixes), _LangOpts(langOpts) {}
 
-TransformAction::TransformAction(llvm::raw_ostream &output) : _Output(output), _Rewriter() {}
+TransformAction::TransformAction(llvm::raw_ostream &output)
+    : _Output(output), _Rewriter(),
+      _UnresolvedTypeNames(std::make_shared<std::set<std::string>>()) {}
 
 // unique_ptr can't be copied, so tempVector is built up and moved into MultiplexConsumer.
 std::unique_ptr<clang::ASTConsumer>
@@ -102,13 +105,18 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
   tempVector.emplace_back(
       std::make_unique<MainGenConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
   tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(neededSuffixes, _Rewriter));
-  tempVector.emplace_back(std::make_unique<AddStdIncludesConsumer>(existingIncludes, _Rewriter));
+  tempVector.emplace_back(
+      std::make_unique<AddStdIncludesConsumer>(existingIncludes, _UnresolvedTypeNames, _Rewriter));
 
   return std::make_unique<clang::MultiplexConsumer>(std::move(tempVector));
 }
 
 bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
+  // Ownership passes to the DiagnosticsEngine; it outlives parsing, which is
+  // all this consumer needs to run for.
+  compiler.getDiagnostics().setClient(new UnknownTypeDiagConsumer(_UnresolvedTypeNames),
+                                      /*ShouldOwnClient=*/true);
   return clang::ASTFrontendAction::BeginSourceFileAction(compiler);
 }
 

@@ -41,8 +41,9 @@ public:
    * @brief Builds the multiplexed consumer chain for the transform pipeline.
    *
    * Registers IncludeFinder on the preprocessor and returns a
-   * MultiplexConsumer running HavocCallsConsumer, MainGenConsumer, and
-   * AddVerifiersConsumer (in that order) over the shared Rewriter.
+   * MultiplexConsumer running HavocCallsConsumer, MainGenConsumer,
+   * AddVerifiersConsumer, and AddStdIncludesConsumer (in that order) over the
+   * shared Rewriter.
    *
    * @param Compiler The compiler instance for this translation unit.
    * @param Filename Name of the file being processed.
@@ -52,7 +53,9 @@ public:
                                                                 llvm::StringRef Filename) override;
 
   /**
-   * @brief Initializes the shared Rewriter before any consumers run.
+   * @brief Initializes the shared Rewriter and installs the unresolved-type diagnostic consumer.
+   *
+   * This runs before parsing starts, so every diagnostic for the translation unit is captured.
    *
    * @param compiler The compiler instance for this translation unit.
    * @return Result of the base class implementation.
@@ -67,6 +70,7 @@ public:
 private:
   llvm::raw_ostream &_Output;
   clang::Rewriter _Rewriter;
+  std::shared_ptr<std::set<std::string>> _UnresolvedTypeNames;
 };
 
 /**

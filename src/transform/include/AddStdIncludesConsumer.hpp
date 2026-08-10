@@ -27,9 +27,13 @@ public:
    *
    * @param existingIncludes System includes already present in the file (recorded
    *        by {@code IncludeFinder}); used to avoid emitting duplicates.
-   * @param rewriter         Shared rewriter for modifying the source buffer.
+   * @param unresolvedTypeNames Unresolved type identifiers recovered by
+   *        {@code UnknownTypeDiagConsumer} during parsing - names that never
+   *        made it into the AST 
+   * @param rewriter Shared rewriter for modifying the source buffer.
    */
   AddStdIncludesConsumer(std::shared_ptr<std::set<std::string>> existingIncludes,
+                         std::shared_ptr<std::set<std::string>> unresolvedTypeNames,
                          clang::Rewriter &rewriter);
 
   /**
@@ -41,5 +45,6 @@ public:
 
 private:
   std::shared_ptr<std::set<std::string>> _ExistingIncludes;
+  std::shared_ptr<std::set<std::string>> _UnresolvedTypeNames;
   clang::Rewriter &_Rewriter;
 };

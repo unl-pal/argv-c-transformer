@@ -117,6 +117,25 @@ project header are recovered by `AddStdIncludesConsumer` (see `CLAUDE.md`). File
 depend on *project* types or macros from a local header will still fail to compile after
 stripping and are caught by the Verify stage's `keepCompilesOnly` compile check.
 
+An unresolved type isn't always AST-visible for `AddStdIncludesConsumer` to recover: a
+local variable declared with an unrecognized type name (e.g. `mode_t m;` with no
+`sys/types.h` in scope) causes Clang to drop the whole `DeclStmt`, leaving no node to
+walk. `UnknownTypeDiagConsumer` closes this gap by hooking the parser's diagnostics
+directly (`err_unknown_typename`, and - the common case for a bare local declaration,
+which is syntactically ambiguous with an expression-statement - `err_undeclared_var_use`)
+and feeding the recovered names into the same `StdHeaders` lookup, name-only and
+backstopped by the same compile check.
+
+### Local Header Resolution
+
+Filter and Transform resolve each file's quoted `#include "..."` directives against a
+`HeaderIndex` (`src/common/include/IncludeIndex.hpp`) built once per run over
+`databaseDir`, passing matches to Clang as `-I` search paths (`runToolOnFile`'s
+`extraIncludeDirs`) so project-local headers actually parse instead of just being
+stripped later. Basename collisions across the tree are disambiguated only by rebasing
+the include's own subdirectory components onto the candidate directory; a spec with no
+subdirectory that still matches more than one candidate just takes the closest one.
+
 ### Preprocessor-Gated Code
 
 The pipeline only operates on the **active** preprocessed translation unit. Functions inside

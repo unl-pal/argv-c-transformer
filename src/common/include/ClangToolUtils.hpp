@@ -118,12 +118,18 @@ inline std::optional<std::string> clangCommand(const std::string &flags) {
  * {@code CommonOptionsParser} build a {@code FixedCompilationDatabase}
  * directly instead of searching for a {@code compile_commands.json}.
  *
- * @param filePath    Path to the C source file to process.
- * @param resourceDir Value from {@code getResourceDir}.
+ * @param filePath        Path to the C source file to process.
+ * @param resourceDir     Value from {@code getResourceDir}.
+ * @param extraIncludeDirs Directories to add as -I search paths (e.g. from
+ *                         {@code collectLocalIncludeDirs}), so quoted
+ *                         #includes the preprocessor's default search
+ *                         (current file's directory, then system paths)
+ *                         wouldn't otherwise find can still resolve.
  * @return Argument vector for {@code CommonOptionsParser::create}.
  */
 inline std::vector<std::string> buildClangArgs(const std::string &filePath,
-                                               const std::string &resourceDir) {
+                                               const std::string &resourceDir,
+                                               const std::vector<std::string> &extraIncludeDirs = {}) {
   std::vector<std::string> args = {
       "clang",
       filePath,
@@ -132,6 +138,8 @@ inline std::vector<std::string> buildClangArgs(const std::string &filePath,
       "-resource-dir=" + resourceDir,
       "-fparse-all-comments",
   };
+  for (const std::string &dir : extraIncludeDirs)
+    args.push_back("-I" + dir);
   std::optional<std::string> sysroot = getSysroot();
   if (sysroot) {
     args.push_back("-isysroot");
@@ -165,12 +173,14 @@ inline std::vector<const char *> toArgv(const std::vector<std::string> &args) {
  * but still count as a successful run; downstream compile checks decide the
  * output's fate.
  *
- * @param filePath Path to the C source file to process.
- * @param factory  Factory producing the FrontendAction to run.
+ * @param filePath        Path to the C source file to process.
+ * @param factory         Factory producing the FrontendAction to run.
+ * @param extraIncludeDirs Directories to add as -I search paths; see {@code buildClangArgs}.
  * @return true if the tool ran; false if setup failed (no resource dir, unparsable options).
  */
 inline bool runToolOnFile(const std::string &filePath,
-                          clang::tooling::FrontendActionFactory &factory) {
+                          clang::tooling::FrontendActionFactory &factory,
+                          const std::vector<std::string> &extraIncludeDirs = {}) {
   static llvm::cl::OptionCategory toolCategory("argv-c-transformer");
   clang::IgnoringDiagConsumer diagConsumer;
 
@@ -180,7 +190,7 @@ inline bool runToolOnFile(const std::string &filePath,
     return false;
   }
 
-  std::vector<std::string> args = buildClangArgs(filePath, *resourceDir);
+  std::vector<std::string> args = buildClangArgs(filePath, *resourceDir, extraIncludeDirs);
   std::vector<const char *> argv = toArgv(args);
   int argc = static_cast<int>(args.size());
 

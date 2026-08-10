@@ -5,8 +5,10 @@
 #pragma once
 
 #include "ConfigParser.hpp"
+#include "IncludeIndex.hpp"
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -96,6 +98,15 @@ public:
    */
   const std::string &getFilterDir() const { return configuration.filterDir; }
 
+  /**
+   * @brief Returns the resolved input tree the filter read from.
+   *
+   * Lets the full pipeline point the transform step's local-#include
+   * resolution back at the real repo tree (filterDir only mirrors .c files,
+   * not headers), whichever of default / config / derived-from-input won.
+   */
+  const std::string &getDatabaseDir() const { return configuration.databaseDir; }
+
 private:
   /// Thresholds, feature gates, and file settings from the shared config
   /// parser; the same structure the verify stage re-applies post-transform.
@@ -103,4 +114,8 @@ private:
 
   /// Path settings and flags that don't fit either config map.
   struct filterConfigs configuration;
+
+  /// Header basename → directory index over databaseDir, built once in run()
+  /// and used to resolve each file's quoted #includes to -I search paths.
+  std::optional<HeaderIndex> headerIndex;
 };
