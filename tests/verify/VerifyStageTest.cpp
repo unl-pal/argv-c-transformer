@@ -161,6 +161,32 @@ TEST_F(VerifyStageTest, HeaderTypedefStructIsForwardDeclaredAndStillCompiles) {
   EXPECT_TRUE(fs::exists(benchmarkDir / "span.i"));
 }
 
+TEST_F(VerifyStageTest, HeaderEnumPointerIsForwardDeclaredAndStillCompiles) {
+  // A complete enum defined only in a stripped header: the main-file test must
+  // treat it like any other tag, dropping it to Opaque rather than sizing a
+  // bare int-like Block that names an enum the output no longer declares. The
+  // enum tag is then hoisted so the cast compiles.
+  writeFile(filterDir / "palette.h", "enum Color { RED, GREEN, BLUE };\n");
+  writeFile(filterDir / "pick.c", "#include \"palette.h\"\n"
+                                  "int is_set(enum Color *c) { return c != 0; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "pick.c"));
+  std::string out = readFile(benchmarkDir / "pick.c");
+
+  EXPECT_EQ(out.find("#include \"palette.h\""), std::string::npos);
+  // The enum tag is hoisted, so the opaque cast to enum Color* has something to
+  // name; the storage is the aligned byte buffer, never sized as an enum array.
+  EXPECT_NE(out.find("enum Color;"), std::string::npos) << "missing enum forward declaration:\n"
+                                                        << out;
+  EXPECT_NE(out.find("(enum Color *)__h"), std::string::npos);
+  EXPECT_NE(out.find("unsigned char __h"), std::string::npos);
+  // A produced benchmark means checkCompilable passed under keepCompilesOnly.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "pick.i"));
+}
+
 TEST_F(VerifyStageTest, MainFileTypedefIsNotRedeclared) {
   // The mirror case: a typedef defined in the .c itself survives into the
   // output on its own. Re-declaring it against a synthesized tag would name a

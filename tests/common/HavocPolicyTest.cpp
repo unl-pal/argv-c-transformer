@@ -102,6 +102,15 @@ TEST(PlanPointer, IncompleteRecordPointerIsOpaque) {
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
 }
 
+TEST(PlanPointer, IncompleteEnumPointerIsOpaqueWithTag) {
+  // An enum is a tag too: an incomplete one is opaque, and its cast needs the
+  // tag hoisted just like a struct's, or the harness names a fresh enum type.
+  auto p = planFirstParam("enum Color; void f(enum Color *c) {}");
+  EXPECT_TRUE(p.plan.viable);
+  EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
+  EXPECT_EQ(p.plan.fwdDecl, "enum Color");
+}
+
 TEST(PlanPointer, PointerFreeRecordIsSizedByType) {
   auto p = planFirstParam("struct Point { int x; int y; };\n"
                           "void f(struct Point *p) {}");

@@ -131,23 +131,25 @@ inline bool recordHasPointerFields(const clang::RecordDecl *record, unsigned dep
  * and measures in raw bytes.
  */
 inline std::string pointeeFwdDecl(clang::QualType pointee, const clang::SourceManager &mgr) {
-  const clang::RecordDecl *record = pointee->getAsRecordDecl();
-  if (!record)
+  // Any tag type - struct, union, or enum - needs its tag hoisted; a builtin
+  // (void, an integer) or a bare pointer names nothing the output must declare.
+  const clang::TagDecl *tag = pointee->getAsTagDecl();
+  if (!tag)
     return "";
-  std::string kind(record->getKindName());
+  std::string kind(tag->getKindName());
   if (const auto *typedefType = pointee->getAs<clang::TypedefType>()) {
     const clang::TypedefNameDecl *decl = typedefType->getDecl();
     if (decl && !mgr.isInMainFile(decl->getLocation())) {
       std::string name = decl->getName().str();
-      std::string tag = record->getName().empty() ? "__havoc_" + name : record->getName().str();
-      return "typedef " + kind + " " + tag + " " + name;
+      std::string synth = tag->getName().empty() ? "__havoc_" + name : tag->getName().str();
+      return "typedef " + kind + " " + synth + " " + name;
     }
     // Declared in the main file: it comes with its own definition.
     return "";
   }
-  if (record->getName().empty())
+  if (tag->getName().empty())
     return ""; // anonymous and unnamed: nothing to declare, nothing names it
-  return kind + " " + record->getName().str();
+  return kind + " " + tag->getName().str();
 }
 
 /**
@@ -191,25 +193,27 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
   // in bounds or every string operation in the callee runs off the end.
   if (pointee->isAnyCharacterType()) {
     plan.shape = PointerShape::CString;
-    plan.elems = 0;
     plan.viable = true;
     return plan;
   }
 
-  plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
-
-  // void*, an incomplete type, or a record whose definition came from a header
-  // the transform strips: no sizeof is available or will survive.
+  // void*, an incomplete type, or a tag (struct/union/enum) whose definition
+  // came from a header the transform strips: no sizeof is available or will
+  // survive.
   bool sized = !pointee->isVoidType() && !pointee->isIncompleteType();
   if (sized) {
-    if (const clang::RecordDecl *record = pointee->getAsRecordDecl()) {
-      const clang::RecordDecl *def = record->getDefinition();
+    if (const clang::TagDecl *tag = pointee->getAsTagDecl()) {
+      const clang::TagDecl *def = tag->getDefinition();
       sized = def && mgr.isInMainFile(def->getLocation());
     }
   }
   if (!sized) {
     plan.shape = PointerShape::Opaque;
-    plan.elems = 0;
+    // Opaque is the only shape whose storage is cast to the pointee type, so it
+    // is the only one whose spelling needs a declaration the output would not
+    // otherwise carry. A sized pointee is declared as real storage of its own
+    // type, which brings the tag with it - no forward declaration required.
+    plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
     plan.viable = true;
     return plan;
   }

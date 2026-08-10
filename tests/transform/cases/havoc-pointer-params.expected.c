@@ -2,7 +2,6 @@
 #define __HAVOC_STR_MAX 16
 #define __HAVOC_ARRAY_ELEMS 8
 #define __HAVOC_OPAQUE_BYTES 128
-struct Point;
 extern int __VERIFIER_nondet_int(void);
 extern size_t __VERIFIER_nondet_size_t(void);
 extern void __VERIFIER_nondet_memory(void *, size_t);
