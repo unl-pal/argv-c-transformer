@@ -261,12 +261,11 @@ Preprocessing with `clang -E -P -std=gnu11` inlines glibc's fallback typedefs fo
 C23 extended float types (`typedef float _Float32;` etc., from `bits/floatn-common.h`)
 into the `.i` file. CBMC treats `_Float32`/`_Float64`/… as reserved built-in type names
 and aborts with `ERROR (6)` on the (semantically inert) redeclaration; CPAchecker and
-UAutomizer don't special-case the names and are unaffected. The fix is to strip exactly
+UAutomizer don't special-case the names and are unaffected. The fix strips exactly
 those `typedef <type> _FloatNN;` lines from the `.i` after preprocessing, safe because
-no generated code spells those names; they are pure header noise. A `stripFloatNNTypedefs`
-regex helper doing this was validated on a full run (identical benchmark counts, CBMC
-went from instant errors to real verdicts) but **is not currently in the tree**; its
-home would be `Verifier::preprocess`, now that preprocessing lives in the Verify stage.
-A same-shaped, currently 1-file gap exists for `<stdatomic.h>`'s
+no generated code spells those names; they are pure header noise. `stripNoiseTypedefs`
+in `Verifier::preprocess` (`src/verify/Verifier.cpp`) does this via a regex list keyed
+on known verifier-frontend/glibc-noise pairs, extensible for future cases of the same
+shape. A same-shaped, currently 1-file gap exists for `<stdatomic.h>`'s
 `typedef _Atomic(_Bool) atomic_bool;` lines (a CPAchecker parse failure, category 4
 above). Details: [`cbmc-float-nn-typedef-fix.md`](./cbmc-float-nn-typedef-fix.md).

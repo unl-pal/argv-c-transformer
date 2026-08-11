@@ -103,6 +103,23 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   EXPECT_NE(yml.find("data_model: LP64"), std::string::npos);
 }
 
+TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
+  // <stdio.h> transitively pulls in glibc's bits/floatn-common.h, whose
+  // fallback typedefs for the C23 extended float types CBMC treats as
+  // reserved builtin names and aborts on. No generated code ever spells
+  // _Float32 etc., so Verifier::preprocess must strip those typedef lines
+  // from the .i without touching anything else.
+  writeFile(filterDir / "prints.c", "#include <stdio.h>\n"
+                                     "int identity(int x) { return x; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "prints.i"));
+  std::string i = readFile(benchmarkDir / "prints.i");
+  EXPECT_EQ(i.find("_Float"), std::string::npos);
+}
+
 // ---------------------------------------------------------------------------
 // selectProperties: which .prp files get attached, based on the fresh
 // per-function counts taken after transform (see CountingVisitor::Complexity).

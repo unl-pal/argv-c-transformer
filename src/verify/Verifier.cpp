@@ -19,10 +19,12 @@
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <string>
 #include <sys/wait.h>
 #include <system_error>
 #include <unistd.h>
+#include <vector>
 
 // Mirrors Transformer's own fallback default, so a bare Verifier invocation
 // lines up with the rest of the "repos" -> "repos-benchmarks" chain.
@@ -298,6 +300,52 @@ void Verifier::writeBenchmarkTask(
     debugLog(1, "[verify] WARN: no properties found for " + cPath.string());
 }
 
+namespace {
+
+// Lines matching one of these are pure header noise. Each entry is a case a specific verifier
+// frontend chokes on despite the declaration being semantically inert.
+//
+// - _Float16/32/64/128(x): glibc's <bits/floatn-common.h> fallback typedefs
+//   for the C23 extended float types, pulled in transitively by <stdio.h>
+const std::vector<std::regex> &knownNoiseTypedefs() {
+  static const std::vector<std::regex> patterns = {
+      std::regex(R"(^\s*typedef\s+.+\s_Float\d+x?\s*;\s*$)"),
+  };
+  return patterns;
+}
+
+// Strips knownNoiseTypedefs() lines from an already-preprocessed .i file.
+void stripNoiseTypedefs(const std::filesystem::path &iPath) {
+  std::ifstream in(iPath);
+  if (!in)
+    return;
+  std::vector<std::string> kept;
+  std::string line;
+  bool changed = false;
+  while (std::getline(in, line)) {
+    bool isNoise = false;
+    for (const std::regex &pattern : knownNoiseTypedefs()) {
+      if (std::regex_match(line, pattern)) {
+        isNoise = true;
+        break;
+      }
+    }
+    if (isNoise) {
+      changed = true;
+      continue;
+    }
+    kept.push_back(std::move(line));
+  }
+  in.close();
+  if (!changed)
+    return;
+  std::ofstream out(iPath, std::ios::trunc);
+  for (const std::string &l : kept)
+    out << l << "\n";
+}
+
+} // namespace
+
 // NOTE: same std::system/unescaped-path caveat as checkCompilable above.
 bool Verifier::preprocess(std::filesystem::path cPath) {
   std::filesystem::path iPath = cPath;
@@ -307,7 +355,10 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
   if (!cmd)
     return false;
   *cmd += " " + cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
-  return std::system(cmd->c_str()) == 0;
+  if (std::system(cmd->c_str()) != 0)
+    return false;
+  stripNoiseTypedefs(iPath);
+  return true;
 }
 
 int Verifier::run() {
