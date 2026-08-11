@@ -123,6 +123,13 @@ public:
   const std::string &getTransformDir() const { return configuration.transformDir; }
 
   /**
+   * @brief Returns the resolved input directory of filtered files to transform.
+   *
+   * Lets the driver check this exists before calling run().
+   */
+  const std::string &getFilterDir() const { return configuration.filterDir; }
+
+  /**
    * @brief Points local-#include resolution at the original repo tree.
    *
    * filterDir only mirrors .c files, so a filtered file's quoted #includes

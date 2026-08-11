@@ -206,19 +206,12 @@ void Transformer::parseConfig(std::string configFile) {
   // The filtered tree holds only .c files, so quoted #includes still have to
   // resolve against the original repo. argv-c injects this via
   // setDatabaseDir(); a standalone `transform` run only has the config.
-  if (!config.databaseDir.empty()) {
+  if (!config.databaseDir.empty())
     configuration.databaseDir = config.databaseDir;
-    if (!std::filesystem::exists(config.databaseDir))
-      debugLog(0, "Database directory not found: " + config.databaseDir);
-  }
 }
 
 int Transformer::run() {
   std::filesystem::path path(configuration.filterDir);
-  if (!std::filesystem::exists(path)) {
-    debugLog(0, "Filter directory not found: " + configuration.filterDir);
-    return 0;
-  }
   // Built once over the original repo tree, before any file is transformed;
   // transformFile runs in a forked child, which inherits the index as-is.
   headerIndex.emplace(configuration.databaseDir);

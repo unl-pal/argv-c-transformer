@@ -5,6 +5,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -71,9 +72,12 @@ inline std::string trim(const std::string &s) {
 /**
  * @brief Parses an INI-style config file and returns raw key/value string pairs.
  *
- * Lines that do not match {@code key = value} (comments, blank lines,
- * section headers) are silently skipped. A trailing {@code # ...} is
- * stripped as an inline comment before matching.
+ * Blank lines and section headers ({@code [Section]}) are silently skipped. A
+ * trailing {@code # ...} is stripped as an inline comment before matching.
+ * Anything else that doesn't match {@code key = value} is a malformed line
+ * and aborts the process — a config typo should never be silently ignored
+ * and fall back to an unrelated default (e.g. a mistyped databaseDir path
+ * silently scanning the whole default "repos" tree instead).
  *
  * @param configFile Path to the INI-style properties file.
  * @return Map of key to raw string value, or empty if the file is missing.
@@ -86,14 +90,21 @@ inline std::map<std::string, std::string> parseIniFile(const std::string &config
   if (!file.is_open())
     return result;
   std::regex pattern(R"(^\s*(\w+)\s*=\s*([0-9]+|[\w\s,\-]+|[\w/\-_.]+)$)");
-  std::string line;
+  std::string rawLine, line;
+  int lineNum = 0;
   std::smatch match;
-  while (std::getline(file, line)) {
-    size_t hash = line.find('#');
-    if (hash != std::string::npos)
-      line = line.substr(0, hash);
-    if (std::regex_search(line, match, pattern))
-      result[match[1]] = trim(match[2]);
+  while (std::getline(file, rawLine)) {
+    lineNum++;
+    size_t hash = rawLine.find('#');
+    line = trim(hash != std::string::npos ? rawLine.substr(0, hash) : rawLine);
+    if (line.empty() || line.front() == ';' || (line.front() == '[' && line.back() == ']'))
+      continue;
+    if (!std::regex_search(line, match, pattern)) {
+      std::cerr << configFile << ":" << lineNum << ": malformed config line: '" << line << "'"
+                << std::endl;
+      std::exit(1);
+    }
+    result[match[1]] = trim(match[2]);
   }
   return result;
 }

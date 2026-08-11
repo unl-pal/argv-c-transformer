@@ -69,6 +69,15 @@ TEST_F(ParseIniFileTest, StripsInlineComment) {
   EXPECT_EQ(m.at("debugLevel"), "2");
 }
 
+// Regression: a path value (forced onto the slash-permitting alternative,
+// which excludes \s) followed by an inline comment used to leave a trailing
+// space that broke the $ anchor, silently dropping the whole line.
+TEST_F(ParseIniFileTest, StripsInlineCommentAfterPathValue) {
+  auto m = parse("databaseDir=repos/Yabause/yabause/yabause/src # filter input\n");
+  ASSERT_TRUE(m.count("databaseDir"));
+  EXPECT_EQ(m.at("databaseDir"), "repos/Yabause/yabause/yabause/src");
+}
+
 TEST_F(ParseIniFileTest, LastDuplicateKeyWins) {
   auto m = parse("debugLevel = 1\ndebugLevel = 3\n");
   EXPECT_EQ(m.at("debugLevel"), "3");

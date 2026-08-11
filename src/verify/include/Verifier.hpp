@@ -92,6 +92,13 @@ public:
   int run();
 
   /**
+   * @brief Returns the resolved input directory of transformed files to verify.
+   *
+   * Lets the driver check this exists before calling run().
+   */
+  const std::string &getTransformDir() const { return configuration.transformDir; }
+
+  /**
    * @brief Returns the set of verification properties for a benchmark.
    *
    * Currently a fixed set (termination + no-overflow) for every file, ignoring

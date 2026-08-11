@@ -37,11 +37,8 @@ Filterer::Filterer(std::string configFile, std::string inputPath) {
 void Filterer::parseConfigFile(std::string configFile) {
   config = parsePipelineConfig(configFile);
 
-  if (!config.databaseDir.empty()) {
+  if (!config.databaseDir.empty())
     configuration.databaseDir = config.databaseDir;
-    if (!std::filesystem::exists(config.databaseDir))
-      debugLog(0, "Database directory not found: " + config.databaseDir);
-  }
   if (!config.filterDir.empty())
     configuration.filterDir = config.filterDir;
 
