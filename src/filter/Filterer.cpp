@@ -13,17 +13,24 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
+#include <csignal>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <string>
+#include <sys/wait.h>
+#include <unistd.h>
 
 const std::string defaultDatabaseDir = "repos";
+/// Per-file wall-clock budget for the isolated filter child, in seconds.
+const int defaultFileTimeoutSecs = 60;
 
 Filterer::Filterer(std::string configFile, std::string inputPath) {
   configuration.databaseDir = defaultDatabaseDir;
+  configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   if (!configFile.empty())
     parseConfigFile(configFile);
   if (configuration.filterDir.empty())
@@ -43,6 +50,7 @@ void Filterer::parseConfigFile(std::string configFile) {
     configuration.filterDir = config.filterDir;
 
   globalDebugLevel() = config.fileSettings.at("debugLevel");
+  configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
 
   if (globalDebugLevel() >= 1) {
     std::string dump = "[filter] loaded config: " + configFile;
@@ -126,6 +134,93 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   return 0;
 }
 
+// Mirror the input's path under filterDir by stripping the databaseDir
+// prefix; relative() handles absolute and relative inputs uniformly.
+// relative() yields "." when the input path IS the file (single-file mode).
+std::filesystem::path Filterer::outputPath(std::filesystem::path oldPath) {
+  std::filesystem::path relPath = std::filesystem::relative(oldPath, configuration.databaseDir);
+  if (relPath.empty() || *relPath.begin() == ".." || relPath == ".")
+    relPath = oldPath.filename();
+  return std::filesystem::path(configuration.filterDir) / relPath;
+}
+
+bool Filterer::filterFile(std::filesystem::path oldPath) {
+  std::filesystem::path newPath = outputPath(oldPath);
+
+  // Hard guard: never write over the source, whatever the path arithmetic.
+  if (std::filesystem::weakly_canonical(oldPath) == std::filesystem::weakly_canonical(newPath)) {
+    debugLog(0, "Refusing to overwrite source file: " + oldPath.string());
+    return false;
+  }
+
+  std::filesystem::create_directories(newPath.parent_path());
+  std::error_code ec;
+  llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
+  if (ec) {
+    debugLog(0, "Cannot open output file " + newPath.string() + ": " + ec.message());
+    return false;
+  }
+
+  std::vector<std::string> includeDirs = collectLocalIncludeDirs(oldPath, *headerIndex);
+
+  FrontendFactoryWithArgs factory(&config.complexity, &config.features, output);
+  bool ran = runToolOnFile(oldPath.string(), factory, includeDirs);
+  output.close();
+  if (!ran) {
+    debugLog(1, "[filter] clang tool failed on: " + oldPath.string());
+    return false;
+  }
+  return true;
+}
+
+int Filterer::filterFileIsolated(std::filesystem::path oldPath) {
+  pid_t pid = fork();
+  if (pid < 0) {
+    debugLog(0, "fork failed, filtering in-process: " + oldPath.string());
+    return filterFile(oldPath) ? 1 : 0;
+  }
+
+  if (pid == 0) {
+    int produced = filterFile(oldPath) ? 1 : 0;
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(produced);
+  }
+
+  time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
+  int status = 0;
+  while (true) {
+    pid_t done = waitpid(pid, &status, WNOHANG);
+    if (done == pid)
+      break;
+    if (done < 0) {
+      debugLog(0, "waitpid failed for " + oldPath.string());
+      return 0;
+    }
+    if (time(nullptr) >= deadline) {
+      debugLog(0, "Timeout, killing filter of: " + oldPath.string());
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(oldPath);
+      return 0;
+    }
+    struct timespec nap = {0, 20 * 1000 * 1000}; // 20ms
+    nanosleep(&nap, nullptr);
+  }
+
+  if (WIFEXITED(status))
+    return WEXITSTATUS(status) == 1 ? 1 : 0;
+  debugLog(0, "Filter crashed (signal " + std::to_string(WTERMSIG(status)) + "), skipping: " +
+                  oldPath.string());
+  cleanupPartialOutput(oldPath);
+  return 0;
+}
+
+void Filterer::cleanupPartialOutput(std::filesystem::path oldPath) {
+  std::error_code ec;
+  std::filesystem::remove(outputPath(oldPath), ec);
+}
+
 int Filterer::run() {
   std::filesystem::path pathObject(configuration.databaseDir);
   std::vector<std::string> filesToFilter;
@@ -140,6 +235,7 @@ int Filterer::run() {
   headerIndex.emplace(configuration.databaseDir);
 
   int passed = 0;
+  int produced = 0;
   int i = 0;
   for (const std::string &fileName : filesToFilter) {
     std::cout << "\r[filter] " << ++i << "/" << filesFound << std::flush;
@@ -149,38 +245,7 @@ int Filterer::run() {
     passed++;
 
     std::filesystem::path oldPath(fileName);
-    // Mirror the input's path under filterDir by stripping the databaseDir
-    // prefix; relative() handles absolute and relative inputs uniformly.
-    // relative() yields "." when the input path IS the file (single-file mode).
-    std::filesystem::path relPath = std::filesystem::relative(oldPath, configuration.databaseDir);
-    if (relPath.empty() || *relPath.begin() == ".." || relPath == ".")
-      relPath = oldPath.filename();
-    std::filesystem::path newPath = std::filesystem::path(configuration.filterDir) / relPath;
-
-    // Hard guard: never write over the source, whatever the path arithmetic.
-    if (std::filesystem::weakly_canonical(oldPath) == std::filesystem::weakly_canonical(newPath)) {
-      debugLog(0, "Refusing to overwrite source file: " + oldPath.string());
-      continue;
-    }
-
-    std::filesystem::create_directories(newPath.parent_path());
-    std::error_code ec;
-    llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
-    if (ec) {
-      debugLog(0, "Cannot open output file " + newPath.string() + ": " + ec.message());
-      continue;
-    }
-
-    std::vector<std::string> includeDirs = collectLocalIncludeDirs(oldPath, *headerIndex);
-
-    FrontendFactoryWithArgs factory(&config.complexity, &config.features, output);
-    bool ran = runToolOnFile(oldPath.string(), factory, includeDirs);
-    output.close();
-    if (!ran) {
-      debugLog(1, "[filter] clang tool failed on: " + oldPath.string());
-      continue;
-    }
-
+    produced += filterFileIsolated(oldPath);
   }
   if (filesFound > 0)
     std::cout << std::endl;
@@ -188,6 +253,8 @@ int Filterer::run() {
   std::cout << "\n=== Filter summary ===\n"
             << "  Files found:            " << filesFound << "\n"
             << "  Passed pre-filter:      " << passed << "\n"
-            << "  Skipped:                " << (filesFound - passed) << std::endl;
-  return 0;
+            << "  Skipped (pre-filter):   " << (filesFound - passed) << "\n"
+            << "  Files filtered:         " << produced << "\n"
+            << "  Discarded/failed:       " << (passed - produced) << std::endl;
+  return produced;
 }

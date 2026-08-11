@@ -26,6 +26,7 @@ struct verifyConfigs {
   bool keepCompilesOnly;    ///< If true, delete output files that fail checkCompilable.
   std::string transformDir; ///< Input directory of transformed C files to verify.
   std::string benchmarkDir; ///< Output directory for finalized benchmarks.
+  int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated verify child.
 };
 
 /**
@@ -64,6 +65,21 @@ public:
    * @return true if a finalized benchmark (.c + .yml + .i) was produced.
    */
   bool verifyFile(std::filesystem::path path);
+
+  /**
+   * @brief Runs {@code verifyFile} in a forked child for crash isolation.
+   *
+   * @param path Path to the transformed C source file.
+   * @return 1 if a finalized benchmark was produced, 0 otherwise.
+   */
+  int verifyFileIsolated(std::filesystem::path path);
+
+  /**
+   * @brief Removes any benchmark files a crashed or timed-out child left behind.
+   *
+   * @param path Path to the transformed C source file whose output to clean up.
+   */
+  void cleanupPartialOutput(std::filesystem::path path);
 
   /**
    * @brief Recursively walks a directory tree, verifying every .c file found.

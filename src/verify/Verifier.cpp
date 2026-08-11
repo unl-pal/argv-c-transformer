@@ -9,7 +9,9 @@
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
 
+#include <csignal>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -18,7 +20,9 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <sys/wait.h>
 #include <system_error>
+#include <unistd.h>
 
 // Mirrors Transformer's own fallback default, so a bare Verifier invocation
 // lines up with the rest of the "repos" -> "repos-benchmarks" chain.
@@ -28,6 +32,7 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   config = parsePipelineConfig(configFile);
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
+  configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
   if (!inputPath.empty())
@@ -101,6 +106,61 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   return true;
 }
 
+int Verifier::verifyFileIsolated(std::filesystem::path path) {
+  pid_t pid = fork();
+  if (pid < 0) {
+    debugLog(0, "fork failed, verifying in-process: " + path.string());
+    return verifyFile(path) ? 1 : 0;
+  }
+
+  if (pid == 0) {
+    int produced = verifyFile(path) ? 1 : 0;
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(produced);
+  }
+
+  time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
+  int status = 0;
+  while (true) {
+    pid_t done = waitpid(pid, &status, WNOHANG);
+    if (done == pid)
+      break;
+    if (done < 0) {
+      debugLog(0, "waitpid failed for " + path.string());
+      return 0;
+    }
+    if (time(nullptr) >= deadline) {
+      debugLog(0, "Timeout, killing verify of: " + path.string());
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(path);
+      return 0;
+    }
+    struct timespec nap = {0, 20 * 1000 * 1000}; // 20ms
+    nanosleep(&nap, nullptr);
+  }
+
+  if (WIFEXITED(status))
+    return WEXITSTATUS(status) == 1 ? 1 : 0;
+  debugLog(0, "Verify crashed (signal " + std::to_string(WTERMSIG(status)) + "), skipping: " +
+                  path.string());
+  cleanupPartialOutput(path);
+  return 0;
+}
+
+void Verifier::cleanupPartialOutput(std::filesystem::path path) {
+  std::filesystem::path outPath = std::filesystem::path(configuration.benchmarkDir) / path.filename();
+  std::error_code ec;
+  std::filesystem::remove(outPath, ec);
+  std::filesystem::path ymlPath = outPath;
+  ymlPath.replace_extension(".yml");
+  std::filesystem::remove(ymlPath, ec);
+  std::filesystem::path iPath = outPath;
+  iPath.replace_extension(".i");
+  std::filesystem::remove(iPath, ec);
+}
+
 int Verifier::verifyAll(std::filesystem::path path) {
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[verify] path does not exist: " + path.string());
@@ -119,7 +179,7 @@ int Verifier::verifyAll(std::filesystem::path path) {
       _totalProcessed++;
       if (globalDebugLevel() == 0)
         std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
-      return verifyFile(path) ? 1 : 0;
+      return verifyFileIsolated(path);
     }
     debugLog(3, "[verify] skipped (not .c): " + path.filename().string());
     return 0;

@@ -22,6 +22,7 @@
 struct filterConfigs {
   std::string databaseDir; ///< Directory containing the source repos to filter
   std::string filterDir;   ///< Output directory for files that pass the filter
+  int fileTimeoutSecs;     ///< Wall-clock budget per file for the isolated filter child.
 };
 
 /**
@@ -64,6 +65,39 @@ public:
    * @return {@code true} if the file should proceed to the AST pass.
    */
   bool checkPotentialFile(std::string fileName);
+
+  /**
+   * @brief Computes the mirrored filterDir output path for a source file.
+   *
+   * @param oldPath Path to the source .c file, under databaseDir.
+   * @return The {@code filterDir/<relative path>} the filter writes to.
+   */
+  std::filesystem::path outputPath(std::filesystem::path oldPath);
+
+  /**
+   * @brief Runs the full Clang AST pipeline on a single C file.
+   *
+   * Writes the filtered result to the mirrored path under filterDir.
+   *
+   * @param oldPath Path to the source .c file to filter.
+   * @return true if a filtered .c was produced.
+   */
+  bool filterFile(std::filesystem::path oldPath);
+
+  /**
+   * @brief Runs {@code filterFile} in a forked child for crash isolation.
+   *
+   * @param oldPath Path to the source .c file to filter.
+   * @return 1 if a filtered file was produced, 0 otherwise.
+   */
+  int filterFileIsolated(std::filesystem::path oldPath);
+
+  /**
+   * @brief Removes any .c a crashed or timed-out child left behind.
+   *
+   * @param oldPath Path to the source .c file whose output to clean up.
+   */
+  void cleanupPartialOutput(std::filesystem::path oldPath);
 
   /**
    * @brief Recursively collects all .c files under a path into a vector.
