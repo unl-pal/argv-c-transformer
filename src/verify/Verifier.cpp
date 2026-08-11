@@ -38,8 +38,8 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   if (!inputPath.empty())
     configuration.transformDir = inputPath;
   configuration.benchmarkDir = config.benchmarkDir.empty()
-                                    ? inputBaseName(configuration.transformDir) + "-benchmarks"
-                                    : config.benchmarkDir;
+                                   ? inputBaseName(configuration.transformDir) + "-benchmarks"
+                                   : config.benchmarkDir;
   globalDebugLevel() = configuration.debugLevel;
 }
 
@@ -143,14 +143,15 @@ int Verifier::verifyFileIsolated(std::filesystem::path path) {
 
   if (WIFEXITED(status))
     return WEXITSTATUS(status) == 1 ? 1 : 0;
-  debugLog(0, "Verify crashed (signal " + std::to_string(WTERMSIG(status)) + "), skipping: " +
-                  path.string());
+  debugLog(0, "Verify crashed (signal " + std::to_string(WTERMSIG(status)) +
+                  "), skipping: " + path.string());
   cleanupPartialOutput(path);
   return 0;
 }
 
 void Verifier::cleanupPartialOutput(std::filesystem::path path) {
-  std::filesystem::path outPath = std::filesystem::path(configuration.benchmarkDir) / path.filename();
+  std::filesystem::path outPath =
+      std::filesystem::path(configuration.benchmarkDir) / path.filename();
   std::error_code ec;
   std::filesystem::remove(outPath, ec);
   std::filesystem::path ymlPath = outPath;
@@ -279,11 +280,15 @@ void Verifier::writeBenchmarkTask(
   out << "format_version: '2.0'\n"
       << "\n"
       << "input_files: '" << inputFile << "'\n"
-      << "\n"
-      << "properties:\n";
-  for (const BenchmarkProperty &prop : properties) {
-    out << "  - property_file: " << prop.propertyFile << "\n"
-        << "    expected_verdict: " << (prop.expectedVerdict ? "true" : "false") << "\n";
+      << "\n";
+  if (properties.empty()) {
+    out << "properties: []\n";
+  } else {
+    out << "properties:\n";
+    for (const BenchmarkProperty &prop : properties) {
+      out << "  - property_file: " << prop.propertyFile << "\n"
+          << "    expected_verdict: " << (prop.expectedVerdict ? "true" : "false") << "\n";
+    }
   }
   out << "\n"
       << "options:\n"

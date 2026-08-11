@@ -21,8 +21,10 @@ struct transformConfigs {
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string transformDir; ///< Output directory for transformed files (verify-stage input).
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
-  /// Original repo tree the filtered files came from, used only to resolve
-  /// quoted #includes to -I paths. Empty means no local-header resolution.
+  /**
+   * Original repo tree the filtered files came from, used only to resolve
+   * quoted #includes to -I paths. Empty means no local-header resolution.
+   */
   std::string databaseDir;
 };
 
@@ -139,11 +141,13 @@ public:
   void setDatabaseDir(const std::string &dir) { configuration.databaseDir = dir; }
 
 private:
-  /// Path settings and flags loaded from the config file.
+  /** Path settings and flags loaded from the config file. */
   struct transformConfigs configuration;
-  /// Count of .c files attempted across the run, for the end-of-run summary.
+  /** Count of .c files attempted across the run, for the end-of-run summary. */
   int _totalProcessed = 0;
-  /// Header basename → directory index over databaseDir, built once in run()
-  /// and used to resolve each file's quoted #includes to -I search paths.
+  /**
+   * Header basename → directory index over databaseDir, built once in run()
+   * and used to resolve each file's quoted #includes to -I search paths.
+   */
   std::optional<HeaderIndex> headerIndex;
 };

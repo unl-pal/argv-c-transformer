@@ -154,7 +154,7 @@ TEST_F(VerifyStageTest, PlainSourceGetsNoProperties) {
   std::string yml = readFile(benchmarkDir / "flat.yml");
   EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
   EXPECT_EQ(yml.find("no-overflow.prp"), std::string::npos);
-  EXPECT_NE(yml.find("properties:\n"), std::string::npos);
+  EXPECT_NE(yml.find("properties: []\n"), std::string::npos);
 }
 
 TEST_F(VerifyStageTest, LoopAndArithmeticAcrossFunctionsGetsBoth) {
@@ -179,6 +179,45 @@ TEST_F(VerifyStageTest, LoopAndArithmeticAcrossFunctionsGetsBoth) {
   std::string yml = readFile(benchmarkDir / "both.yml");
   EXPECT_NE(yml.find("termination.prp"), std::string::npos);
   EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
+}
+
+TEST_F(VerifyStageTest, PointerDerefSourceGetsMemsafetyProperty) {
+  // arr[i] is an ArraySubscriptExpr, which CountingVisitor flags as
+  // PointerDeref. Keep the array local rather than a pointer param: params
+  // are only harnessed when every one has a primitive nondet suffix
+  // (MainGenConsumer::verifierSuffixForType), so a pointer param currently
+  // leaves the function unharnessed and the file discarded (no calls at all).
+  writeFile(filterDir / "deref.c",
+            "void access(void) {\n"
+            "  int arr[4];\n"
+            "  int i = 0;\n"
+            "  arr[i] = 1;\n"
+            "}\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "deref.yml"));
+  std::string yml = readFile(benchmarkDir / "deref.yml");
+  EXPECT_NE(yml.find("valid-memsafety.prp"), std::string::npos);
+}
+
+TEST_F(VerifyStageTest, MallocFreeSourceGetsMemsafetyProperty) {
+  // malloc/free are MemAlloc/MemFree signals; either alone should select
+  // valid-memsafety.prp (it bundles deref/free/memtrack CHECKs in one file).
+  writeFile(filterDir / "alloc.c",
+            "#include <stdlib.h>\n"
+            "void make_and_drop(int n) {\n"
+            "  int *buf = malloc(n * sizeof(int));\n"
+            "  free(buf);\n"
+            "}\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "alloc.yml"));
+  std::string yml = readFile(benchmarkDir / "alloc.yml");
+  EXPECT_NE(yml.find("valid-memsafety.prp"), std::string::npos);
 }
 
 TEST_F(VerifyStageTest, DegradedFunctionIsStrippedAndUnharnessed) {

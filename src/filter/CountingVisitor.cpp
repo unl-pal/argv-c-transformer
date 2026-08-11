@@ -82,7 +82,7 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
   }
   if (const clang::FunctionDecl *callee = CE->getDirectCallee()) {
     if (!callee->getIdentifier() || !_mgr->isInSystemHeader(callee->getBeginLoc())) return true;
-    if (callee->getNameAsString() == "free") {
+    if (callee->getNameAsString() == "free" || callee->getNameAsString() == "munmap") {
       _allFunctions->at(getStmtParentFuncName(*CE)).Features.MemFree = true;
     } else if (isMemoryFunction(callee->getNameAsString())) {
       _allFunctions->at(getStmtParentFuncName(*CE)).Features.MemAlloc = true;

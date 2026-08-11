@@ -142,14 +142,18 @@ public:
   const std::string &getDatabaseDir() const { return configuration.databaseDir; }
 
 private:
-  /// Thresholds, feature gates, and file settings from the shared config
-  /// parser; the same structure the verify stage re-applies post-transform.
+  /**
+   * Thresholds, feature gates, and file settings from the shared config
+   * parser; the same structure the verify stage re-applies post-transform.
+   */
   PipelineConfig config;
 
-  /// Path settings and flags that don't fit either config map.
+  /** Path settings and flags that don't fit either config map. */
   struct filterConfigs configuration;
 
-  /// Header basename → directory index over databaseDir, built once in run()
-  /// and used to resolve each file's quoted #includes to -I search paths.
+  /**
+   * Header basename → directory index over databaseDir, built once in run()
+   * and used to resolve each file's quoted #includes to -I search paths.
+   */
   std::optional<HeaderIndex> headerIndex;
 };

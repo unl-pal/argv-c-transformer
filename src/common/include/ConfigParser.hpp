@@ -29,14 +29,16 @@ enum class FeatureGate { Ignore, Require, Forbid };
  * driver applies its own defaults (and CLI overrides) on top.
  */
 struct PipelineConfig {
-  /// Per-function complexity thresholds: metric name → [min, max]. Defaults
-  /// to {0, 9999}, meaning no filtering unless explicitly configured.
+  /**
+   * Per-function complexity thresholds: metric name → [min, max]. Defaults
+   * to {0, 9999}, meaning no filtering unless explicitly configured.
+   */
   std::map<std::string, std::pair<int, int>> complexity = {
       {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}}, {"IfStmt", {0, 9999}},
       {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}}, {"Operations", {0,9999}},
   };
 
-  /// Per-function feature gates: feature name → ignore|require|forbid.
+  /** Per-function feature gates: feature name → ignore|require|forbid. */
   std::map<std::string, FeatureGate> features = {
       {"Concurrency", FeatureGate::Ignore},
       {"FloatingPoint", FeatureGate::Ignore},
@@ -46,7 +48,7 @@ struct PipelineConfig {
       {"MemFree", FeatureGate::Ignore},
   };
 
-  /// File-level integer settings (booleans are stored as 0/1).
+  /** File-level integer settings (booleans are stored as 0/1). */
   std::map<std::string, int> fileSettings = {
       {"debugLevel", 0},       {"minFileLoC", 0},        {"maxFileLoC", 9999},
       {"fileTimeoutSecs", 60}, {"keepCompilesOnly", 1},

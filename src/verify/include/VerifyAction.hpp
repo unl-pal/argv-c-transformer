@@ -46,7 +46,7 @@ public:
 
   bool BeginSourceFileAction(clang::CompilerInstance &compiler) override;
 
-  /// Flushes the repaired buffer to the output file.
+  /** Flushes the repaired buffer to the output file. */
   void EndSourceFileAction() override;
 
 private:

@@ -150,11 +150,13 @@ public:
   bool preprocess(std::filesystem::path cPath);
 
 private:
-  /// Thresholds and feature gates re-applied post-transform - the same
-  /// PipelineConfig structure the filter stage applies pre-transform.
+  /**
+   * Thresholds and feature gates re-applied post-transform - the same
+   * PipelineConfig structure the filter stage applies pre-transform.
+   */
   PipelineConfig config;
-  /// Path settings and flags for this stage.
+  /** Path settings and flags for this stage. */
   struct verifyConfigs configuration;
-  /// Count for the end-of-run summary.
+  /** Count for the end-of-run summary. */
   int _totalProcessed = 0;
 };
