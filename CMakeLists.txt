@@ -41,6 +41,22 @@ set(HEADERS_TRANSFORM src/transform/include)
 set(HEADERS_VERIFY src/verify/include)
 set(HEADERS_COMMON src/common/include)
 
+# Embed src/common/argv_c_runtime.h into the binary at build time, so
+# Verifier can write it into each benchmarkDir without any runtime lookup of
+# an installed resource file. Edit the .h, not the generated header.
+# file(READ) alone creates no build dependency, so CMAKE_CONFIGURE_DEPENDS is
+# required - without it, editing the .h wouldn't trigger a reconfigure and
+# `ninja` would silently keep embedding stale content.
+set(ARGV_C_RUNTIME_HEADER "${CMAKE_SOURCE_DIR}/src/common/argv_c_runtime.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ARGV_C_RUNTIME_HEADER}")
+file(READ "${ARGV_C_RUNTIME_HEADER}" ARGV_C_RUNTIME_HEADER_CONTENT)
+set(HEADERS_GENERATED "${CMAKE_BINARY_DIR}/generated")
+configure_file(
+  "${HEADERS_COMMON}/RuntimeHeaderData.hpp.in"
+  "${HEADERS_GENERATED}/RuntimeHeaderData.hpp"
+  @ONLY
+)
+
 set(SOURCE_FILTER
   src/filter/CountingConsumer.cpp
   src/filter/CountingVisitor.cpp
@@ -53,7 +69,6 @@ set(SOURCE_FILTER
 
 set(SOURCE_TRANSFORM
   src/transform/AddStdIncludesConsumer.cpp
-  src/transform/AddVerifiersConsumer.cpp
   src/transform/MainGenConsumer.cpp
   src/transform/HavocCallsVisitor.cpp
   src/transform/HavocCallsConsumer.cpp
@@ -76,13 +91,13 @@ target_include_directories(filter_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEAD
 target_link_libraries(filter_lib PRIVATE ${LLVM_LIBS})
 
 add_library(transform_lib STATIC ${SOURCE_TRANSFORM})
-target_include_directories(transform_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_COMMON})
+target_include_directories(transform_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_COMMON} ${HEADERS_GENERATED})
 target_link_libraries(transform_lib PRIVATE ${LLVM_LIBS})
 
 # verify reuses the filter's counting/removal consumers, hence HEADERS_FILTER
 # and the filter_lib link
 add_library(verify_lib STATIC ${SOURCE_VERIFY})
-target_include_directories(verify_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_VERIFY} ${HEADERS_FILTER} ${HEADERS_COMMON})
+target_include_directories(verify_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_VERIFY} ${HEADERS_FILTER} ${HEADERS_COMMON} ${HEADERS_GENERATED})
 target_link_libraries(verify_lib PRIVATE filter_lib ${LLVM_LIBS})
 
 add_executable(filter src/filter/main.cpp)

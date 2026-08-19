@@ -8,6 +8,7 @@
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
+#include "RuntimeHeaderData.hpp"
 
 #include <cerrno>
 #include <csignal>
@@ -196,48 +197,16 @@ int Verifier::verifyAll(std::filesystem::path path) {
   return 0;
 }
 
-static constexpr const char *kVerifierStubs = R"(
-#include <stdbool.h>
-#include <stddef.h>
-bool __VERIFIER_nondet_bool(void) { return false; }
-char __VERIFIER_nondet_char(void) { return 'a'; }
-unsigned char __VERIFIER_nondet_uchar(void) { return 'a'; }
-short __VERIFIER_nondet_short(void) { return 0; }
-unsigned short __VERIFIER_nondet_ushort(void) { return 0; }
-int __VERIFIER_nondet_int(void) { return 0; }
-size_t __VERIFIER_nondet_size_t(void) { return 0; }
-unsigned int __VERIFIER_nondet_uint(void) { return 0; }
-long __VERIFIER_nondet_long(void) { return 0; }
-unsigned long __VERIFIER_nondet_ulong(void) { return 0; }
-long long __VERIFIER_nondet_longlong(void) { return 0; }
-unsigned long long __VERIFIER_nondet_ulonglong(void) { return 0; }
-float __VERIFIER_nondet_float(void) { return 0; }
-double __VERIFIER_nondet_double(void) { return 0; }
-void* __VERIFIER_nondet_pointer(void) { return (void*)(0); }
-void __VERIFIER_nondet_memory(void *mem, size_t size) {
-  unsigned char *p = (unsigned char *)mem;
-  for (size_t i = 0; i < size; i++) p[i] = __VERIFIER_nondet_uchar();
-}
-)";
-
-// NOTE: cmd is passed to std::system (shell-interpreted), and path/verifierPath
-// are not escaped. path originates from a cloned/downloaded repository, so a
+// NOTE: cmd is passed to std::system (shell-interpreted), and path is not
+// escaped. path originates from a cloned/downloaded repository, so a
 // pathological filename containing shell metacharacters could inject commands
 bool Verifier::checkCompilable(std::filesystem::path path) {
   std::optional<std::string> cmd = clangCommand("-fsyntax-only -xc");
   if (!cmd)
     return false;
 
-  std::filesystem::path verifierPath = path.parent_path() / "__verifier_stubs.c";
-  {
-    std::ofstream out(verifierPath);
-    out << kVerifierStubs;
-  }
-
-  *cmd += " " + path.string() + " " + verifierPath.string() + " 2>/dev/null";
-  int result = std::system(cmd->c_str());
-  std::filesystem::remove(verifierPath);
-  return result == 0;
+  *cmd += " " + path.string() + " 2>/dev/null";
+  return std::system(cmd->c_str()) == 0;
 }
 
 std::vector<BenchmarkProperty> Verifier::selectProperties(
@@ -367,12 +336,19 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
   return true;
 }
 
+void Verifier::writeRuntimeHeader() {
+  std::filesystem::create_directories(configuration.benchmarkDir);
+  std::ofstream out(std::filesystem::path(configuration.benchmarkDir) / kArgvCRuntimeHeaderName);
+  out << kArgvCRuntimeHeaderContents;
+}
+
 int Verifier::run() {
   std::filesystem::path path(configuration.transformDir);
   if (!std::filesystem::exists(path)) {
     debugLog(0, "Transform directory not found: " + configuration.transformDir);
     return 0;
   }
+  writeRuntimeHeader();
   int result = verifyAll(path);
   int discarded = _totalProcessed - result;
   std::cout << "\n=== Verify summary ===\n"

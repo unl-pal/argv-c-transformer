@@ -11,28 +11,25 @@
 #include <clang/AST/Stmt.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <initializer_list>
-#include <memory>
 #include <set>
-#include <string>
 
 /**
  * @brief Havocs every in-file function call so bodies become intraprocedural.
  *
  * Primitive returns -> {@code __VERIFIER_nondet_<type>()}; pointer returns ->
- * an inline GNU statement-expression declaring a havocked stack block (char
- * pointees additionally null-terminated); void returns dropped; aggregate
- * returns left as-is. Dropped calls are marked no-op, and enclosing
- * loops/branches that become side-effect-free no-ops are pruned.
+ * {@code __HAVOC_BLOCK()} / {@code __HAVOC_CSTRING()} (macros from
+ * argv_c_runtime.h; char pointees get the null-terminated variant); void
+ * returns dropped; aggregate returns left as-is. Dropped calls are marked
+ * no-op, and enclosing loops/branches that become side-effect-free no-ops
+ * are pruned.
  */
 class HavocCallsVisitor : public clang::RecursiveASTVisitor<HavocCallsVisitor> {
 public:
   /**
-   * @param C              AST context, used for return-type resolution and source manager access.
-   * @param neededSuffixes Output set; verifier suffixes and havoc helper markers are inserted here.
-   * @param rewriter       Shared rewriter for modifying the source buffer.
+   * @param C        AST context, used for return-type resolution and source manager access.
+   * @param rewriter Shared rewriter for modifying the source buffer.
    */
-  HavocCallsVisitor(clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededSuffixes,
-                    clang::Rewriter &rewriter);
+  HavocCallsVisitor(clang::ASTContext *C, clang::Rewriter &rewriter);
 
   /**
    * @brief Havocs a call if it should be (in-file, non-library, non-verifier, non-macro).
@@ -110,7 +107,6 @@ private:
                    const clang::Stmt *init = nullptr, const clang::Expr *inc = nullptr);
 
   clang::ASTContext *_C;
-  std::shared_ptr<std::set<std::string>> _NeededSuffixes;
   clang::Rewriter &_Rewriter;
   std::set<const clang::Stmt *> _NoOpStmts;
 };

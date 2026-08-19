@@ -14,13 +14,12 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/Casting.h>
 
-HavocCallsConsumer::HavocCallsConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
-                                       std::shared_ptr<std::set<std::string>> noOpFunctions,
+HavocCallsConsumer::HavocCallsConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
                                        clang::Rewriter &rewriter)
-    : _NeededSuffixes(neededSuffixes), _NoOpFunctions(noOpFunctions), _Rewriter(rewriter) {}
+    : _NoOpFunctions(noOpFunctions), _Rewriter(rewriter) {}
 
 void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
-  HavocCallsVisitor Visitor(&Context, _NeededSuffixes, _Rewriter);
+  HavocCallsVisitor Visitor(&Context, _Rewriter);
   Visitor.TraverseDecl(Context.getTranslationUnitDecl());
 
   // Strip any function whose body collapsed entirely to no-ops

@@ -5,6 +5,7 @@
 #include "MainGenConsumer.hpp"
 
 #include "DebugLog.hpp"
+#include "RuntimeHeaderData.hpp"
 #include "VerifierNames.hpp"
 
 #include <clang/AST/Decl.h>
@@ -15,13 +16,19 @@
 #include <string>
 #include <vector>
 
-MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
-                                 std::shared_ptr<std::set<std::string>> noOpFunctions,
+MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
                                  clang::Rewriter &rewriter)
-    : _NeededSuffixes(neededSuffixes), _NoOpFunctions(noOpFunctions), _Rewriter(rewriter) {}
+    : _NoOpFunctions(noOpFunctions), _Rewriter(rewriter) {}
 
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &mgr = Context.getSourceManager();
+
+  // Every transformed file uses at least one __VERIFIER_nondet_* call (this
+  // consumer's own harness guarantees that), so the runtime header - which
+  // unconditionally declares all of them plus the __HAVOC_*/reach_error
+  // scaffolding - is always needed.
+  std::string prelude = "#include \"" + std::string(kArgvCRuntimeHeaderName) + "\"\n";
+  _Rewriter.InsertTextBefore(mgr.translateLineCol(mgr.getMainFileID(), 1, 1), prelude + "\n");
 
   // Collect every function defined in this file, in source order, renaming
   // any existing main along the way so the generated main below is the sole
@@ -57,7 +64,6 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     }
     std::string args;
-    std::set<std::string> argSuffixes;
     bool supported = true;
     for (const clang::ParmVarDecl *parm : func->parameters()) {
       std::optional<std::string> suffix = verifierSuffixForType(parm->getOriginalType());
@@ -68,7 +74,6 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       if (!args.empty())
         args += ", ";
       args += "__VERIFIER_nondet_" + *suffix + "()";
-      argSuffixes.insert(*suffix);
     }
     // A parameter without a nondet equivalent (pointer, struct, ...): skip
     // this function but keep harnessing the rest.
@@ -79,7 +84,6 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     }
     std::string name = func->isMain() ? "original_main" : func->getNameAsString();
     harness += "  " + name + "(" + args + ");\n";
-    _NeededSuffixes->insert(argSuffixes.begin(), argSuffixes.end());
   }
 
   std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
@@ -93,28 +97,13 @@ std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   if (numParams == 0)
     return "  original_main();\n";
 
-  // int main(int argc, char **argv[, char **envp]): build a nondet argc and
-  // an argv of havocked C strings, then call original_main(argc, argv).
-  // The bounds are __HAVOC_* macros emitted by AddVerifiersConsumer, so the
-  // generated benchmark stays retunable by hand.
+  // int main(int argc, char **argv[, char **envp]): a nondet, bounded argc
+  // and a matching havocked argv, both synthesized entirely by
+  // __HAVOC_ARGC()/__HAVOC_ARGV() (argv_c_runtime.h) - the __HAVOC_* bounds
+  // are macros in that same header, so the generated benchmark stays
+  // retunable by hand.
   std::string body;
-  body += "  int argc = __VERIFIER_nondet_int();\n";
-  body += "  if (argc < __HAVOC_ARGC_MIN || argc > __HAVOC_ARGC_MAX) abort();\n";
-  body += "  char __argv_buf[__HAVOC_ARGC_MAX][__HAVOC_STR_MAX];\n";
-  body += "  char *argv[__HAVOC_ARGC_MAX + 1];\n";
-  body += "  for (int i = 0; i < argc; i++) {\n";
-  body += "    __VERIFIER_nondet_memory(__argv_buf[i], __HAVOC_STR_MAX);\n";
-  body += "    size_t __argv_len = __VERIFIER_nondet_size_t();\n";
-  body += "    if (__argv_len >= __HAVOC_STR_MAX) abort();\n";
-  body += "    __argv_buf[i][__argv_len] = 0;\n";
-  body += "    argv[i] = __argv_buf[i];\n";
-  body += "  }\n";
-  body += "  argv[argc] = 0;\n";
-  body += "  original_main(argc, argv);\n";
-
-  _NeededSuffixes->insert("int");
-  _NeededSuffixes->insert("__havoc_memory");
-  _NeededSuffixes->insert("size_t");
-  _NeededSuffixes->insert("__havoc_argv");
+  body += "  int argc = __HAVOC_ARGC();\n";
+  body += "  original_main(argc, __HAVOC_ARGV(argc));\n";
   return body;
 }

@@ -1,10 +1,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "argv_c_runtime.h"
 
 
-extern int __VERIFIER_nondet_int(void);
-extern unsigned int __VERIFIER_nondet_uint(void);
 
 size_t measure(const char *s) {
   size_t i = 0;

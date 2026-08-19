@@ -1,3 +1,5 @@
+#include "argv_c_runtime.h"
+
 extern int __VERIFIER_nondet_int(void);
 
 int pick(int n) {

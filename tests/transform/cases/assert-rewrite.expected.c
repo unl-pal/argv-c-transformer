@@ -1,8 +1,6 @@
-#include <assert.h>
-extern int __VERIFIER_nondet_int(void);
-#include <assert.h>
-void reach_error(void) { assert(0); }
+#include "argv_c_runtime.h"
 
+#include <assert.h>
 int add(int a, int b) {
   int r = a + b;
   if (!(r >= a)) reach_error();

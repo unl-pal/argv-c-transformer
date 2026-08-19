@@ -4,7 +4,6 @@
 
 #include "TransformAction.hpp"
 #include "AddStdIncludesConsumer.hpp"
-#include "AddVerifiersConsumer.hpp"
 #include "DebugLog.hpp"
 #include "HavocCallsConsumer.hpp"
 #include "MainGenConsumer.hpp"
@@ -69,13 +68,11 @@ void AssertRewriter::MacroExpands(const clang::Token &MacroNameTok, const clang:
 
   debugLog(3, "[transform] rewrote assert(" + cond.str() + ") -> reach_error()");
   _Rewriter.ReplaceText(charRange, ("if (!(" + cond + ")) reach_error()").str());
-  _NeededSuffixes->insert("__reach_error");
 }
 
 AssertRewriter::AssertRewriter(clang::SourceManager &SM, clang::Rewriter &rewriter,
-                               std::shared_ptr<std::set<std::string>> neededSuffixes,
                                const clang::LangOptions &langOpts)
-    : _Mgr(SM), _Rewriter(rewriter), _NeededSuffixes(neededSuffixes), _LangOpts(langOpts) {}
+    : _Mgr(SM), _Rewriter(rewriter), _LangOpts(langOpts) {}
 
 TransformAction::TransformAction(llvm::raw_ostream &output)
     : _Output(output), _Rewriter(),
@@ -85,26 +82,20 @@ TransformAction::TransformAction(llvm::raw_ostream &output)
 std::unique_ptr<clang::ASTConsumer>
 TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef) {
   auto existingIncludes = std::make_shared<std::set<std::string>>();
-  // Verifier suffixes needed by call havocking and the generated main;
-  // AddVerifiersConsumer runs last and emits the extern declarations
-  auto neededSuffixes = std::make_shared<std::set<std::string>>();
 
   clang::Preprocessor &pp = compiler.getPreprocessor();
   pp.addPPCallbacks(
       std::make_unique<IncludeFinder>(compiler.getSourceManager(), _Rewriter, existingIncludes));
-  pp.addPPCallbacks(std::make_unique<AssertRewriter>(compiler.getSourceManager(), _Rewriter,
-                                                     neededSuffixes, pp.getLangOpts()));
+  pp.addPPCallbacks(
+      std::make_unique<AssertRewriter>(compiler.getSourceManager(), _Rewriter, pp.getLangOpts()));
 
   // Functions HavocCallsConsumer found to have collapsed entirely to no-ops;
   // MainGenConsumer skips harnessing them
   auto noOpFunctions = std::make_shared<std::set<std::string>>();
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
-  tempVector.emplace_back(
-      std::make_unique<HavocCallsConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
-  tempVector.emplace_back(
-      std::make_unique<MainGenConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
-  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(neededSuffixes, _Rewriter));
+  tempVector.emplace_back(std::make_unique<HavocCallsConsumer>(noOpFunctions, _Rewriter));
+  tempVector.emplace_back(std::make_unique<MainGenConsumer>(noOpFunctions, _Rewriter));
   tempVector.emplace_back(
       std::make_unique<AddStdIncludesConsumer>(existingIncludes, _UnresolvedTypeNames, _Rewriter));
 

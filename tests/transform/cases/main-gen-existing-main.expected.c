@@ -1,4 +1,4 @@
-extern int __VERIFIER_nondet_int(void);
+#include "argv_c_runtime.h"
 
 int helper(void) {
   return 7;

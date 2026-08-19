@@ -1,6 +1,6 @@
-#include <stdbool.h>
+#include "argv_c_runtime.h"
 
-extern int __VERIFIER_nondet_int(void);
+#include <stdbool.h>
 
 bool flag(int n) {
   return n > 0;

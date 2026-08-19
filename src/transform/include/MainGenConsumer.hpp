@@ -15,6 +15,9 @@
 /**
  * @brief ASTConsumer that generates the benchmark entry point.
  *
+ * Inserts the {@code #include "argv_c_runtime.h"} prelude every
+ * transformed file needs (unconditional - see HandleTranslationUnit)
+ *
  * Any pre-existing {@code main} (including its forward declarations) is renamed
  * to {@code original_main}, then a fresh {@code int main(void)} is appended that
  * calls every function defined in the file with {@code __VERIFIER_nondet_*}
@@ -29,14 +32,11 @@ public:
   /**
    * @brief Constructs the consumer with the shared pipeline state.
    *
-   * @param neededSuffixes Verifier suffixes used by the harness, shared with
-   *        {@code AddVerifiersConsumer} which emits the extern declarations.
-   * @param noOpFunctions  Names of functions {@code HavocCallsConsumer} found
+   * @param noOpFunctions Names of functions {@code HavocCallsConsumer} found
    *        to have an entirely no-op body; these are not harnessed.
-   * @param rewriter       Shared rewriter for modifying the source buffer.
+   * @param rewriter      Shared rewriter for modifying the source buffer.
    */
-  MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
-                  std::shared_ptr<std::set<std::string>> noOpFunctions, clang::Rewriter &rewriter);
+  MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions, clang::Rewriter &rewriter);
 
   /**
    * @brief Renames an existing {@code main} and appends the generated harness main.
@@ -56,13 +56,11 @@ private:
    * @brief Builds the harness body that invokes the renamed {@code original_main}.
    *
    * Unlike an arbitrary function, {@code main}'s pointer params have a known
-   * contract, so instead of skipping it we synthesize a realistic call: a nondet
-   * {@code argc} bounded to [{@code __HAVOC_ARGC_MIN}, {@code __HAVOC_ARGC_MAX}]
-   * via {@code abort()}, and a fixed-extent {@code argv} array of havocked,
-   * null-terminated C strings (via {@code __havoc_cstring}). The bounds come
-   * from {@code HavocPolicy.hpp} and are emitted as macros by
-   * {@code AddVerifiersConsumer}. Registers any verifier helpers it uses in
-   * {@code _NeededSuffixes}.
+   * contract, so instead of skipping it we synthesize a realistic call: a nondet,
+   * bounded {@code argc} from {@code __HAVOC_ARGC()} and a matching havocked
+   * {@code argv} from {@code __HAVOC_ARGV()}, both macros/helpers defined in
+   * argv_c_runtime.h (see HandleTranslationUnit for where the {@code #include}
+   * is inserted).
    *
    * @param mainFn The original {@code main} FunctionDecl (already renamed in
    *               the rewriter output).
@@ -71,7 +69,6 @@ private:
    */
   std::string genMainHarness(const clang::FunctionDecl *mainFn);
 
-  std::shared_ptr<std::set<std::string>> _NeededSuffixes;
   std::shared_ptr<std::set<std::string>> _NoOpFunctions;
   clang::Rewriter &_Rewriter;
 };
