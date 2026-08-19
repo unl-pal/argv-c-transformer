@@ -13,7 +13,9 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
+#include <cerrno>
 #include <csignal>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -193,8 +195,11 @@ int Filterer::filterFileIsolated(std::filesystem::path oldPath) {
     pid_t done = waitpid(pid, &status, WNOHANG);
     if (done == pid)
       break;
-    if (done < 0) {
-      debugLog(0, "waitpid failed for " + oldPath.string());
+    if (done < 0 && errno != EINTR) {
+      debugLog(0, "waitpid failed for " + oldPath.string() + ", killing: " + strerror(errno));
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(oldPath);
       return 0;
     }
     if (time(nullptr) >= deadline) {

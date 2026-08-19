@@ -9,7 +9,9 @@
 #include "DebugLog.hpp"
 #include "IncludeIndex.hpp"
 
+#include <cerrno>
 #include <csignal>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <iostream>
@@ -138,8 +140,11 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
     pid_t done = waitpid(pid, &status, WNOHANG);
     if (done == pid)
       break;
-    if (done < 0) {
-      debugLog(0, "waitpid failed for " + path.string());
+    if (done < 0 && errno != EINTR) {
+      debugLog(0, "waitpid failed for " + path.string() + ", killing: " + strerror(errno));
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(path);
       return 0;
     }
     if (time(nullptr) >= deadline) {
