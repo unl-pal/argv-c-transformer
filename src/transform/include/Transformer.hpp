@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 /**
  * @brief Runtime configuration loaded from the INI-style config file.
@@ -22,6 +23,7 @@ struct transformConfigs {
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string transformDir; ///< Output directory for transformed files (verify-stage input).
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
+  int nproc;                ///< Worker pool size (0 = default to hardware concurrency).
   /**
    * Original repo tree the filtered files came from, used only to resolve
    * quoted #includes to -I paths. Empty means no local-header resolution.
@@ -70,18 +72,6 @@ public:
   bool transformFile(std::filesystem::path path);
 
   /**
-   * @brief Runs {@code transformFile} in a forked child for crash isolation.
-   *
-   * The child does the file I/O and reports success through
-   * its exit status; the parent enforces {@code fileTimeoutSecs} and cleans up
-   * any partial output left by a child that crashed or timed out.
-   *
-   * @param path Path to the filtered C source file to transform.
-   * @return 1 if a transformed file was produced, 0 otherwise.
-   */
-  int transformFileIsolated(std::filesystem::path path);
-
-  /**
    * @brief Computes the flattened transformDir output path for a filtered file.
    *
    * @param path Path to the filtered C source file.
@@ -99,10 +89,22 @@ public:
   /**
    * @brief Recursively walks a directory tree, transforming every .c file found.
    *
+   * Collects the matching files, then runs them through a worker pool sized
+   * by {@code configuration.nproc} (each file still isolated in its own
+   * forked child), instead of the old one-file-at-a-time fork+wait.
+   *
    * @param path Root path to search (file or directory).
    * @return Total count of transformed files produced.
    */
   int transformAll(std::filesystem::path path);
+
+  /**
+   * @brief Recursively collects every .c file under path into `files`.
+   *
+   * @param path  Root path to search (file or directory).
+   * @param files Output vector; matching file paths are appended.
+   */
+  void collectCFiles(std::filesystem::path path, std::vector<std::filesystem::path> &files);
 
   /**
    * @brief Parses the config file via the shared {@code parsePipelineConfig},
