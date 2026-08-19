@@ -9,8 +9,12 @@
 #include <csignal>
 #include <cstring>
 #include <ctime>
+#include <fcntl.h>
 #include <filesystem>
+#include <fstream>
 #include <functional>
+#include <iostream>
+#include <sstream>
 #include <string>
 #include <sys/wait.h>
 #include <thread>
@@ -59,7 +63,35 @@ struct WorkerPoolJob {
   pid_t pid;
   std::filesystem::path file;
   time_t deadline;
+  std::filesystem::path logPath;
 };
+
+/**
+ * @brief Prints a reaped child's buffered stderr (from debugLog calls made
+ * inside the child) as one block, tagged with its file, then deletes the log
+ * file. A no-op if the child wrote nothing (e.g. debugLevel 0).
+ *
+ * Concurrent children share the pool's real stderr, so writing debugLog
+ * output there directly would interleave mid-line across processes; each
+ * child instead has its own fd 2 redirected to a private file (see the fork
+ * site below), and only the parent - which nothing else is writing to
+ * stderr concurrently with - prints the finished block.
+ */
+inline void flushChildLog(const WorkerPoolJob &job) {
+  std::ifstream in(job.logPath);
+  if (in) {
+    std::ostringstream buf;
+    buf << in.rdbuf();
+    std::string content = buf.str();
+    if (!content.empty()) {
+      std::cerr << "----- " << job.file.string() << " -----\n" << content;
+      if (content.back() != '\n')
+        std::cerr << '\n';
+    }
+  }
+  std::error_code ec;
+  std::filesystem::remove(job.logPath, ec);
+}
 
 /**
  * @brief Runs {@code work} over every file in {@code files}, isolating each
@@ -69,12 +101,21 @@ struct WorkerPoolJob {
  *
  * Each file gets its own wall-clock budget of {@code timeoutSecs} starting
  * from when its child is forked, independent of how long its pool-mates
- * take.
+ * take. Each child's debugLog output is buffered to a private file (see
+ * {@code flushChildLog}) and printed as one block once the child is reaped,
+ * so concurrent children's debug output never interleaves.
  *
  * @return count of files whose child exited reporting success (status 1).
  */
 inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int workers,
                           int timeoutSecs, const IsolatedWork &work) {
+  std::error_code ec;
+  std::filesystem::path logDir =
+      std::filesystem::temp_directory_path(ec) / ("argv-c-pool-" + std::to_string(getpid()));
+  if (ec)
+    logDir = std::filesystem::path(".") / ("argv-c-pool-" + std::to_string(getpid()));
+  std::filesystem::create_directories(logDir);
+
   std::vector<WorkerPoolJob> inFlight;
   size_t next = 0;
   int produced = 0;
@@ -83,13 +124,16 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
     int status = 0;
     kill(job.pid, SIGKILL);
     waitpid(job.pid, &status, 0);
+    flushChildLog(job);
     work.debugLog(0, std::string(reason) + ": " + job.file.string());
     work.cleanupPartial(job.file);
   };
 
   while (next < files.size() || !inFlight.empty()) {
     while (static_cast<int>(inFlight.size()) < workers && next < files.size()) {
+      size_t idx = next;
       const std::filesystem::path &file = files[next++];
+      std::filesystem::path logPath = logDir / (std::to_string(idx) + ".log");
       pid_t pid = fork();
       if (pid < 0) {
         work.debugLog(0, "fork failed, running in-process: " + file.string());
@@ -97,10 +141,18 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
         continue;
       }
       if (pid == 0) {
+        // Redirect fd 2 (not just the C++ std::cerr stream) so debugLog
+        // calls anywhere in the child - including deep in the Clang chain -
+        // land in this child's own file instead of the shared stderr.
+        int fd = open(logPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd >= 0) {
+          dup2(fd, STDERR_FILENO);
+          close(fd);
+        }
         work.child(file);
         _exit(0); // safety net; work.child is expected to _exit itself
       }
-      inFlight.push_back({pid, file, time(nullptr) + timeoutSecs});
+      inFlight.push_back({pid, file, time(nullptr) + timeoutSecs, logPath});
     }
 
     bool reaped = false;
@@ -108,6 +160,7 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
       int status = 0;
       pid_t done = waitpid(it->pid, &status, WNOHANG);
       if (done == it->pid) {
+        flushChildLog(*it);
         if (WIFEXITED(status)) {
           produced += WEXITSTATUS(status) == 1 ? 1 : 0;
         } else {
@@ -137,5 +190,7 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
       nanosleep(&nap, nullptr);
     }
   }
+
+  std::filesystem::remove_all(logDir, ec);
   return produced;
 }
