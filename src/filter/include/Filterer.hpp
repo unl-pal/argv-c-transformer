@@ -23,6 +23,7 @@ struct filterConfigs {
   std::string databaseDir; ///< Directory containing the source repos to filter
   std::string filterDir;   ///< Output directory for files that pass the filter
   int fileTimeoutSecs;     ///< Wall-clock budget per file for the isolated filter child.
+  int nproc;               ///< Worker pool size (0 = default to hardware concurrency).
 };
 
 /**
@@ -83,14 +84,6 @@ public:
    * @return true if a filtered .c was produced.
    */
   bool filterFile(std::filesystem::path oldPath);
-
-  /**
-   * @brief Runs {@code filterFile} in a forked child for crash isolation.
-   *
-   * @param oldPath Path to the source .c file to filter.
-   * @return 1 if a filtered file was produced, 0 otherwise.
-   */
-  int filterFileIsolated(std::filesystem::path oldPath);
 
   /**
    * @brief Removes any .c a crashed or timed-out child left behind.

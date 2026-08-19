@@ -27,6 +27,7 @@ struct verifyConfigs {
   std::string transformDir; ///< Input directory of transformed C files to verify.
   std::string benchmarkDir; ///< Output directory for finalized benchmarks.
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated verify child.
+  int nproc;                ///< Worker pool size (0 = default to hardware concurrency).
 };
 
 /**
@@ -67,14 +68,6 @@ public:
   bool verifyFile(std::filesystem::path path);
 
   /**
-   * @brief Runs {@code verifyFile} in a forked child for crash isolation.
-   *
-   * @param path Path to the transformed C source file.
-   * @return 1 if a finalized benchmark was produced, 0 otherwise.
-   */
-  int verifyFileIsolated(std::filesystem::path path);
-
-  /**
    * @brief Removes any benchmark files a crashed or timed-out child left behind.
    *
    * @param path Path to the transformed C source file whose output to clean up.
@@ -84,10 +77,22 @@ public:
   /**
    * @brief Recursively walks a directory tree, verifying every .c file found.
    *
+   * Collects the matching files, then runs them through a worker pool sized
+   * by {@code configuration.nproc} (each file still isolated in its own
+   * forked child), instead of the old one-file-at-a-time fork+wait.
+   *
    * @param path Root path to search (file or directory).
    * @return Total count of finalized benchmarks produced.
    */
   int verifyAll(std::filesystem::path path);
+
+  /**
+   * @brief Recursively collects every .c file under path into `files`.
+   *
+   * @param path  Root path to search (file or directory).
+   * @param files Output vector; matching file paths are appended.
+   */
+  void collectCFiles(std::filesystem::path path, std::vector<std::filesystem::path> &files);
 
   /**
    * @brief Checks whether a verified file compiles without errors.
