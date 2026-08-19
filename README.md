@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 # ArgV C Transformer
 
 [![Build and Test](https://github.com/unl-pal/argv-c-transformer/actions/workflows/ci.yaml/badge.svg)](https://github.com/unl-pal/argv-c-transformer/actions/workflows/ci.yaml)
-[![License](https://img.shields.io/github/license/unl-pal/argv-c-transformer)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/unl-pal/argv-c-transformer)](https://github.com/unl-pal/argv-c-transformer/releases)
 
 ArgV C Transformer takes C source files or directories and converts them into

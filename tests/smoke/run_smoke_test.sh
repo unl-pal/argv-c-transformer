@@ -49,7 +49,7 @@ transformDir=$WORK/transformed-default
 benchmarkDir=$WORK/bench-default
 EOF
 
-# Config-file-only invocation ("classic" style, see CLAUDE.md): passing
+# Config-file-only invocation ("classic" style): passing
 # SAMPLES_DIR as a positional input path would take precedence over
 # filterDir/transformDir/benchmarkDir above (see Filterer.cpp's/
 # Transformer.cpp's/Verifier.cpp's documented input-path-wins precedence),
