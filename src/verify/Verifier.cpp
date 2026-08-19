@@ -205,6 +205,7 @@ unsigned char __VERIFIER_nondet_uchar(void) { return 'a'; }
 short __VERIFIER_nondet_short(void) { return 0; }
 unsigned short __VERIFIER_nondet_ushort(void) { return 0; }
 int __VERIFIER_nondet_int(void) { return 0; }
+size_t __VERIFIER_nondet_size_t(void) { return 0; }
 unsigned int __VERIFIER_nondet_uint(void) { return 0; }
 long __VERIFIER_nondet_long(void) { return 0; }
 unsigned long __VERIFIER_nondet_ulong(void) { return 0; }

@@ -19,9 +19,10 @@
  * @brief Havocs every in-file function call so bodies become intraprocedural.
  *
  * Primitive returns -> {@code __VERIFIER_nondet_<type>()}; pointer returns ->
- * {@code __havoc_block(128)} / {@code __havoc_cstring(128)}; void returns
- * dropped; aggregate returns left as-is. Dropped calls are marked no-op, and
- * enclosing loops/branches that become side-effect-free no-ops are pruned.
+ * an inline GNU statement-expression declaring a havocked stack block (char
+ * pointees additionally null-terminated); void returns dropped; aggregate
+ * returns left as-is. Dropped calls are marked no-op, and enclosing
+ * loops/branches that become side-effect-free no-ops are pruned.
  */
 class HavocCallsVisitor : public clang::RecursiveASTVisitor<HavocCallsVisitor> {
 public:

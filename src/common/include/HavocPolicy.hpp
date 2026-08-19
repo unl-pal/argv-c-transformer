@@ -39,3 +39,11 @@ inline constexpr unsigned kArgcMax = 4;
  * string lengths span empty through @c kStrMax-1.
  */
 inline constexpr unsigned kStrMax = 16;
+
+/**
+ * @brief Size in bytes of a havocked pointer-return block.
+ *
+ * Used for both the opaque-block and char-pointee (C string) cases; the
+ * char-pointee case additionally null-terminates within this bound.
+ */
+inline constexpr unsigned kBlockMax = 128;

@@ -118,7 +118,7 @@ TEST_F(TransformStageTest, ArgcArgvMainProducesTransformedSource) {
 
   std::string src = readFile(transformDir / "withmain.c");
   EXPECT_NE(src.find("original_main"), std::string::npos);
-  EXPECT_NE(src.find("__havoc_cstring"), std::string::npos);
+  EXPECT_NE(src.find("__argv_buf"), std::string::npos);
   EXPECT_NE(src.find("__VERIFIER_nondet_int"), std::string::npos);
   EXPECT_NE(src.find("abort"), std::string::npos);
 }

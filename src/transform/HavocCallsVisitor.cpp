@@ -171,20 +171,29 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     _Rewriter.ReplaceText(E->getSourceRange(), "__VERIFIER_nondet_" + *suffix + "()");
     _NeededSuffixes->emplace(*suffix);
   } else if (returnType->isAnyPointerType() && !returnType->isFunctionPointerType()) {
-    // Pointer returns get a havocked-but-valid block (SV-COMP __VERIFIER_nondet_memory).
-    // Block size is a fixed guess for now; char pointers are
-    // null-terminated so string ops stay in bounds. AddVerifiersConsumer
-    // emits the helper definitions when it sees these markers.
+    // Pointer returns get a havocked-but-valid stack block (SV-COMP
+    // __VERIFIER_nondet_memory), declared inline via a GNU statement
+    // Char pointers are additionally null-terminated at a nondet bound.
+    // AddVerifiersConsumer emits the externs/macros these markers request.
     bool isCharPtr = returnType->getPointeeType()->isAnyCharacterType();
-    std::string helper = isCharPtr ? "__havoc_cstring" : "__havoc_block";
-    debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked pointer call -> " + helper +
-                    "(128)");
-    // The helpers return char* / void*; cast back to the call's actual
-    // return type so e.g. unsigned char* or a struct pointer doesn't end up
-    // assigned from an incompatible pointer type.
+    std::string replacement;
+    if (isCharPtr) {
+      replacement = "({ char __havoc_str[__HAVOC_BLOCK_MAX]; "
+                    "__VERIFIER_nondet_memory(__havoc_str, __HAVOC_BLOCK_MAX); "
+                    "size_t __havoc_len = __VERIFIER_nondet_size_t(); "
+                    "if (__havoc_len >= __HAVOC_BLOCK_MAX) abort(); "
+                    "__havoc_str[__havoc_len] = 0; __havoc_str; })";
+      _NeededSuffixes->emplace("size_t");
+    } else {
+      replacement = "({ unsigned char __havoc_blk[__HAVOC_BLOCK_MAX]; "
+                    "__VERIFIER_nondet_memory(__havoc_blk, __HAVOC_BLOCK_MAX); __havoc_blk; })";
+    }
+    debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked pointer call -> stack block");
+    // Cast back to the call's actual return type so e.g. unsigned char* or a
+    // struct pointer doesn't end up assigned from an incompatible pointer type.
     _Rewriter.ReplaceText(E->getSourceRange(),
-                          "(" + returnType.getAsString() + ")" + helper + "(128)");
-    _NeededSuffixes->emplace(helper);
+                          "(" + returnType.getAsString() + ")" + replacement);
+    _NeededSuffixes->emplace("__havoc_memory");
   }
   // Aggregate returns (structs, unions) have no expression-position nondet
   // equivalent; those calls are left as-is

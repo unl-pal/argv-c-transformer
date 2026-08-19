@@ -3,20 +3,9 @@
 #define __HAVOC_ARGC_MAX 4
 #define __HAVOC_STR_MAX 16
 extern int __VERIFIER_nondet_int(void);
-extern size_t __VERIFIER_nondet_size_t(void);
+#define __HAVOC_BLOCK_MAX 128
 extern void __VERIFIER_nondet_memory(void *, size_t);
-static void *__havoc_block(size_t size) {
-  void *block = malloc(size);
-  __VERIFIER_nondet_memory(block, size);
-  return block;
-}
-static char *__havoc_cstring(size_t size) {
-  char *s = __havoc_block(size);
-  size_t len = __VERIFIER_nondet_size_t();
-  if (len >= size) abort();
-  s[len] = '\0';
-  return s;
-}
+extern size_t __VERIFIER_nondet_size_t(void);
 
 int helper(int x) {
   return x + 1;
@@ -30,9 +19,15 @@ int main(void) {
   helper(__VERIFIER_nondet_int());
   int argc = __VERIFIER_nondet_int();
   if (argc < __HAVOC_ARGC_MIN || argc > __HAVOC_ARGC_MAX) abort();
+  char __argv_buf[__HAVOC_ARGC_MAX][__HAVOC_STR_MAX];
   char *argv[__HAVOC_ARGC_MAX + 1];
-  for (int i = 0; i < argc; i++)
-    argv[i] = __havoc_cstring(__HAVOC_STR_MAX);
+  for (int i = 0; i < argc; i++) {
+    __VERIFIER_nondet_memory(__argv_buf[i], __HAVOC_STR_MAX);
+    size_t __argv_len = __VERIFIER_nondet_size_t();
+    if (__argv_len >= __HAVOC_STR_MAX) abort();
+    __argv_buf[i][__argv_len] = 0;
+    argv[i] = __argv_buf[i];
+  }
   argv[argc] = 0;
   original_main(argc, argv);
   return 0;

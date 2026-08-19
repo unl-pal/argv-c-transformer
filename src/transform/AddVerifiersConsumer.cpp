@@ -55,6 +55,13 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   std::string decls;
 
+  // "__havoc_memory"/"size_t" put a bare `size_t` in the emitted externs, and
+  // both that path and "__havoc_argv" emit `abort()` calls (argc/argv/length
+  // bound checks). <stdlib.h> covers both size_t and abort.
+  if (_NeededSuffixes->count("__havoc_memory") || _NeededSuffixes->count("size_t") ||
+      _NeededSuffixes->count("__havoc_argv"))
+    decls += "#include <stdlib.h>\n";
+
   // MainGenConsumer marks the argv harness with "__havoc_argv"; emit the
   // bounds it references as macros so a user can retune a generated benchmark
   // without rerunning the pipeline.
@@ -76,33 +83,15 @@ void AddVerifiersConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     decls += "extern " + *cType + " " + name + "(void);\n";
   }
 
-  // HavocCallsVisitor marks pointer-returning call replacements with the
-  // helper names; emit the helper definitions they rely on. The helpers
-  // hand out valid havocked blocks per the SV-COMP __VERIFIER_nondet_memory
-  // contract (an arbitrary nondet pointer value must never be dereferenced).
-  // <stdlib.h> supplies malloc, abort and size_t
-  bool needCString = _NeededSuffixes->count("__havoc_cstring");
-  bool needBlock = needCString || _NeededSuffixes->count("__havoc_block");
-  if (needBlock) {
-    decls.insert(0, "#include <stdlib.h>\n");
-    if (needCString && !_NeededSuffixes->count("size_t"))
-      decls += "extern size_t __VERIFIER_nondet_size_t(void);\n";
-    decls += "extern void __VERIFIER_nondet_memory(void *, size_t);\n"
-             "static void *__havoc_block(size_t size) {\n"
-             "  void *block = malloc(size);\n"
-             "  __VERIFIER_nondet_memory(block, size);\n"
-             "  return block;\n"
-             "}\n";
+  // HavocCallsVisitor and MainGenConsumer mark stack-block pointer havocking
+  // with "__havoc_memory"; emit the extern + bound macro they rely on. The
+  // blocks are filled per the SV-COMP __VERIFIER_nondet_memory contract.
+  if (_NeededSuffixes->count("__havoc_memory")) {
+    decls += "#define __HAVOC_BLOCK_MAX " + std::to_string(kBlockMax) + "\n";
+    decls += "extern void __VERIFIER_nondet_memory(void *, size_t);\n";
   }
-  if (needCString) {
-    decls += "static char *__havoc_cstring(size_t size) {\n"
-             "  char *s = __havoc_block(size);\n"
-             "  size_t len = __VERIFIER_nondet_size_t();\n"
-             "  if (len >= size) abort();\n"
-             "  s[len] = '\\0';\n"
-             "  return s;\n"
-             "}\n";
-  }
+  if (_NeededSuffixes->count("size_t"))
+    decls += "extern size_t __VERIFIER_nondet_size_t(void);\n";
 
   // AssertRewriter rewrote at least one assert(cond) to reach_error()
   if (_NeededSuffixes->count("__reach_error")) {

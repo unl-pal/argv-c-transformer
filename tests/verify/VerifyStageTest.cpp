@@ -353,5 +353,5 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
 
   std::string src = readFile(benchmarkDir / "withmain.c");
   EXPECT_NE(src.find("original_main(argc, argv);"), std::string::npos);
-  EXPECT_NE(src.find("__havoc_cstring"), std::string::npos);
+  EXPECT_NE(src.find("__argv_buf"), std::string::npos);
 }

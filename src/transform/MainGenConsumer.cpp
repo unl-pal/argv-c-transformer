@@ -97,18 +97,24 @@ std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   // an argv of havocked C strings, then call original_main(argc, argv).
   // The bounds are __HAVOC_* macros emitted by AddVerifiersConsumer, so the
   // generated benchmark stays retunable by hand.
-
   std::string body;
   body += "  int argc = __VERIFIER_nondet_int();\n";
   body += "  if (argc < __HAVOC_ARGC_MIN || argc > __HAVOC_ARGC_MAX) abort();\n";
+  body += "  char __argv_buf[__HAVOC_ARGC_MAX][__HAVOC_STR_MAX];\n";
   body += "  char *argv[__HAVOC_ARGC_MAX + 1];\n";
-  body += "  for (int i = 0; i < argc; i++)\n";
-  body += "    argv[i] = __havoc_cstring(__HAVOC_STR_MAX);\n";
+  body += "  for (int i = 0; i < argc; i++) {\n";
+  body += "    __VERIFIER_nondet_memory(__argv_buf[i], __HAVOC_STR_MAX);\n";
+  body += "    size_t __argv_len = __VERIFIER_nondet_size_t();\n";
+  body += "    if (__argv_len >= __HAVOC_STR_MAX) abort();\n";
+  body += "    __argv_buf[i][__argv_len] = 0;\n";
+  body += "    argv[i] = __argv_buf[i];\n";
+  body += "  }\n";
   body += "  argv[argc] = 0;\n";
   body += "  original_main(argc, argv);\n";
 
   _NeededSuffixes->insert("int");
-  _NeededSuffixes->insert("__havoc_cstring");
+  _NeededSuffixes->insert("__havoc_memory");
+  _NeededSuffixes->insert("size_t");
   _NeededSuffixes->insert("__havoc_argv");
   return body;
 }

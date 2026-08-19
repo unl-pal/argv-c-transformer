@@ -17,8 +17,9 @@
  * Runs last in the transform consumer chain. For every verifier suffix recorded
  * by earlier consumers (havoc calls, main generation), inserts an
  * {@code extern <type> __VERIFIER_nondet_<suffix>(void);} declaration. Also emits
- * helper definitions for {@code __havoc_block} and {@code __havoc_cstring} when
- * those markers are present in the suffix set, the {@code __HAVOC_*} bound
+ * the {@code __VERIFIER_nondet_memory} extern and {@code __HAVOC_BLOCK_MAX}
+ * macro when the "__havoc_memory" marker is present (stack-block pointer
+ * havocking), the {@code __HAVOC_ARGC_*}/{@code __HAVOC_STR_MAX} bound
  * macros when {@code MainGenConsumer} recorded the "__havoc_argv" marker, and a
  * {@code reach_error()} definition (plus its own {@code #include <assert.h>})
  * when {@code AssertRewriter} recorded the "__reach_error" marker.
