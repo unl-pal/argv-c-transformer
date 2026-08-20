@@ -37,15 +37,17 @@ inline int resolveWorkerCount(int configuredNproc) {
  * @brief The per-file work a worker pool isolates, shared by every caller of
  * {@code runWorkerPool}.
  *
- * Mirrors what each stage's old FooFileIsolated hand-rolled: a child body
- * that does the real work and exits with its result, an in-process fallback
- * for when fork() itself fails, and cleanup for a child that got killed.
+ * Child exits with its result, has an in-process fallback
+ * for when fork() itself fails, and cleanup for any child that got killed.
  */
 struct IsolatedWork {
   /**
    * Runs in the forked child. Must not return: do the work, flush stdout
-   * and stderr (`_exit` skips C++ stream flushing), then `_exit(1)` on
-   * success or `_exit(0)` otherwise.
+   * and stderr (`_exit` skips C++ stream flushing), then `_exit(0)` on
+   * success or any nonzero code otherwise. Standard Unix convention,
+   * chosen deliberately: it means a stray `exit()`/`std::exit()` call deep
+   * in Clang/LLVM internals (or anywhere else in the call stack) defaults
+   * to being read as failure rather than silently counted as success
    */
   std::function<void(const std::filesystem::path &)> child;
 
@@ -71,11 +73,8 @@ struct WorkerPoolJob {
  * inside the child) as one block, tagged with its file, then deletes the log
  * file. A no-op if the child wrote nothing (e.g. debugLevel 0).
  *
- * Concurrent children share the pool's real stderr, so writing debugLog
- * output there directly would interleave mid-line across processes; each
- * child instead has its own fd 2 redirected to a private file (see the fork
- * site below), and only the parent - which nothing else is writing to
- * stderr concurrently with - prints the finished block.
+ * Each child has its own fd 2 redirected to a private file (see the fork
+ * site below), and only the parent prints the finished block.
  */
 inline void flushChildLog(const WorkerPoolJob &job) {
   std::ifstream in(job.logPath);
@@ -95,17 +94,12 @@ inline void flushChildLog(const WorkerPoolJob &job) {
 
 /**
  * @brief Runs {@code work} over every file in {@code files}, isolating each
- * in its own forked child the way the old per-stage FooFileIsolated did, but
- * running up to {@code workers} children concurrently instead of one at a
- * time.
+ * in its own forked child running up to {@code workers} children concurrently.
  *
  * Each file gets its own wall-clock budget of {@code timeoutSecs} starting
- * from when its child is forked, independent of how long its pool-mates
- * take. Each child's debugLog output is buffered to a private file (see
- * {@code flushChildLog}) and printed as one block once the child is reaped,
- * so concurrent children's debug output never interleaves.
+ * from when its child is forked.
  *
- * @return count of files whose child exited reporting success (status 1).
+ * @return count of files whose child exited reporting success (status 0).
  */
 inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int workers,
                           int timeoutSecs, const IsolatedWork &work) {
@@ -142,15 +136,14 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
       }
       if (pid == 0) {
         // Redirect fd 2 (not just the C++ std::cerr stream) so debugLog
-        // calls anywhere in the child - including deep in the Clang chain -
-        // land in this child's own file instead of the shared stderr.
+        // calls anywhere in the child land in this child's own file instead of the shared stderr.
         int fd = open(logPath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd >= 0) {
           dup2(fd, STDERR_FILENO);
           close(fd);
         }
         work.child(file);
-        _exit(0); // safety net; work.child is expected to _exit itself
+        _exit(1); // safety net; work.child is expected to _exit itself
       }
       inFlight.push_back({pid, file, time(nullptr) + timeoutSecs, logPath});
     }
@@ -162,7 +155,13 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
       if (done == it->pid) {
         flushChildLog(*it);
         if (WIFEXITED(status)) {
-          produced += WEXITSTATUS(status) == 1 ? 1 : 0;
+          if (WEXITSTATUS(status) == 0) {
+            produced += 1;
+          } else {
+            work.debugLog(0, "failed (exit " + std::to_string(WEXITSTATUS(status)) +
+                                  "), skipping: " + it->file.string());
+            work.cleanupPartial(it->file);
+          }
         } else {
           work.debugLog(0, "crashed (signal " + std::to_string(WTERMSIG(status)) +
                                 "), skipping: " + it->file.string());

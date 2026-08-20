@@ -156,10 +156,10 @@ int Verifier::verifyAll(std::filesystem::path path) {
 
   IsolatedWork work;
   work.child = [this](const std::filesystem::path &p) {
-    int produced = verifyFile(p) ? 1 : 0;
+    bool produced = verifyFile(p);
     std::cout.flush();
     std::cerr.flush();
-    _exit(produced);
+    _exit(produced ? 0 : 1);
   };
   work.runInProcess = [this](const std::filesystem::path &p) { return verifyFile(p); };
   work.cleanupPartial = [this](const std::filesystem::path &p) { cleanupPartialOutput(p); };

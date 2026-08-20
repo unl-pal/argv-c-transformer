@@ -141,10 +141,10 @@ int Transformer::transformAll(std::filesystem::path path) {
 
   IsolatedWork work;
   work.child = [this](const std::filesystem::path &p) {
-    int produced = transformFile(p) ? 1 : 0;
+    bool produced = transformFile(p);
     std::cout.flush();
     std::cerr.flush();
-    _exit(produced);
+    _exit(produced ? 0 : 1);
   };
   work.runInProcess = [this](const std::filesystem::path &p) { return transformFile(p); };
   work.cleanupPartial = [this](const std::filesystem::path &p) { cleanupPartialOutput(p); };
