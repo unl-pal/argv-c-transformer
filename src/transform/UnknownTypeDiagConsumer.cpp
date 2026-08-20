@@ -9,8 +9,6 @@
 #include <clang/Basic/DiagnosticSema.h>
 #include <clang/Basic/IdentifierTable.h>
 
-#include <cstdlib>
-
 UnknownTypeDiagConsumer::UnknownTypeDiagConsumer(
     std::shared_ptr<std::set<std::string>> unresolvedTypeNames)
     : _UnresolvedTypeNames(unresolvedTypeNames) {
@@ -26,19 +24,26 @@ void UnknownTypeDiagConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level,
   if (!isUnknownTypename && !isUndeclaredVarUse)
     return;
 
-  // Guarded against a future Clang version diagnostic change
-  if (isUnknownTypename) {
-    if (Info.getArgKind(0) != clang::DiagnosticsEngine::ak_identifierinfo){
-      debugLog(0, "ERROR: Potential Clang Version Issue in UnknownTypeDiag recovery");
-      std::exit(1);
-    }
+  // Clang does not guarantee a diagnostic ID always carries its name
+  // argument with the same encoding: err_undeclared_var_use_suggest (and
+  // presumably its siblings) has been observed emitting the same identifier
+  // as an IdentifierInfo* in one call and a DeclarationName in another,
+  // for the same diagnostic ID, in the same TU. Handle both. Recording
+  // nothing for a genuinely unrecognized encoding is safe: at worst
+  // AddStdIncludesConsumer misses one header, which checkCompilable()
+  // catches downstream -- never worth aborting the whole file over.
+  switch (Info.getArgKind(0)) {
+  case clang::DiagnosticsEngine::ak_identifierinfo:
     _UnresolvedTypeNames->insert(Info.getArgIdentifier(0)->getName().str());
-  } else {
-    if (Info.getArgKind(0) != clang::DiagnosticsEngine::ak_declarationname) {
-      debugLog(0, "ERROR: Potential Clang Version Issue in UnknownTypeDiag recovery");
-      std::exit(1);
-    }
-    clang::DeclarationName name = clang::DeclarationName::getFromOpaqueInteger(Info.getRawArg(0));
-    _UnresolvedTypeNames->insert(name.getAsString());
+    break;
+  case clang::DiagnosticsEngine::ak_declarationname:
+    _UnresolvedTypeNames->insert(
+        clang::DeclarationName::getFromOpaqueInteger(Info.getRawArg(0)).getAsString());
+    break;
+  default:
+    debugLog(2, "UnknownTypeDiagConsumer: diagnostic " + std::to_string(id) +
+                    " arg0 has unrecognized kind " + std::to_string(Info.getArgKind(0)) +
+                    "; skipping");
+    break;
   }
 }

@@ -206,10 +206,10 @@ int Filterer::run() {
 
   IsolatedWork work;
   work.child = [this](const std::filesystem::path &p) {
-    int produced = filterFile(p) ? 1 : 0;
+    bool produced = filterFile(p);
     std::cout.flush();
     std::cerr.flush();
-    _exit(produced);
+    _exit(produced ? 0 : 1);
   };
   work.runInProcess = [this](const std::filesystem::path &p) { return filterFile(p); };
   work.cleanupPartial = [this](const std::filesystem::path &p) { cleanupPartialOutput(p); };
