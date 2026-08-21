@@ -224,6 +224,13 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
                     << std::endl;
           level = std::clamp(level, 0, 3);
         }
+      } else if (key == "nproc") {
+        int &workers = config.fileSettings.at(key);
+        if (workers < 0) {
+          std::cerr << "Warning: 'nproc' expects a non-negative count (0 = auto) - ignoring value '"
+                    << value << "'" << std::endl;
+          workers = 0;
+        }
       }
     } else if (config.havoc.count(key)) {
       try {

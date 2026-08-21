@@ -144,7 +144,7 @@ void Verifier::collectCFiles(std::filesystem::path path, std::vector<std::filesy
   debugLog(3, "[verify] ignored: " + path.filename().string());
 }
 
-int Verifier::verifyAll(std::filesystem::path path) {
+WorkerPoolResult Verifier::verifyAll(std::filesystem::path path) {
   std::vector<std::filesystem::path> files;
   collectCFiles(path, files);
   _totalProcessed = static_cast<int>(files.size());
@@ -159,11 +159,12 @@ int Verifier::verifyAll(std::filesystem::path path) {
     bool produced = verifyFile(p);
     std::cout.flush();
     std::cerr.flush();
-    _exit(produced ? 0 : 1);
+    _exit(produced ? kProducedExit : kDeclinedExit);
   };
   work.runInProcess = [this](const std::filesystem::path &p) { return verifyFile(p); };
   work.cleanupPartial = [this](const std::filesystem::path &p) { cleanupPartialOutput(p); };
   work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[verify] " + msg); };
+  work.label = "verify";
 
   return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work);
 }
@@ -320,11 +321,11 @@ int Verifier::run() {
     return 0;
   }
   writeHarnessHeader();
-  int result = verifyAll(path);
-  int discarded = _totalProcessed - result;
+  WorkerPoolResult result = verifyAll(path);
   std::cout << "\n=== Verify summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"
-            << "  Benchmarks produced:    " << result << "\n"
-            << "  Discarded/failed:       " << discarded << std::endl;
-  return result;
+            << "  Benchmarks produced:    " << result.produced << "\n"
+            << "  Declined (no output):   " << result.declined << "\n"
+            << "  Failed:                 " << result.failed << std::endl;
+  return result.produced;
 }

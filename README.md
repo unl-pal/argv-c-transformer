@@ -106,9 +106,10 @@ Users can run single stages if building from source.
 Config files use INI syntax. Any `*.config` file is accepted with the following
 keys. See `settings.config` for more info.
 
-- `[Complexity Requirements]` - per-function `min,max` thresholds: `ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`
-- `[Feature Requirements]` - per-function gates: `require` | `forbid` | `ignore` (default): `Concurrency` and `FloatingPoint`
-- `[File Settings]` - `FileLoC`, `fileTimeoutSecs`, `keepCompilesOnly`, `debugLevel` (0–3)
+- `[Complexity Requirements]` - per-function `min,max` thresholds: `ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`, `Operations`
+- `[Feature Requirements]` - per-function gates: `require` | `forbid` | `ignore` (default): `Concurrency`, `FloatingPoint`, `PointerOrArray`, `PointerDeref`, `MemAlloc`, `MemFree`
+- `[File Settings]` - `FileLoC`, `fileTimeoutSecs`, `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores), `keepCompilesOnly`, `debugLevel` (0–3)
+- `[Havoc Settings]` - bounds emitted as `__HAVOC_*` macros into each benchmark: `havocArgcMin`, `havocArgcMax`, `havocStrMax`, `havocBlockMax`
 - `[Stage Directories]` - `databaseDir`, `filterDir`, `transformDir`, `benchmarkDir`
 
 # Build
