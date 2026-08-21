@@ -49,7 +49,7 @@ public:
     bool PointerOrArray = false; // coarse gate: pointer/array VarDecl|ParmVarDecl, string literal
     bool PointerDeref = false;   // valid-deref signal: array subscript, *p, p->field
     bool MemAlloc = false;       // valid-memtrack signal: malloc/calloc/realloc/strdup
-    bool MemFree = false;        // valid-free signal: free
+    bool MemFree = false;        // valid-free signal: free, munmap
   };
 
   /** @brief Per-function AST property counts, split across the two axes. */

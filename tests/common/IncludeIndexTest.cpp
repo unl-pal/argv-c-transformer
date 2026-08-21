@@ -4,6 +4,7 @@
 
 #include "IncludeIndex.hpp"
 
+#include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
 #include <string>

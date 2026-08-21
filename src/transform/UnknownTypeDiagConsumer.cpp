@@ -9,6 +9,8 @@
 #include <clang/Basic/DiagnosticSema.h>
 #include <clang/Basic/IdentifierTable.h>
 
+#include <cstdlib>
+
 UnknownTypeDiagConsumer::UnknownTypeDiagConsumer(
     std::shared_ptr<std::set<std::string>> unresolvedTypeNames)
     : _UnresolvedTypeNames(unresolvedTypeNames) {
@@ -28,13 +30,13 @@ void UnknownTypeDiagConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level,
   if (isUnknownTypename) {
     if (Info.getArgKind(0) != clang::DiagnosticsEngine::ak_identifierinfo){
       debugLog(0, "ERROR: Potential Clang Version Issue in UnknownTypeDiag recovery");
-      exit(-1);
+      std::exit(1);
     }
     _UnresolvedTypeNames->insert(Info.getArgIdentifier(0)->getName().str());
   } else {
     if (Info.getArgKind(0) != clang::DiagnosticsEngine::ak_declarationname) {
       debugLog(0, "ERROR: Potential Clang Version Issue in UnknownTypeDiag recovery");
-      exit(-1);
+      std::exit(1);
     }
     clang::DeclarationName name = clang::DeclarationName::getFromOpaqueInteger(Info.getRawArg(0));
     _UnresolvedTypeNames->insert(name.getAsString());

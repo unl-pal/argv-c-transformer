@@ -22,9 +22,11 @@ CountingVisitor::CountingVisitor(
 }
 
 std::string CountingVisitor::getDeclParentFuncName(const clang::Decl &D) {
-  if (const clang::DeclContext *parentFuncContext = D.getParentFunctionOrMethod()) {
-    if (parentFuncContext->isFunctionOrMethod()) {
-      const clang::FunctionDecl *FD = clang::dyn_cast<clang::FunctionDecl>(parentFuncContext);
+  // Walk past anything that isn't a FunctionDecl to find the nearest
+  // real enclosing function, rather than assuming the cast succeeds.
+  for (const clang::DeclContext *ctx = D.getParentFunctionOrMethod(); ctx;
+       ctx = clang::Decl::castFromDeclContext(ctx)->getParentFunctionOrMethod()) {
+    if (const clang::FunctionDecl *FD = clang::dyn_cast<clang::FunctionDecl>(ctx)) {
       std::string name = FD->getNameAsString();
       // guarantee function entry exists, may add harmless irrelevant entries
       _allFunctions->try_emplace(name);
@@ -80,7 +82,7 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
   }
   if (const clang::FunctionDecl *callee = CE->getDirectCallee()) {
     if (!callee->getIdentifier() || !_mgr->isInSystemHeader(callee->getBeginLoc())) return true;
-    if (callee->getNameAsString() == "free") {
+    if (callee->getNameAsString() == "free" || callee->getNameAsString() == "munmap") {
       _allFunctions->at(getStmtParentFuncName(*CE)).Features.MemFree = true;
     } else if (isMemoryFunction(callee->getNameAsString())) {
       _allFunctions->at(getStmtParentFuncName(*CE)).Features.MemAlloc = true;

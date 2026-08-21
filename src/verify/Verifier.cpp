@@ -9,7 +9,11 @@
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
 
+#include <cerrno>
+#include <csignal>
 #include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -17,8 +21,12 @@
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <string>
+#include <sys/wait.h>
 #include <system_error>
+#include <unistd.h>
+#include <vector>
 
 // Mirrors Transformer's own fallback default, so a bare Verifier invocation
 // lines up with the rest of the "repos" -> "repos-benchmarks" chain.
@@ -28,13 +36,14 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   config = parsePipelineConfig(configFile);
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
+  configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
   if (!inputPath.empty())
     configuration.transformDir = inputPath;
   configuration.benchmarkDir = config.benchmarkDir.empty()
-                                    ? inputBaseName(configuration.transformDir) + "-benchmarks"
-                                    : config.benchmarkDir;
+                                   ? inputBaseName(configuration.transformDir) + "-benchmarks"
+                                   : config.benchmarkDir;
   globalDebugLevel() = configuration.debugLevel;
 }
 
@@ -101,6 +110,65 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   return true;
 }
 
+int Verifier::verifyFileIsolated(std::filesystem::path path) {
+  pid_t pid = fork();
+  if (pid < 0) {
+    debugLog(0, "fork failed, verifying in-process: " + path.string());
+    return verifyFile(path) ? 1 : 0;
+  }
+
+  if (pid == 0) {
+    int produced = verifyFile(path) ? 1 : 0;
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(produced);
+  }
+
+  time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
+  int status = 0;
+  while (true) {
+    pid_t done = waitpid(pid, &status, WNOHANG);
+    if (done == pid)
+      break;
+    if (done < 0 && errno != EINTR) {
+      debugLog(0, "waitpid failed for " + path.string() + ", killing: " + strerror(errno));
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(path);
+      return 0;
+    }
+    if (time(nullptr) >= deadline) {
+      debugLog(0, "Timeout, killing verify of: " + path.string());
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(path);
+      return 0;
+    }
+    struct timespec nap = {0, 20 * 1000 * 1000}; // 20ms
+    nanosleep(&nap, nullptr);
+  }
+
+  if (WIFEXITED(status))
+    return WEXITSTATUS(status) == 1 ? 1 : 0;
+  debugLog(0, "Verify crashed (signal " + std::to_string(WTERMSIG(status)) +
+                  "), skipping: " + path.string());
+  cleanupPartialOutput(path);
+  return 0;
+}
+
+void Verifier::cleanupPartialOutput(std::filesystem::path path) {
+  std::filesystem::path outPath =
+      std::filesystem::path(configuration.benchmarkDir) / path.filename();
+  std::error_code ec;
+  std::filesystem::remove(outPath, ec);
+  std::filesystem::path ymlPath = outPath;
+  ymlPath.replace_extension(".yml");
+  std::filesystem::remove(ymlPath, ec);
+  std::filesystem::path iPath = outPath;
+  iPath.replace_extension(".i");
+  std::filesystem::remove(iPath, ec);
+}
+
 int Verifier::verifyAll(std::filesystem::path path) {
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[verify] path does not exist: " + path.string());
@@ -119,7 +187,7 @@ int Verifier::verifyAll(std::filesystem::path path) {
       _totalProcessed++;
       if (globalDebugLevel() == 0)
         std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
-      return verifyFile(path) ? 1 : 0;
+      return verifyFileIsolated(path);
     }
     debugLog(3, "[verify] skipped (not .c): " + path.filename().string());
     return 0;
@@ -219,11 +287,15 @@ void Verifier::writeBenchmarkTask(
   out << "format_version: '2.0'\n"
       << "\n"
       << "input_files: '" << inputFile << "'\n"
-      << "\n"
-      << "properties:\n";
-  for (const BenchmarkProperty &prop : properties) {
-    out << "  - property_file: " << prop.propertyFile << "\n"
-        << "    expected_verdict: " << (prop.expectedVerdict ? "true" : "false") << "\n";
+      << "\n";
+  if (properties.empty()) {
+    out << "properties: []\n";
+  } else {
+    out << "properties:\n";
+    for (const BenchmarkProperty &prop : properties) {
+      out << "  - property_file: " << prop.propertyFile << "\n"
+          << "    expected_verdict: " << (prop.expectedVerdict ? "true" : "false") << "\n";
+    }
   }
   out << "\n"
       << "options:\n"
@@ -232,6 +304,52 @@ void Verifier::writeBenchmarkTask(
   if (properties.empty())
     debugLog(1, "[verify] WARN: no properties found for " + cPath.string());
 }
+
+namespace {
+
+// Lines matching one of these are pure header noise. Each entry is a case a specific verifier
+// frontend chokes on despite the declaration being semantically inert.
+//
+// - _Float16/32/64/128(x): glibc's <bits/floatn-common.h> fallback typedefs
+//   for the C23 extended float types, pulled in transitively by <stdio.h>
+const std::vector<std::regex> &knownNoiseTypedefs() {
+  static const std::vector<std::regex> patterns = {
+      std::regex(R"(^\s*typedef\s+.+\s_Float\d+x?\s*;\s*$)"),
+  };
+  return patterns;
+}
+
+// Strips knownNoiseTypedefs() lines from an already-preprocessed .i file.
+void stripNoiseTypedefs(const std::filesystem::path &iPath) {
+  std::ifstream in(iPath);
+  if (!in)
+    return;
+  std::vector<std::string> kept;
+  std::string line;
+  bool changed = false;
+  while (std::getline(in, line)) {
+    bool isNoise = false;
+    for (const std::regex &pattern : knownNoiseTypedefs()) {
+      if (std::regex_match(line, pattern)) {
+        isNoise = true;
+        break;
+      }
+    }
+    if (isNoise) {
+      changed = true;
+      continue;
+    }
+    kept.push_back(std::move(line));
+  }
+  in.close();
+  if (!changed)
+    return;
+  std::ofstream out(iPath, std::ios::trunc);
+  for (const std::string &l : kept)
+    out << l << "\n";
+}
+
+} // namespace
 
 // NOTE: same std::system/unescaped-path caveat as checkCompilable above.
 bool Verifier::preprocess(std::filesystem::path cPath) {
@@ -242,7 +360,10 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
   if (!cmd)
     return false;
   *cmd += " " + cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
-  return std::system(cmd->c_str()) == 0;
+  if (std::system(cmd->c_str()) != 0)
+    return false;
+  stripNoiseTypedefs(iPath);
+  return true;
 }
 
 int Verifier::run() {

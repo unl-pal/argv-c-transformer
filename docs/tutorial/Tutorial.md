@@ -23,122 +23,53 @@ They're kept separate because `Downloader.py` is a standalone step never
 invoked by the C++ pipeline (see `../../README.md`'s Downloader section) and
 reads its config with Python's `configparser`, keyed by section, while the
 C++ side (`ConfigParser.hpp`) ignores section headers entirely and just
-looks for known `key = value` pairs wherever they appear. Feeding
-`Downloader.py`'s `[Downloader]` section to the C++ tools would just print a
-harmless but confusing `Unknown config key: repo`.
+looks for known `key = value` pairs wherever they appear.
 
 Both point at the same paths this tutorial uses
 (`docs/tutorial/source-files`, `docs/tutorial/filtered-files`,
-`docs/tutorial/transformed-files`, `docs/tutorial/benchmark-files` - all
-gitignored, so running this tutorial won't leave anything to clean up in
-`git status`).
+`docs/tutorial/transformed-files`, `docs/tutorial/benchmark-files`).
 
-`docs/tutorial/download.config`:
+For this tutorial we will use `docs/tutorial/download.config` and
+`docs/tutorial/tutorial.config`. The former defines the repo to download
+and a destination path, while the latter has intermediate directory
+locations as well as complexity threshold and file settings for each stage.
+Have a quick look at them to familiarize yourself with some of the available
+settings.
 
-```ini
-[File Locations]
-# Must match tutorial.config's databaseDir, since filter reads from there.
-databaseDir=docs/tutorial/source-files
+## 0. Prerequisites
 
-[Downloader]
-# A single "owner/name" repo, bypassing the CSV-index flow entirely (see
-# Downloader.py's `repo` setting). Good for a known, deliberately-chosen
-# repo like this tutorial's toy example.
-repo=natsteven/argc-example
-```
-
-`docs/tutorial/tutorial.config`:
-
-```ini
-[Stage Directories]
-databaseDir=docs/tutorial/source-files
-filterDir=docs/tutorial/filtered-files
-transformDir=docs/tutorial/transformed-files
-benchmarkDir=docs/tutorial/benchmark-files
-
-[Complexity Requirements]
-# A function needs at least one for-loop to survive filtering. This is the
-# only threshold set here - enough to split argc-example's three functions
-# into "removed" and "kept" buckets.
-ForLoops = 1,9999
-
-[File Settings]
-FileLoC=1,9999
-keepCompilesOnly=true
-debugLevel=1
-```
+If you haven't already, follow the steps in the `README` to build the project.
+This tutorial is intended to walk through each separate stage to demonstrate
+the pipeline, and so we will invoke them separately from the build directory.
 
 ## 1. Download
+
+To download this tutorial toy example run the downloader script with the
+config path as shown:
 
 ```sh
 ./scripts/downloader.py docs/tutorial/download.config
 ```
 
-Normally `Downloader.py` reads a CSV index of repositories and clones every
+Normally, `downloader.py` reads a CSV index of repositories and clones every
 one that meets `language`/`minRepoLoC`/`minNumStars` criteria (see
-`../../README.md`'s Downloader section). That's the wrong tool for "grab this
-one specific repo I already picked", so `Downloader.py` also accepts a `repo`
-setting under `[Downloader]` (an `"owner/name"` string) that skips the CSV
-entirely and downloads just that repo, no criteria applied. That's what
-`docs/tutorial/download.config` uses above.
+`README.md`'s Downloader section and `scripts/downloader.config`).
+`Downloader.py` alternatively accepts a `repo` setting under `[Downloader]`
+that just downloads `repo`, no criteria applied, as seen above.
 
 You'll see some `KeyError: ... On Setting ...` lines in the output. Those
 are `Downloader.py` warning that `projectCount`/`csv` aren't set in the
 config. That's expected and harmless here: those settings only matter for
 the CSV-driven flow, which the `repo` setting bypasses.
 
-Result:
+The result is the file:
 
 ```
 docs/tutorial/source-files/natsteven/argc-example/src/example.c
 ```
 
-`databaseDir` serves double duty: the downloader writes into
-`databaseDir/<owner>/<name>/...`, and the Filter step scans that same
-`databaseDir` for what Download fetched.
-
-`.../example.c`:
-
-```c
-#include <stdio.h>
-
-typedef struct Point {
-    int x;
-    int y;
-} Point;
-
-/* Trivial helper: no loops, so the filter's ForLoops threshold strips it. */
-int add(int a, int b) {
-    return a + b;
-}
-
-/* Has a for-loop, so it survives filtering. Calls add(), which becomes a
- * havoc target in the transform step. */
-int sum_range(int n) {
-    int total = 0;
-    for (int i = 0; i < n; i++) {
-        total = add(total, i);
-    }
-    return total;
-}
-
-/* Takes a struct param - no __VERIFIER_nondet_* equivalent exists for
- * aggregate types, so the filter's parameter-type gate strips this body
- * even though it isn't touched by the loop threshold. */
-void print_point(Point p) {
-    printf("(%d, %d)\n", p.x, p.y);
-}
-
-int main(void) {
-    int result = sum_range(10);
-    for (int i = 0; i < 3; i++) {
-        Point p = {i, i};
-        print_point(p);
-    }
-    printf("Result: %d\n", result);
-    return 0;
-}
-```
+Have a look at the source code to get an idea of what it looks like before the
+filter and transform stages.
 
 ## 2. Filter
 
@@ -146,44 +77,8 @@ int main(void) {
 ./build/filter docs/tutorial/tutorial.config
 ```
 
-Output, `docs/tutorial/filtered-files/natsteven/argc-example/src/example.c`:
-
-```c
-#include <stdio.h>
-
-typedef struct Point {
-    int x;
-    int y;
-} Point;
-
-/* Trivial helper: no loops, so the filter's ForLoops threshold strips it. */
-int add(int a, int b) ;
-
-/* Has a for-loop, so it survives filtering. Calls add(), which becomes a
- * havoc target in the transform step. */
-int sum_range(int n) {
-    int total = 0;
-    for (int i = 0; i < n; i++) {
-        total = add(total, i);
-    }
-    return total;
-}
-
-/* Takes a struct param - no __VERIFIER_nondet_* equivalent exists for
- * aggregate types, so the filter's parameter-type gate strips this body
- * even though it isn't touched by the loop threshold. */
-void print_point(Point p) ;
-
-int main(void) {
-    int result = sum_range(10);
-    for (int i = 0; i < 3; i++) {
-        Point p = {i, i};
-        print_point(p);
-    }
-    printf("Result: %d\n", result);
-    return 0;
-}
-```
+Have a look at the output:
+`docs/tutorial/filtered-files/natsteven/argc-example/src/example.c`:
 
 Three things happened:
 
@@ -210,52 +105,7 @@ replaces the call inside `sum_range`.
 ./build/transform docs/tutorial/tutorial.config
 ```
 
-Output, `docs/tutorial/transformed-files/natsteven_argc-example_src_example.c`:
-
-```c
-#include <stdio.h>
-
-extern int __VERIFIER_nondet_int(void);
-
-typedef struct Point {
-    int x;
-    int y;
-} Point;
-
-/* Trivial helper: no loops, so the filter's ForLoops threshold strips it. */
-int add(int a, int b) ;
-
-/* Has a for-loop, so it survives filtering. Calls add(), which becomes a
- * havoc target in the transform step. */
-int sum_range(int n) {
-    int total = 0;
-    for (int i = 0; i < n; i++) {
-        total = __VERIFIER_nondet_int();
-    }
-    return total;
-}
-
-/* Takes a struct param - no __VERIFIER_nondet_* equivalent exists for
- * aggregate types, so the filter's parameter-type gate strips this body
- * even though it isn't touched by the loop threshold. */
-void print_point(Point p) ;
-
-int original_main(void) {
-    int result = __VERIFIER_nondet_int();
-    for (int i = 0; i < 3; i++) {
-        Point p = {i, i};
-        ;
-    }
-    printf("Result: %d\n", result);
-    return 0;
-}
-
-int main(void) {
-  sum_range(__VERIFIER_nondet_int());
-  original_main();
-  return 0;
-}
-```
+Now we have `docs/tutorial/transformed-files/natsteven_argc-example_src_example.c`:
 
 Walking through what changed:
 
@@ -298,39 +148,18 @@ natsteven_argc-example_src_example.i
 natsteven_argc-example_src_example.yml
 ```
 
-The `.c` here is byte-identical to Transform's output above: Verify reparses
+The `.c` here is identical to Transform's output above: Verify reparses
 it fresh (Transform's edits are Rewriter text edits, not AST edits, so only a
 fresh parse sees the post-transform shape), re-applies the `ForLoops`
 threshold per function, and finds nothing to repair - `sum_range` still has
 its loop, and the generated `main`/`original_main` are exempt from the
 re-check anyway. A file where havocking dropped a function below threshold
-would come out repaired or discarded instead; see *Empty Benchmark Discard*
-in `../Design.md`.
+would come out repaired or discarded instead.
 
-The `.yml` task file:
-
-```yaml
-format_version: '2.0'
-
-input_files: 'natsteven_argc-example_src_example.i'
-
-properties:
-  - property_file: ../properties/termination.prp
-    expected_verdict: true
-  - property_file: ../properties/no-overflow.prp
-    expected_verdict: true
-
-options:
-  language: C
-  data_model: LP64
-```
-
+The `.yml` task file is what the SV-COMP benchmark runner consumes.
 `input_files` points at the preprocessed `.i` (produced by
-`Verifier::preprocess`), not the `.c` directly; that's the form SV-Comp
-benchmark runners consume. The property set here (`termination` +
-`no-overflow`) is currently fixed for every benchmark - see `selectProperties`
-in `../Design.md`/`../../CLAUDE.md` for where per-function counts could drive
-this in the future.
+`Verifier::preprocess`), not the `.c` directly. The properties are detected
+(`termination` for loops + `no-overflow` for integer arithmetic).
 
 ## Where to go next
 

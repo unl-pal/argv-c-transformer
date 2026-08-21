@@ -60,8 +60,8 @@ void AssertRewriter::MacroExpands(const clang::Token &MacroNameTok, const clang:
   if (invalid)
     return;
 
-  size_t openParen = text.find('(');
-  size_t closeParen = text.rfind(')');
+  auto openParen = text.find('(');
+  auto closeParen = text.rfind(')');
   if (openParen == llvm::StringRef::npos || closeParen == llvm::StringRef::npos ||
       closeParen <= openParen)
     return;

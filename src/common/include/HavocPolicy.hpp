@@ -8,7 +8,7 @@
  * @file HavocPolicy.hpp
  * @brief Bounds governing how much symbolic state generated havoc code creates.
  *
- * Every havocked object is finite. There bounds are emitted into generated
+ * Every havocked object is finite. Their bounds are emitted into generated
  * benchmarks as @c __HAVOC_* macros so a benchmark can be retuned.
  *
  * Nondet values are constrained with @c if (cond) abort().

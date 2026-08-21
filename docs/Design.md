@@ -6,11 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # ArgV C Transformer - Design
 
-This document covers the *why* behind the pipeline: design choices, the
-trade-offs and roadblocks that motivated them, what's explicitly unsupported,
-and known downstream-verifier quirks. For what the pipeline does and how to
-run it, see [`README.md`](../README.md); for stage-by-stage architecture
-(consumer chains, source layout), see [`CLAUDE.md`](../CLAUDE.md).
+This document is intended to describe the pipeline's design choices, the
+trade-offs and roadblocks that motivated them, and what's explicitly unsupported.
+For what the pipeline does and how to run it, see [`README.md`](../README.md).
 
 Download, Filter, Transform, and Verify are four separate steps, not one
 uniformly-configured pipeline: Download reads its own config
@@ -62,7 +60,7 @@ Only C builtin primitives have `__VERIFIER_nondet_*` equivalents. The full set (
 `double`
 
 Types outside this set (pointers, structs, unions, enums, typedefs to non-builtins) are
-**unsupported for parameter synthesis**. Functions with any unsupported parameter type
+currently **unsupported for parameter synthesis**. Functions with any unsupported parameter type
 cannot be called in the generated harness and have their bodies stripped during filtering.
 
 ### Intraprocedural by Design
@@ -113,8 +111,8 @@ operations on the result stay in bounds. Function pointer returns are left as-is
 The Transform step removes all non-system `#include` directives. Functions declared in
 project-local headers are havocked anyway, so the includes only leave unresolvable
 references. Standard types that were reaching the file transitively through a stripped
-project header are recovered by `AddStdIncludesConsumer` (see `CLAUDE.md`). Files that
-depend on *project* types or macros from a local header will still fail to compile after
+project header are recovered by `AddStdIncludesConsumer`. Files that depend on
+*project* types or macros from a local header will still fail to compile after
 stripping and are caught by the Verify stage's `keepCompilesOnly` compile check.
 
 An unresolved type isn't always AST-visible for `AddStdIncludesConsumer` to recover: a
@@ -233,40 +231,3 @@ flowchart TB
 Verifier nondet naming, suffix→C-type mappings, and the `isVerifierGenerated`
 generated-artifact check live in `src/common/include/VerifierNames.hpp`, shared by all
 stages.
-
-## Downstream Verifier Frontend Compatibility
-
-Benchmarks that clang accepts can still be rejected by an SV-Comp verifier's own C
-frontend. Two classes of this have been characterized on full benchmark runs:
-
-### CPAchecker "parsing failed" (32/1,880 benchmarks)
-
-CPAchecker's Eclipse-CDT frontend is stricter than CBMC's and UAutomizer's about a
-handful of valid-but-unusual C constructs. All 32 failures traced back to constructs in
-the *original* downloaded source (none transform-introduced), in eight categories, the
-largest being non-const string literals initialized into `char *` (~11 files), K&R-style
-function definitions, and function-scope `extern` re-declarations, plus one-offs
-(`_Atomic(...)` typedefs from `<stdatomic.h>`, GCC vector-`mode` attributes, excess
-array initializers, scalar braced initializers). Four of the categories map onto clang
-warning flags (`-Wdeprecated-non-prototype`, `-Wwrite-strings`, `-Wexcess-initializers`,
-`-Wdeprecated-attributes`); the proposed mitigation is to enable those in the Verify
-stage's `checkCompilable` and record hits as a `verifier-frontend-risk` note rather than
-a filtering gate, since the other verifiers tolerate these files. Function-scope
-`extern` has no clang diagnostic and would need a small `VisitVarDecl` AST check.
-Full breakdown: [`cpachecker-parsing-failures.md`](./cpachecker-parsing-failures.md).
-
-### CBMC `_FloatNN` typedef conflict (~66% of CBMC runs)
-
-Preprocessing with `clang -E -P -std=gnu11` inlines glibc's fallback typedefs for the
-C23 extended float types (`typedef float _Float32;` etc., from `bits/floatn-common.h`)
-into the `.i` file. CBMC treats `_Float32`/`_Float64`/… as reserved built-in type names
-and aborts with `ERROR (6)` on the (semantically inert) redeclaration; CPAchecker and
-UAutomizer don't special-case the names and are unaffected. The fix is to strip exactly
-those `typedef <type> _FloatNN;` lines from the `.i` after preprocessing, safe because
-no generated code spells those names; they are pure header noise. A `stripFloatNNTypedefs`
-regex helper doing this was validated on a full run (identical benchmark counts, CBMC
-went from instant errors to real verdicts) but **is not currently in the tree**; its
-home would be `Verifier::preprocess`, now that preprocessing lives in the Verify stage.
-A same-shaped, currently 1-file gap exists for `<stdatomic.h>`'s
-`typedef _Atomic(_Bool) atomic_bool;` lines (a CPAchecker parse failure, category 4
-above). Details: [`cbmc-float-nn-typedef-fix.md`](./cbmc-float-nn-typedef-fix.md).
