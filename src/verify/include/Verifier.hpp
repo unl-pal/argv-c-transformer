@@ -64,12 +64,15 @@ public:
    * non-compiling results and emits the .yml + .i for survivors.
    *
    * @param path Path to the transformed C source file.
-   * @return true if a finalized benchmark (.c + .yml + .i) was produced.
+   * @return true if a finalized benchmark (.c + .yml + .i) was produced. A
+   *         false return leaves nothing behind except under
+   *         keepCompilesOnly=false, which keeps the non-compiling .c on purpose.
    */
   bool verifyFile(std::filesystem::path path);
 
   /**
-   * @brief Removes any benchmark files a crashed or timed-out child left behind.
+   * @brief Removes this file's benchmark outputs. A no-op when benchmarkDir
+   * resolves to the input's own directory.
    *
    * @param path Path to the transformed C source file whose output to clean up.
    */

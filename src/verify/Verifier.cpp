@@ -74,13 +74,13 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   output.close();
   if (!ran) {
     debugLog(1, "[verify] clang tool failed on: " + path.string());
-    std::filesystem::remove(outPath);
+    cleanupPartialOutput(path);
     return false;
   }
 
   if (harnessIsEmpty(outPath)) {
     debugLog(1, "[verify] discarded (harness empty after re-check): " + outPath.string());
-    std::filesystem::remove(outPath);
+    cleanupPartialOutput(path);
     return false;
   }
 
@@ -88,10 +88,12 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   if (!checkCompilable(outPath)) {
     if (configuration.keepCompilesOnly) {
       debugLog(1, "[verify] discarded (fails compile check): " + outPath.string());
-      std::filesystem::remove(outPath);
+      cleanupPartialOutput(path);
       return false;
     }
-    // Kept for inspection, but not a benchmark: no task file, no .i.
+    // Kept for inspection, but not a benchmark: no task file, no .i. Left on
+    // disk deliberately, so no cleanup here - and none from the pool either,
+    // which never touches a child that exited under its own control.
     debugLog(1, "[verify] kept but not a benchmark (fails compile check): " + outPath.string());
     return false;
   }
@@ -99,10 +101,7 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   writeBenchmarkTask(outPath, *counts);
   if (!preprocess(outPath)) {
     debugLog(0, "Preprocessing failed, discarding: " + outPath.string());
-    std::filesystem::path ymlPath = outPath;
-    ymlPath.replace_extension(".yml");
-    std::filesystem::remove(outPath);
-    std::filesystem::remove(ymlPath);
+    cleanupPartialOutput(path);
     return false;
   }
   return true;
@@ -111,6 +110,9 @@ bool Verifier::verifyFile(std::filesystem::path path) {
 void Verifier::cleanupPartialOutput(std::filesystem::path path) {
   std::filesystem::path outPath =
       std::filesystem::path(configuration.benchmarkDir) / path.filename();
+  // transformDir == benchmarkDir makes the "partial output" the input itself.
+  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath))
+    return;
   std::error_code ec;
   std::filesystem::remove(outPath, ec);
   std::filesystem::path ymlPath = outPath;

@@ -87,21 +87,28 @@ bool Transformer::transformFile(std::filesystem::path path) {
   output.close();
   if (!ran) {
     debugLog(1, "[transform] clang tool failed on: " + path.string());
+    // The stream above already created/truncated srcPath.
+    cleanupPartialOutput(path);
     return false;
   }
 
   if (harnessIsEmpty(srcPath)) {
     debugLog(2, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
                     srcPath.string());
-    std::filesystem::remove(srcPath);
+    cleanupPartialOutput(path);
     return false;
   }
   return true;
 }
 
 void Transformer::cleanupPartialOutput(std::filesystem::path path) {
+  std::filesystem::path outPath = flattenedOutputPath(path);
+  // A top-level file flattens to its own name, so filterDir == transformDir
+  // makes the "partial output" the input itself.
+  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath))
+    return;
   std::error_code ec;
-  std::filesystem::remove(flattenedOutputPath(path), ec);
+  std::filesystem::remove(outPath, ec);
 }
 
 void Transformer::collectCFiles(std::filesystem::path path, std::vector<std::filesystem::path> &files) {

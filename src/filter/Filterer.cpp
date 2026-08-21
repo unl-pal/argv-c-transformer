@@ -168,14 +168,21 @@ bool Filterer::filterFile(std::filesystem::path oldPath) {
   output.close();
   if (!ran) {
     debugLog(1, "[filter] clang tool failed on: " + oldPath.string());
+    // The stream above already created/truncated newPath.
+    cleanupPartialOutput(oldPath);
     return false;
   }
   return true;
 }
 
 void Filterer::cleanupPartialOutput(std::filesystem::path oldPath) {
+  std::filesystem::path newPath = outputPath(oldPath);
+  // The same guard filterFile applies before writing: when databaseDir and
+  // filterDir resolve to one directory, the "partial output" is the input.
+  if (std::filesystem::weakly_canonical(oldPath) == std::filesystem::weakly_canonical(newPath))
+    return;
   std::error_code ec;
-  std::filesystem::remove(outputPath(oldPath), ec);
+  std::filesystem::remove(newPath, ec);
 }
 
 int Filterer::run() {

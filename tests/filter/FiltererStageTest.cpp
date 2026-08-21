@@ -185,3 +185,21 @@ TEST_F(FiltererStageTest, StripsFunctionFailingComplexityThreshold) {
   EXPECT_NE(out.find("int plain(int x) ;"), std::string::npos) << out;
   EXPECT_EQ(out.find("return x + 1;"), std::string::npos) << out;
 }
+
+// filterFile refuses to run when the output path resolves to the input, so
+// every file declines - and the decline must not take the source with it.
+TEST_F(FiltererStageTest, DatabaseDirEqualToFilterDirLeavesTheSourceIntact) {
+  std::ofstream cfg(configPath);
+  cfg << "[File Locations]\n"
+      << "databaseDir = " << databaseDir.string() << "\n"
+      << "filterDir = " << databaseDir.string() << "\n"
+      << "[Debug]\n"
+      << "debugLevel = 0\n";
+  cfg.close();
+  writeFile(databaseDir / "keepme.c", "int add(int a, int b) { return a + b; }\n");
+
+  Filterer f(configPath.string());
+  f.run();
+
+  EXPECT_TRUE(fs::exists(databaseDir / "keepme.c"));
+}

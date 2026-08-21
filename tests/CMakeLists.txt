@@ -21,6 +21,7 @@ add_executable(filter_tests
   common/ClangToolUtilsTest.cpp
   common/ConfigParserTest.cpp
   common/IncludeIndexTest.cpp
+  common/WorkerPoolTest.cpp
   filter/CountingVisitorTest.cpp
   filter/FilterFunctionsConsumerTest.cpp
   filter/FiltererStageTest.cpp
