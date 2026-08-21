@@ -94,7 +94,7 @@ public:
    *
    * Runs `clang -fsyntax-only` against the file. No stub definitions are
    * needed for `__VERIFIER_nondet_*`: syntax-only checking never links, and
-   * argv_c_runtime.h (which every benchmark unconditionally `#include`s)
+   * argv_c_harness.h (which every benchmark unconditionally `#include`s)
    * already supplies the extern declarations.
    *
    * @param path Path to the C file to check.
@@ -153,9 +153,9 @@ public:
 
 private:
   /**
-   * @brief Writes the embedded argv_c_runtime.h into benchmarkDir.
+   * @brief Writes the embedded argv_c_harness.h into benchmarkDir.
    */
-  void writeRuntimeHeader();
+  void writeHarnessHeader();
 
   /**
    * Thresholds and feature gates re-applied post-transform - the same

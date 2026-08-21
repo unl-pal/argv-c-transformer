@@ -8,7 +8,7 @@
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
-#include "RuntimeHeaderData.hpp"
+#include "HarnessHeaderData.hpp"
 
 #include <cerrno>
 #include <csignal>
@@ -336,10 +336,10 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
   return true;
 }
 
-void Verifier::writeRuntimeHeader() {
+void Verifier::writeHarnessHeader() {
   std::filesystem::create_directories(configuration.benchmarkDir);
-  std::ofstream out(std::filesystem::path(configuration.benchmarkDir) / kArgvCRuntimeHeaderName);
-  out << kArgvCRuntimeHeaderContents;
+  std::ofstream out(std::filesystem::path(configuration.benchmarkDir) / kArgvCHarnessHeaderName);
+  out << kArgvCHarnessHeaderContents;
 }
 
 int Verifier::run() {
@@ -348,7 +348,7 @@ int Verifier::run() {
     debugLog(0, "Transform directory not found: " + configuration.transformDir);
     return 0;
   }
-  writeRuntimeHeader();
+  writeHarnessHeader();
   int result = verifyAll(path);
   int discarded = _totalProcessed - result;
   std::cout << "\n=== Verify summary ===\n"

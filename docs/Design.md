@@ -101,12 +101,15 @@ which `__VERIFIER_nondet_*` variant to use.
 ### Pointer Returns in Havocking
 
 When havocking a call that returns a pointer, a raw nondet pointer value cannot be used
-(dereferencing an arbitrary address is undefined behavior). Instead, the replacement is
-`__HAVOC_BLOCK()` / `__HAVOC_CSTRING()` - macros (from the shared `argv_c_runtime.h`,
-copied into every benchmark) that declare a stack buffer inline at the call site and
-fill it with nondeterministic content (`__VERIFIER_nondet_memory`); no heap, so no
-`free` obligation. `char *` returns are null-terminated so that string operations on
-the result stay in bounds. Function pointer returns are left as-is.
+(dereferencing an arbitrary address is undefined behavior). Instead, `HavocCallsVisitor`
+hoists a uniquely-named stack buffer declaration to the top of the enclosing function
+(so it outlives the call, unlike a function's own stack storage would) and replaces the
+call with a plain-C expression that fills it and yields it: `__VERIFIER_nondet_memory`
+directly for a block, or `__havoc_cstring_fill` (from the shared `argv_c_harness.h`,
+copied into every benchmark) for a `char *` return, which additionally null-terminates
+the buffer so string operations on the result stay in bounds. No heap, so no `free`
+obligation. No GNU statement-expressions either - standard C only. Function pointer
+returns are left as-is.
 
 ### Include Stripping
 
@@ -205,7 +208,7 @@ flowchart TB
 
     subgraph transformC["Transform consumers (in order)"]
         T1["HavocCallsConsumer<br/>havoc in-file calls"]
-        T2["MainGenConsumer<br/>rename main, synthesize int main(void),<br/>insert argv_c_runtime.h include"]
+        T2["MainGenConsumer<br/>rename main, synthesize int main(void),<br/>insert argv_c_harness.h include"]
         T3["AddStdIncludesConsumer<br/>re-inject needed standard headers"]
         T1 --> T2 --> T3
     end

@@ -39,9 +39,8 @@ IncludeFinder::IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter
                              std::shared_ptr<std::set<std::string>> existingIncludes)
     : _Mgr(SM), _Rewriter(rewriter), _ExistingIncludes(existingIncludes) {}
 
-// assert(cond) always expands with the macro name token first and the
-// closing paren as the invocation's last token, so Range brackets exactly
-// the text to replace
+// assert(cond) expands with the macro name token first and the closing paren
+// last, so Range brackets exactly the text to replace.
 void AssertRewriter::MacroExpands(const clang::Token &MacroNameTok, const clang::MacroDefinition &MD,
                                   clang::SourceRange Range, const clang::MacroArgs *) {
   const clang::IdentifierInfo *id = MacroNameTok.getIdentifierInfo();
@@ -74,11 +73,10 @@ AssertRewriter::AssertRewriter(clang::SourceManager &SM, clang::Rewriter &rewrit
                                const clang::LangOptions &langOpts)
     : _Mgr(SM), _Rewriter(rewriter), _LangOpts(langOpts) {}
 
-TransformAction::TransformAction(llvm::raw_ostream &output)
+TransformAction::TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc)
     : _Output(output), _Rewriter(),
-      _UnresolvedTypeNames(std::make_shared<std::set<std::string>>()) {}
+      _UnresolvedTypeNames(std::make_shared<std::set<std::string>>()), _Havoc(havoc) {}
 
-// unique_ptr can't be copied, so tempVector is built up and moved into MultiplexConsumer.
 std::unique_ptr<clang::ASTConsumer>
 TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef) {
   auto existingIncludes = std::make_shared<std::set<std::string>>();
@@ -89,13 +87,12 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
   pp.addPPCallbacks(
       std::make_unique<AssertRewriter>(compiler.getSourceManager(), _Rewriter, pp.getLangOpts()));
 
-  // Functions HavocCallsConsumer found to have collapsed entirely to no-ops;
-  // MainGenConsumer skips harnessing them
+  // HavocCallsConsumer fills this; MainGenConsumer skips harnessing them.
   auto noOpFunctions = std::make_shared<std::set<std::string>>();
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(std::make_unique<HavocCallsConsumer>(noOpFunctions, _Rewriter));
-  tempVector.emplace_back(std::make_unique<MainGenConsumer>(noOpFunctions, _Rewriter));
+  tempVector.emplace_back(std::make_unique<MainGenConsumer>(noOpFunctions, _Rewriter, _Havoc));
   tempVector.emplace_back(
       std::make_unique<AddStdIncludesConsumer>(existingIncludes, _UnresolvedTypeNames, _Rewriter));
 
@@ -104,20 +101,19 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
 
 bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
-  // Ownership passes to the DiagnosticsEngine; it outlives parsing, which is
-  // all this consumer needs to run for.
+  // Ownership passes to the DiagnosticsEngine, which outlives parsing.
   compiler.getDiagnostics().setClient(new UnknownTypeDiagConsumer(_UnresolvedTypeNames),
                                       /*ShouldOwnClient=*/true);
   return clang::ASTFrontendAction::BeginSourceFileAction(compiler);
 }
 
 void TransformAction::EndSourceFileAction() {
-  // Retrieve the edited buffer and write to the new output location
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }
 
-ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_ostream &output) : _Output(output) {}
+ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_ostream &output, const HavocBounds &havoc)
+    : _Output(output), _Havoc(havoc) {}
 
 std::unique_ptr<clang::FrontendAction> ArgsFrontendFactory::create() {
-  return std::make_unique<TransformAction>(_Output);
+  return std::make_unique<TransformAction>(_Output, _Havoc);
 }

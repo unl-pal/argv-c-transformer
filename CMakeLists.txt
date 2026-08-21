@@ -41,19 +41,19 @@ set(HEADERS_TRANSFORM src/transform/include)
 set(HEADERS_VERIFY src/verify/include)
 set(HEADERS_COMMON src/common/include)
 
-# Embed src/common/argv_c_runtime.h into the binary at build time, so
+# Embed src/common/argv_c_harness.h into the binary at build time, so
 # Verifier can write it into each benchmarkDir without any runtime lookup of
 # an installed resource file. Edit the .h, not the generated header.
 # file(READ) alone creates no build dependency, so CMAKE_CONFIGURE_DEPENDS is
 # required - without it, editing the .h wouldn't trigger a reconfigure and
 # `ninja` would silently keep embedding stale content.
-set(ARGV_C_RUNTIME_HEADER "${CMAKE_SOURCE_DIR}/src/common/argv_c_runtime.h")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ARGV_C_RUNTIME_HEADER}")
-file(READ "${ARGV_C_RUNTIME_HEADER}" ARGV_C_RUNTIME_HEADER_CONTENT)
+set(ARGV_C_HARNESS_HEADER "${CMAKE_SOURCE_DIR}/src/common/argv_c_harness.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ARGV_C_HARNESS_HEADER}")
+file(READ "${ARGV_C_HARNESS_HEADER}" ARGV_C_HARNESS_HEADER_CONTENT)
 set(HEADERS_GENERATED "${CMAKE_BINARY_DIR}/generated")
 configure_file(
-  "${HEADERS_COMMON}/RuntimeHeaderData.hpp.in"
-  "${HEADERS_GENERATED}/RuntimeHeaderData.hpp"
+  "${HEADERS_COMMON}/HarnessHeaderData.hpp.in"
+  "${HEADERS_GENERATED}/HarnessHeaderData.hpp"
   @ONLY
 )
 

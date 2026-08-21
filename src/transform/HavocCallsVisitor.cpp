@@ -20,7 +20,6 @@
 
 namespace {
 
-// Formats a source location as "file:line" for per-decision debug logging.
 std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
   clang::PresumedLoc presumed = mgr.getPresumedLoc(loc);
   if (!presumed.isValid())
@@ -28,8 +27,6 @@ std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
   return std::string(presumed.getFilename()) + ":" + std::to_string(presumed.getLine());
 }
 
-// Returns the VarDecl behind an expression if it's a plain variable
-// reference, else null.
 const clang::VarDecl *referencedVar(const clang::Expr *E) {
   if (!E)
     return nullptr;
@@ -38,15 +35,12 @@ const clang::VarDecl *referencedVar(const clang::Expr *E) {
   return nullptr;
 }
 
-// Conservative purity check used to decide whether an `if` condition can be
-// dropped along with its (now no-op) branches. Anything not explicitly
-// recognized here - calls, overloaded operators, volatile accesses, etc. -
-// is treated as side-effecting, so we only ever prune conditionals we can
-// prove are safe to remove.
+// Conservative: anything not explicitly recognized here is treated as
+// side-effecting, so pruning only ever removes what is provably safe.
 //
-// `mutableVars` lists variables whose mutation is unobservable (a for-loop's
-// init-declared variables, which die with the loop): increments/decrements
-// and assignments targeting them are allowed. Everywhere else it's empty.
+// `mutableVars` holds variables whose mutation is unobservable (a for-loop's
+// init-declared variables, which die with the loop); increments and
+// assignments targeting them pass.
 bool isSideEffectFree(const clang::Expr *E,
                       const std::set<const clang::VarDecl *> &mutableVars = {}) {
   if (!E)
@@ -93,9 +87,6 @@ bool isSideEffectFree(const clang::Expr *E,
   }
 }
 
-// Variables declared in a for-loop's init clause are scoped to the loop and
-// die with it, so mutating them (e.g. the classic `i++` increment) is not an
-// observable side effect.
 std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
   std::set<const clang::VarDecl *> vars;
   if (const auto *declStmt = clang::dyn_cast_or_null<clang::DeclStmt>(init)) {
@@ -107,11 +98,9 @@ std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
   return vars;
 }
 
-// A `for` loop's init clause is a statement, not an expression: either a
-// bare expression-statement or a declaration (`for (int i = 0; ...)`). A
-// loop-scoped declaration with a side-effect-free initializer is itself
-// side-effect-free, since the variable it introduces cannot be observed
-// outside the loop.
+// A `for` init clause is a statement, not an expression: either a bare
+// expression-statement or a declaration. A loop-scoped declaration with a
+// side-effect-free initializer is itself side-effect-free.
 bool isInitSideEffectFree(const clang::Stmt *init) {
   std::set<const clang::VarDecl *> mutableVars = loopLocalVars(init);
   if (!init)
@@ -135,16 +124,26 @@ bool isInitSideEffectFree(const clang::Stmt *init) {
 HavocCallsVisitor::HavocCallsVisitor(clang::ASTContext *C, clang::Rewriter &rewriter)
     : _C(C), _Rewriter(rewriter) {};
 
+bool HavocCallsVisitor::TraverseFunctionDecl(clang::FunctionDecl *D) {
+  clang::SourceLocation savedHoistPoint = _HoistPoint;
+  if (D->isThisDeclarationADefinition()) {
+    if (const auto *body = clang::dyn_cast_or_null<clang::CompoundStmt>(D->getBody()))
+      _HoistPoint = body->getLBracLoc().getLocWithOffset(1);
+  }
+  bool result = RecursiveASTVisitor::TraverseFunctionDecl(D);
+  _HoistPoint = savedHoistPoint;
+  return result;
+}
+
 bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   clang::SourceManager &mgr = _C->getSourceManager();
   clang::SourceLocation loc = E->getExprLoc();
-  // Only rewrite calls spelled out in the file being transformed; a macro
-  // expansion has no rewritable source range of its own
+  // A macro expansion has no rewritable source range of its own.
   if (!mgr.isInMainFile(loc) || loc.isMacroID())
     return true;
 
   if (const clang::FunctionDecl *callee = E->getDirectCallee()) {
-    // Keep nondet calls already injected by the filter step
+    // Nondet calls already injected upstream.
     if (callee->getIdentifier() && callee->getName().starts_with("__VERIFIER_"))
       return true;
     if (!callee->isImplicit() && !mgr.isInMainFile(callee->getLocation()) &&
@@ -157,9 +156,8 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     return true;
 
   if (returnType->isVoidType()) {
-    // A void call yields no value to havoc; drop it (the statement's
-    // semicolon stays behind, leaving an empty statement). Mark it a no-op so
-    // an enclosing if-branch made up only of dropped calls can be pruned too.
+    // Dropping the call leaves the statement's semicolon behind as an empty
+    // statement; marking it no-op lets an enclosing branch prune too.
     debugLog(3, "[transform] " + locString(mgr, loc) + ": dropped void call");
     _Rewriter.ReplaceText(E->getSourceRange(), "");
     _NoOpStmts.insert(E);
@@ -167,19 +165,22 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked call -> __VERIFIER_nondet_" +
                     *suffix + "()");
     _Rewriter.ReplaceText(E->getSourceRange(), "__VERIFIER_nondet_" + *suffix + "()");
-  } else if (returnType->isAnyPointerType() && !returnType->isFunctionPointerType()) {
-    // Pointer returns get a havocked-but-valid stack block, via the
-    // __HAVOC_BLOCK()/__HAVOC_CSTRING() macros argv_c_runtime.h defines.
-    //  Char pointers get the null-terminated variant.
+  } else if (returnType->isAnyPointerType() && !returnType->isFunctionPointerType() &&
+             _HoistPoint.isValid()) {
     bool isCharPtr = returnType->getPointeeType()->isAnyCharacterType();
-    std::string call = isCharPtr ? "__HAVOC_CSTRING()" : "__HAVOC_BLOCK()";
+    std::string name = "__havoc_buf" + std::to_string(_HavocCounter++);
+    std::string elemType = isCharPtr ? "char" : "unsigned char";
+    _Rewriter.InsertTextAfter(_HoistPoint,
+                              "\n  " + elemType + " " + name + "[__HAVOC_BLOCK_MAX];");
+    std::string call = isCharPtr
+                            ? "__havoc_cstring_fill(" + name + ", __HAVOC_BLOCK_MAX)"
+                            : "(__VERIFIER_nondet_memory(" + name + ", __HAVOC_BLOCK_MAX), " +
+                                  name + ")";
     debugLog(3, "[transform] " + locString(mgr, loc) + ": havocked pointer call -> " + call);
-    // Cast back to the call's actual return type so e.g. unsigned char* or a
-    // struct pointer doesn't end up assigned from an incompatible pointer type.
+    // Cast back to the call's return type; the buffer's element type differs.
     _Rewriter.ReplaceText(E->getSourceRange(), "(" + returnType.getAsString() + ")" + call);
   }
-  // Aggregate returns (structs, unions) have no expression-position nondet
-  // equivalent; those calls are left as-is
+  // Aggregate returns have no expression-position nondet equivalent; left as-is.
   return true;
 }
 
@@ -199,15 +200,10 @@ bool HavocCallsVisitor::VisitCompoundStmt(clang::CompoundStmt *S) {
   return true;
 }
 
-// `init`/`inc` are unused (default null, trivially side-effect-free) outside
-// VisitForStmt.
-//
-// For `if`, pruning a dead branch can never change termination. For loops it
-// can: an empty body spinning on a side-effect-free condition
-// (`while (n > 0);`) may hang, and pruning turns that hang into termination -
-// intentional, since such loops are havoc artifacts, not meaningful
-// termination-benchmark content. A condition/increment with a real side
-// effect is kept, since it may be observed after the loop.
+// Pruning a loop can change termination: an empty body spinning on a
+// side-effect-free condition (`while (n > 0);`) may hang, and pruning turns
+// that hang into termination. Intentional - such loops are havoc artifacts,
+// not termination-benchmark content.
 bool HavocCallsVisitor::pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc,
                                     std::initializer_list<const clang::Stmt *> branches,
                                     const clang::Expr *cond, const clang::Stmt *init,

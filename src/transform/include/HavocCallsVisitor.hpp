@@ -17,11 +17,12 @@
  * @brief Havocs every in-file function call so bodies become intraprocedural.
  *
  * Primitive returns -> {@code __VERIFIER_nondet_<type>()}; pointer returns ->
- * {@code __HAVOC_BLOCK()} / {@code __HAVOC_CSTRING()} (macros from
- * argv_c_runtime.h; char pointees get the null-terminated variant); void
- * returns dropped; aggregate returns left as-is. Dropped calls are marked
- * no-op, and enclosing loops/branches that become side-effect-free no-ops
- * are pruned.
+ * a uniquely-named buffer hoisted to the top of the enclosing function plus a
+ * comma-expression at the call site that fills it and yields it (char
+ * pointees go through {@code __havoc_cstring_fill}, from argv_c_harness.h,
+ * for null-termination); void returns dropped; aggregate returns left as-is.
+ * Dropped calls are marked no-op, and enclosing loops/branches that become
+ * side-effect-free no-ops are pruned.
  */
 class HavocCallsVisitor : public clang::RecursiveASTVisitor<HavocCallsVisitor> {
 public:
@@ -37,6 +38,15 @@ public:
    * @return false to stop traversal, true to continue.
    */
   bool VisitCallExpr(clang::CallExpr *E);
+
+  /**
+   * @brief Tracks the enclosing function's hoist point (just inside its
+   * opening brace) for the duration of its body, so a havocked pointer call
+   * anywhere inside can hoist its buffer declaration there.
+   * @param D The function declaration being traversed.
+   * @return true to continue traversal.
+   */
+  bool TraverseFunctionDecl(clang::FunctionDecl *D);
 
   /**
    * @brief Marks an empty or all-no-op compound statement as a no-op.
@@ -109,4 +119,10 @@ private:
   clang::ASTContext *_C;
   clang::Rewriter &_Rewriter;
   std::set<const clang::Stmt *> _NoOpStmts;
+
+  /** @brief Insertion point just inside the current function's opening
+   * brace, or invalid outside any function body. Set by TraverseFunctionDecl. */
+  clang::SourceLocation _HoistPoint;
+  /** @brief Monotonic counter giving every hoisted buffer a unique name within the file. */
+  unsigned _HavocCounter = 0;
 };

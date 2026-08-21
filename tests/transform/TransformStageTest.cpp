@@ -118,7 +118,7 @@ TEST_F(TransformStageTest, ArgcArgvMainProducesTransformedSource) {
 
   std::string src = readFile(transformDir / "withmain.c");
   EXPECT_NE(src.find("original_main"), std::string::npos);
-  EXPECT_NE(src.find("#include \"argv_c_runtime.h\""), std::string::npos);
+  EXPECT_NE(src.find("#include \"argv_c_harness.h\""), std::string::npos);
   EXPECT_NE(src.find("__HAVOC_ARGC"), std::string::npos);
-  EXPECT_NE(src.find("__HAVOC_ARGV"), std::string::npos);
+  EXPECT_NE(src.find("__havoc_argv_fill"), std::string::npos);
 }

@@ -94,7 +94,7 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   EXPECT_TRUE(fs::exists(benchmarkDir / "simple.i"));
   EXPECT_TRUE(fs::exists(benchmarkDir / "simple.yml"));
 
-  // Verifier::writeRuntimeHeader copies the shared runtime header into
+  // Verifier::writeHarnessHeader copies the shared harness header into
   // benchmarkDir once per run, and the #include for it must not survive into
   // the preprocessed .i (preprocessing inlines it - the .i is what a
   // verifier actually reads, so it must not depend on the header file
@@ -102,7 +102,7 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   // header's path behind as an inert __FILE__ string in __assert_fail's
   // arguments - that's fine, it's just a diagnostic string, not a real
   // dependency.
-  EXPECT_TRUE(fs::exists(benchmarkDir / "argv_c_runtime.h"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "argv_c_harness.h"));
   EXPECT_EQ(readFile(benchmarkDir / "simple.i").find("#include"), std::string::npos);
 
   std::string yml = readFile(benchmarkDir / "simple.yml");
@@ -336,11 +336,11 @@ TEST_F(VerifyStageTest, AssertRewriteAddsUnreachCallProperty) {
   ASSERT_TRUE(fs::exists(benchmarkDir / "checked.yml"));
 
   std::string src = readFile(benchmarkDir / "checked.c");
-  // reach_error() is defined unconditionally in argv_c_runtime.h now, not
+  // reach_error() is defined unconditionally in argv_c_harness.h now, not
   // per-file; only the rewritten call site and the runtime include remain
   // in the .c itself.
   EXPECT_NE(src.find("if (!(r >= a)) reach_error();"), std::string::npos);
-  EXPECT_NE(src.find("#include \"argv_c_runtime.h\""), std::string::npos);
+  EXPECT_NE(src.find("#include \"argv_c_harness.h\""), std::string::npos);
 
   std::string yml = readFile(benchmarkDir / "checked.yml");
   EXPECT_NE(yml.find("unreach-call.prp"), std::string::npos);
@@ -361,5 +361,5 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
   ASSERT_TRUE(fs::exists(benchmarkDir / "withmain.c"));
 
   std::string src = readFile(benchmarkDir / "withmain.c");
-  EXPECT_NE(src.find("original_main(argc, __HAVOC_ARGV(argc));"), std::string::npos);
+  EXPECT_NE(src.find("original_main(argc, __havoc_argv_fill(argc));"), std::string::npos);
 }

@@ -24,10 +24,9 @@
 #include <unistd.h>
 
 const int defaultDebugLevel = 0;
-// Mirrors Filterer's own fallback default ("repos" -> "repos-filtered"), so a
-// bare Transformer invocation lines up with a bare Filterer invocation.
+// Must match Filterer's fallback default, so a bare transform run lines up
+// with a bare filter run.
 const std::string defaultFilterDir = "repos-filtered";
-/// Per-file wall-clock budget for the isolated transform child, in seconds.
 const int defaultFileTimeoutSecs = 60;
 
 Transformer::Transformer(std::string configFile, std::string inputPath) : configuration() {
@@ -45,11 +44,8 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
   globalDebugLevel() = configuration.debugLevel;
 }
 
-// Flatten the filtered path into a single filename under transformDir:
 //   filtered-files/antirez/redis/src/endianconv.c
-//   → transformed-files/antirez_redis_src_endianconv.c
-// Strip the filterDir prefix (works for both relative and absolute paths),
-// then join remaining components with underscores.
+//   -> transformed-files/antirez_redis_src_endianconv.c
 std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path path) {
   std::filesystem::path relPath = std::filesystem::relative(path, configuration.filterDir);
   // relative() yields "." when the input path IS the file (single-file mode).
@@ -76,7 +72,6 @@ bool Transformer::transformFile(std::filesystem::path path) {
 
   std::filesystem::path srcPath = flattenedOutputPath(path);
 
-  // Run TransformAction, writing the rewritten source to srcPath
   std::error_code ec;
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
@@ -85,13 +80,12 @@ bool Transformer::transformFile(std::filesystem::path path) {
     return false;
   }
 
-  // The filtered file still carries its original quoted #includes, but only
-  // the source repo has the headers they name, so they resolve against that
-  // tree. An unset databaseDir leaves the index empty and the list empty.
+  // Quoted #includes resolve against the source repo, not the filtered tree,
+  // which mirrors only .c files. An unset databaseDir leaves this empty.
   std::vector<std::string> includeDirs =
       headerIndex ? collectLocalIncludeDirs(path, *headerIndex) : std::vector<std::string>{};
 
-  ArgsFrontendFactory factory(output);
+  ArgsFrontendFactory factory(output, configuration.havoc);
   bool ran = runToolOnFile(path.string(), factory, includeDirs);
   output.close();
   if (!ran) {
@@ -99,7 +93,6 @@ bool Transformer::transformFile(std::filesystem::path path) {
     return false;
   }
 
-  // harness may be empty due to unsupported transforming
   if (harnessIsEmpty(srcPath)) {
     debugLog(2, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
                     srcPath.string());
@@ -109,11 +102,6 @@ bool Transformer::transformFile(std::filesystem::path path) {
   return true;
 }
 
-// Runs transformFile in a forked child so a crash, OOM-kill, assertion, or
-// hang on a single pathological file cannot take down the whole batch. The
-// child does the file I/O (the rewritten .c) and exits with 1 on a produced
-// file, 0 otherwise; the parent enforces a wall-clock timeout and reaps the
-// child, translating its fate into the success count.
 int Transformer::transformFileIsolated(std::filesystem::path path) {
   _totalProcessed++;
   if (globalDebugLevel() == 0)
@@ -125,15 +113,14 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
   }
 
   if (pid == 0) {
-    // Child: do the work and report 1/0 through the exit status. _exit skips
-    // C++ stream flushing, so flush explicitly first
+    // Child: _exit skips C++ stream flushing, so flush explicitly first.
     int produced = transformFile(path) ? 1 : 0;
     std::cout.flush();
     std::cerr.flush();
     _exit(produced);
   }
 
-  // Parent: poll for completion, killing the child if it overruns the budget.
+  // Parent: poll, killing the child if it overruns the budget.
   time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
   int status = 0;
   while (true) {
@@ -160,16 +147,13 @@ int Transformer::transformFileIsolated(std::filesystem::path path) {
 
   if (WIFEXITED(status))
     return WEXITSTATUS(status) == 1 ? 1 : 0;
-  // WIFSIGNALED: segfault, OOM-kill, etc. The child may have left a partial
-  // .c behind; harnessIsEmpty never ran, so clean up.
+  // WIFSIGNALED: harnessIsEmpty never ran, so a partial .c may be left behind.
   debugLog(0, "Transform crashed (signal " + std::to_string(WTERMSIG(status)) + "), skipping: " +
                   path.string());
   cleanupPartialOutput(path);
   return 0;
 }
 
-// Remove any .c a crashed or timed-out child left half-written, so
-// downstream steps never see a partial file.
 void Transformer::cleanupPartialOutput(std::filesystem::path path) {
   std::error_code ec;
   std::filesystem::remove(flattenedOutputPath(path), ec);
@@ -208,17 +192,19 @@ void Transformer::parseConfig(std::string configFile) {
   if (!config.filterDir.empty()) {
     configuration.filterDir = config.filterDir;
   }
-  // The filtered tree holds only .c files, so quoted #includes still have to
-  // resolve against the original repo. argv-c injects this via
-  // setDatabaseDir(); a standalone `transform` run only has the config.
+  // argv-c injects this via setDatabaseDir(); a standalone `transform` run
+  // only has the config.
   if (!config.databaseDir.empty())
     configuration.databaseDir = config.databaseDir;
+  configuration.havoc.argcMin = config.havoc.at("havocArgcMin");
+  configuration.havoc.argcMax = config.havoc.at("havocArgcMax");
+  configuration.havoc.strMax = config.havoc.at("havocStrMax");
+  configuration.havoc.blockMax = config.havoc.at("havocBlockMax");
 }
 
 int Transformer::run() {
   std::filesystem::path path(configuration.filterDir);
-  // Built once over the original repo tree, before any file is transformed;
-  // transformFile runs in a forked child, which inherits the index as-is.
+  // Built before any fork; each child inherits the index as-is.
   headerIndex.emplace(configuration.databaseDir);
 
   int result = transformAll(path);

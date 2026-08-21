@@ -54,6 +54,17 @@ struct PipelineConfig {
       {"fileTimeoutSecs", 60}, {"keepCompilesOnly", 1},
   };
 
+  /**
+   * Bounds the transform stage emits as __HAVOC_* macros into each
+   * transformed file (see HavocBounds.hpp).
+   */
+  std::map<std::string, int> havoc = {
+      {"havocArgcMin", 1},
+      {"havocArgcMax", 4},
+      {"havocStrMax", 16},
+      {"havocBlockMax", 128},
+  };
+
   std::string databaseDir;  ///< Input tree for the filter stage ("" = unset).
   std::string filterDir;    ///< Filter output / transform input ("" = unset).
   std::string transformDir; ///< Transform output / verify input ("" = unset).
@@ -213,6 +224,17 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
                     << std::endl;
           level = std::clamp(level, 0, 3);
         }
+      }
+    } else if (config.havoc.count(key)) {
+      try {
+        int parsed = std::stoi(value);
+        if (parsed < 0) {
+          std::cerr << "Warning: '" << key << "' expects a non-negative count - ignoring value '"
+                    << value << "'" << std::endl;
+        } else {
+          config.havoc.at(key) = parsed;
+        }
+      } catch (...) {
       }
     } else if (key == "databaseDir") {
       config.databaseDir = value;

@@ -64,10 +64,6 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
   // don't count Verifier nondet / havoc-helper / reach_error / asserts
   if (const clang::FunctionDecl *callee = CE->getDirectCallee()) {
     if (callee->getIdentifier() && isVerifierGenerated(callee->getNameAsString())) {
-      // reach_error is defined in the shared runtime header now, not the
-      // main file, so VisitFunctionDecl never sees it; record the call site
-      // instead, so Verifier::selectProperties can still detect it via
-      // counts.count("reach_error") per file.
       if (callee->getName() == "reach_error")
         _allFunctions->try_emplace("reach_error");
       return true;

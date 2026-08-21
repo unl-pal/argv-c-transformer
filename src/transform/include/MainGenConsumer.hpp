@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "HavocBounds.hpp"
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
@@ -15,8 +17,8 @@
 /**
  * @brief ASTConsumer that generates the benchmark entry point.
  *
- * Inserts the {@code #include "argv_c_runtime.h"} prelude every
- * transformed file needs (unconditional - see HandleTranslationUnit)
+ * Inserts the {@code __HAVOC_*} bound macros and the
+ * {@code #include "argv_c_harness.h"} prelude every transformed file needs
  *
  * Any pre-existing {@code main} (including its forward declarations) is renamed
  * to {@code original_main}, then a fresh {@code int main(void)} is appended that
@@ -35,8 +37,11 @@ public:
    * @param noOpFunctions Names of functions {@code HavocCallsConsumer} found
    *        to have an entirely no-op body; these are not harnessed.
    * @param rewriter      Shared rewriter for modifying the source buffer.
+   * @param havoc         Bounds emitted as the __HAVOC_* macro definitions
+   *                      ahead of the argv_c_harness.h #include.
    */
-  MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions, clang::Rewriter &rewriter);
+  MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions, clang::Rewriter &rewriter,
+                  const HavocBounds &havoc = {});
 
   /**
    * @brief Renames an existing {@code main} and appends the generated harness main.
@@ -58,9 +63,8 @@ private:
    * Unlike an arbitrary function, {@code main}'s pointer params have a known
    * contract, so instead of skipping it we synthesize a realistic call: a nondet,
    * bounded {@code argc} from {@code __HAVOC_ARGC()} and a matching havocked
-   * {@code argv} from {@code __HAVOC_ARGV()}, both macros/helpers defined in
-   * argv_c_runtime.h (see HandleTranslationUnit for where the {@code #include}
-   * is inserted).
+   * {@code argv} from {@code __havoc_argv_fill()}, both helpers defined in
+   * argv_c_harness.h.
    *
    * @param mainFn The original {@code main} FunctionDecl (already renamed in
    *               the rewriter output).
@@ -71,4 +75,5 @@ private:
 
   std::shared_ptr<std::set<std::string>> _NoOpFunctions;
   clang::Rewriter &_Rewriter;
+  HavocBounds _Havoc;
 };
