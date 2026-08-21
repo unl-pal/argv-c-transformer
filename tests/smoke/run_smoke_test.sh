@@ -79,8 +79,19 @@ fi
 
 echo
 echo "--- Assertion: no quoted #include survives in any produced benchmark ---"
-if ls "$WORK/bench-default"/*.c >/dev/null 2>&1 && grep -lE '^[[:space:]]*#include[[:space:]]*"' "$WORK/bench-default"/*.c; then
-  echo "FAIL: quoted include(s) leaked into benchmark output (files listed above)"
+# argv_c_harness.h is a deliberate exception: MainGenConsumer quote-includes it
+# unconditionally, and Verifier writes one real copy alongside the benchmarks
+# (see Verifier::writeHarnessHeader) for every generated harness to share.
+leaked=""
+if ls "$WORK/bench-default"/*.c >/dev/null 2>&1; then
+  for f in "$WORK/bench-default"/*.c; do
+    if grep -E '^[[:space:]]*#include[[:space:]]*"' "$f" | grep -qv 'argv_c_harness\.h'; then
+      leaked="$leaked $f"
+    fi
+  done
+fi
+if [ -n "$leaked" ]; then
+  echo "FAIL: quoted include(s) leaked into benchmark output:$leaked"
   fail=1
 else
   echo "OK"
