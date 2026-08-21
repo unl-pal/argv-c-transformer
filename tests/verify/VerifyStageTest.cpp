@@ -94,6 +94,17 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   EXPECT_TRUE(fs::exists(benchmarkDir / "simple.i"));
   EXPECT_TRUE(fs::exists(benchmarkDir / "simple.yml"));
 
+  // Verifier::writeHarnessHeader copies the shared harness header into
+  // benchmarkDir once per run, and the #include for it must not survive into
+  // the preprocessed .i (preprocessing inlines it - the .i is what a
+  // verifier actually reads, so it must not depend on the header file
+  // existing on disk). reach_error()'s unconditional assert(0) does leave the
+  // header's path behind as an inert __FILE__ string in __assert_fail's
+  // arguments - that's fine, it's just a diagnostic string, not a real
+  // dependency.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "argv_c_harness.h"));
+  EXPECT_EQ(readFile(benchmarkDir / "simple.i").find("#include"), std::string::npos);
+
   std::string yml = readFile(benchmarkDir / "simple.yml");
   EXPECT_NE(yml.find("input_files: 'simple.i'"), std::string::npos);
   EXPECT_NE(yml.find("format_version: '2.0'"), std::string::npos);
@@ -325,13 +336,11 @@ TEST_F(VerifyStageTest, AssertRewriteAddsUnreachCallProperty) {
   ASSERT_TRUE(fs::exists(benchmarkDir / "checked.yml"));
 
   std::string src = readFile(benchmarkDir / "checked.c");
-  EXPECT_NE(src.find("void reach_error(void) { assert(0); }"), std::string::npos);
+  // reach_error() is defined unconditionally in argv_c_harness.h now, not
+  // per-file; only the rewritten call site and the runtime include remain
+  // in the .c itself.
   EXPECT_NE(src.find("if (!(r >= a)) reach_error();"), std::string::npos);
-  // AddVerifiersConsumer unconditionally adds its own #include <assert.h>
-  // alongside the reach_error definition, so this may duplicate the one
-  // already in the source; that's harmless since assert.h is deliberately
-  // unguarded against re-inclusion, so only presence is checked here.
-  EXPECT_NE(src.find("#include <assert.h>"), std::string::npos);
+  EXPECT_NE(src.find("#include \"argv_c_harness.h\""), std::string::npos);
 
   std::string yml = readFile(benchmarkDir / "checked.yml");
   EXPECT_NE(yml.find("unreach-call.prp"), std::string::npos);
@@ -352,6 +361,5 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
   ASSERT_TRUE(fs::exists(benchmarkDir / "withmain.c"));
 
   std::string src = readFile(benchmarkDir / "withmain.c");
-  EXPECT_NE(src.find("original_main(argc, argv);"), std::string::npos);
-  EXPECT_NE(src.find("__havoc_cstring"), std::string::npos);
+  EXPECT_NE(src.find("original_main(argc, __havoc_argv_fill(argc));"), std::string::npos);
 }

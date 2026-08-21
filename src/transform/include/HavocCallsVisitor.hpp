@@ -11,27 +11,26 @@
 #include <clang/AST/Stmt.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <initializer_list>
-#include <memory>
 #include <set>
-#include <string>
 
 /**
  * @brief Havocs every in-file function call so bodies become intraprocedural.
  *
  * Primitive returns -> {@code __VERIFIER_nondet_<type>()}; pointer returns ->
- * {@code __havoc_block(128)} / {@code __havoc_cstring(128)}; void returns
- * dropped; aggregate returns left as-is. Dropped calls are marked no-op, and
- * enclosing loops/branches that become side-effect-free no-ops are pruned.
+ * a uniquely-named buffer hoisted to the top of the enclosing function plus a
+ * comma-expression at the call site that fills it and yields it (char
+ * pointees go through {@code __havoc_cstring_fill}, from argv_c_harness.h,
+ * for null-termination); void returns dropped; aggregate returns left as-is.
+ * Dropped calls are marked no-op, and enclosing loops/branches that become
+ * side-effect-free no-ops are pruned.
  */
 class HavocCallsVisitor : public clang::RecursiveASTVisitor<HavocCallsVisitor> {
 public:
   /**
-   * @param C              AST context, used for return-type resolution and source manager access.
-   * @param neededSuffixes Output set; verifier suffixes and havoc helper markers are inserted here.
-   * @param rewriter       Shared rewriter for modifying the source buffer.
+   * @param C        AST context, used for return-type resolution and source manager access.
+   * @param rewriter Shared rewriter for modifying the source buffer.
    */
-  HavocCallsVisitor(clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededSuffixes,
-                    clang::Rewriter &rewriter);
+  HavocCallsVisitor(clang::ASTContext *C, clang::Rewriter &rewriter);
 
   /**
    * @brief Havocs a call if it should be (in-file, non-library, non-verifier, non-macro).
@@ -39,6 +38,15 @@ public:
    * @return false to stop traversal, true to continue.
    */
   bool VisitCallExpr(clang::CallExpr *E);
+
+  /**
+   * @brief Tracks the enclosing function's hoist point (just inside its
+   * opening brace) for the duration of its body, so a havocked pointer call
+   * anywhere inside can hoist its buffer declaration there.
+   * @param D The function declaration being traversed.
+   * @return true to continue traversal.
+   */
+  bool TraverseFunctionDecl(clang::FunctionDecl *D);
 
   /**
    * @brief Marks an empty or all-no-op compound statement as a no-op.
@@ -109,7 +117,12 @@ private:
                    const clang::Stmt *init = nullptr, const clang::Expr *inc = nullptr);
 
   clang::ASTContext *_C;
-  std::shared_ptr<std::set<std::string>> _NeededSuffixes;
   clang::Rewriter &_Rewriter;
   std::set<const clang::Stmt *> _NoOpStmts;
+
+  /** @brief Insertion point just inside the current function's opening
+   * brace, or invalid outside any function body. Set by TraverseFunctionDecl. */
+  clang::SourceLocation _HoistPoint;
+  /** @brief Monotonic counter giving every hoisted buffer a unique name within the file. */
+  unsigned _HavocCounter = 0;
 };

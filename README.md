@@ -201,8 +201,8 @@ Two suites run:
 - **`transform_tests`** - golden-file tests for the transform stage
   (`tests/transform/`). Each case is a pair of files in
   `tests/transform/cases/`: `<name>.input.c` is fed through the full transform
-  pipeline (include stripping → call havocking → main generation → verifier
-  extern injection) and the output must match `<name>.expected.c` exactly.
+  pipeline (include stripping → call havocking → main generation → runtime
+  header include) and the output must match `<name>.expected.c` exactly.
 
 To add a transform test, drop a new `<name>.input.c` into the cases directory
 (support headers can sit alongside; quoted includes resolve there) and generate

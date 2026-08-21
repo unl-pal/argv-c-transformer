@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "HavocBounds.hpp"
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/Basic/LangOptions.h>
 #include <clang/Basic/SourceLocation.h>
@@ -23,8 +25,8 @@
 /**
  * @brief ASTFrontendAction that drives the transform consumer pipeline.
  *
- * Owns the Rewriter shared by all consumers, registers IncludeFinder on the
- * preprocessor, and writes the rewritten source to output once all consumers
+ * Owns the Rewriter shared by all consumers, registers the preprocessor
+ * callbacks, and writes the rewritten source to output once all consumers
  * have run.
  */
 class TransformAction : public clang::ASTFrontendAction {
@@ -34,16 +36,17 @@ public:
    *
    * @param output Stream the transformed source is written to (a file in
    *               production, a string stream in tests).
+   * @param havoc  Bounds MainGenConsumer emits as __HAVOC_* macros; defaults
+   *               match a bare (config-free) transform run.
    */
-  TransformAction(llvm::raw_ostream &output);
+  TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc = {});
 
   /**
    * @brief Builds the multiplexed consumer chain for the transform pipeline.
    *
-   * Registers IncludeFinder on the preprocessor and returns a
-   * MultiplexConsumer running HavocCallsConsumer, MainGenConsumer,
-   * AddVerifiersConsumer, and AddStdIncludesConsumer (in that order) over the
-   * shared Rewriter.
+   * Registers IncludeFinder and AssertRewriter on the preprocessor, and
+   * returns a MultiplexConsumer running HavocCallsConsumer, MainGenConsumer,
+   * and AddStdIncludesConsumer (in that order) over the shared Rewriter.
    *
    * @param Compiler The compiler instance for this translation unit.
    * @param Filename Name of the file being processed.
@@ -71,6 +74,7 @@ private:
   llvm::raw_ostream &_Output;
   clang::Rewriter _Rewriter;
   std::shared_ptr<std::set<std::string>> _UnresolvedTypeNames;
+  HavocBounds _Havoc;
 };
 
 /**
@@ -87,20 +91,20 @@ public:
    * @brief Constructs the factory, binding the output stream.
    *
    * @param output Reference to the output stream for the transformed file.
+   * @param havoc  Bounds forwarded to each TransformAction this factory creates.
    */
-  ArgsFrontendFactory(llvm::raw_ostream &output);
+  ArgsFrontendFactory(llvm::raw_ostream &output, const HavocBounds &havoc = {});
 
   /**
    * @brief Called by {@code ClangTool} once per source file to create the action.
    *
-   * Returns a new {@code TransformAction} loaded with the output stream.
-   *
-   * @return Owning pointer to the created action.
+   * @return Owning pointer to the created {@code TransformAction}.
    */
   std::unique_ptr<clang::FrontendAction> create() override;
 
 private:
   llvm::raw_ostream &_Output;
+  HavocBounds _Havoc;
 };
 
 /**
@@ -110,8 +114,7 @@ private:
  * includes are removed from the output, since every function they declare is
  * havocked by HavocCallsConsumer anyway. A file that uses types or macros
  * from a local header will no longer compile after stripping; those outputs
- * are weeded out by keepCompilesOnly (header type/macro handling is a future
- * feature).
+ * are weeded out by keepCompilesOnly.
  */
 class IncludeFinder : public clang::PPCallbacks {
 public:
@@ -149,23 +152,23 @@ private:
 /**
  * @brief PPCallbacks hook that rewrites {@code assert(cond)} invocations.
  *
- * SV-Comp's unreach-call property is checked against calls to a
- * function literally named {@code reach_error}, so `assert(cond)` becomes
- * {@code if (!(cond)) reach_error()}
+ * SV-Comp's unreach-call property is checked against calls to a function
+ * literally named {@code reach_error}, so `assert(cond)` becomes
+ * {@code if (!(cond)) reach_error()}. {@code reach_error} is defined
+ * unconditionally in argv_c_harness.h, and CountingVisitor::VisitCallExpr
+ * detects the rewritten call site directly for Verifier's property selection,
+ * so nothing has to be threaded out of this callback.
  */
 class AssertRewriter : public clang::PPCallbacks {
 public:
   /**
    * @brief Constructs the callback, binding the source manager and rewriter.
    *
-   * @param SM             Source manager, used to check whether the invocation is in the main file.
-   * @param rewriter       Shared rewriter the invocation is rewritten through.
-   * @param neededSuffixes Output set; "__reach_error" is inserted when a rewrite happens, so
-   *                       AddVerifiersConsumer knows to emit the reach_error() definition.
-   * @param langOpts       Language options, needed to re-lex the invocation's source text.
+   * @param SM       Source manager, used to check whether the invocation is in the main file.
+   * @param rewriter Shared rewriter the invocation is rewritten through.
+   * @param langOpts Language options, needed to re-lex the invocation's source text.
    */
   AssertRewriter(clang::SourceManager &SM, clang::Rewriter &rewriter,
-                 std::shared_ptr<std::set<std::string>> neededSuffixes,
                  const clang::LangOptions &langOpts);
 
   /**
@@ -184,7 +187,6 @@ public:
 private:
   clang::SourceManager &_Mgr;
   clang::Rewriter &_Rewriter;
-  std::shared_ptr<std::set<std::string>> _NeededSuffixes;
   const clang::LangOptions &_LangOpts;
 };
 

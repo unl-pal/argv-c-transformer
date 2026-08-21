@@ -92,8 +92,10 @@ public:
   /**
    * @brief Checks whether a verified file compiles without errors.
    *
-   * Runs `clang -fsyntax-only` against the file alongside a dummy
-   * `verifier.c` (to resolve extern `__VERIFIER_nondet_*` declarations).
+   * Runs `clang -fsyntax-only` against the file. No stub definitions are
+   * needed for `__VERIFIER_nondet_*`: syntax-only checking never links, and
+   * argv_c_harness.h (which every benchmark unconditionally `#include`s)
+   * already supplies the extern declarations.
    *
    * @param path Path to the C file to check.
    * @return true if the file compiles with no errors.
@@ -150,6 +152,11 @@ public:
   bool preprocess(std::filesystem::path cPath);
 
 private:
+  /**
+   * @brief Writes the embedded argv_c_harness.h into benchmarkDir.
+   */
+  void writeHarnessHeader();
+
   /**
    * Thresholds and feature gates re-applied post-transform - the same
    * PipelineConfig structure the filter stage applies pre-transform.

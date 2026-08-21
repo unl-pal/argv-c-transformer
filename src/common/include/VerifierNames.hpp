@@ -33,28 +33,8 @@ inline const std::unordered_map<clang::BuiltinType::Kind, std::string> kVerifier
 };
 
 /**
- * @brief Maps verifier suffix to the C type spelling used in source-level
- * declarations (e.g. "uint" -> "unsigned int").
- */
-inline const std::unordered_map<std::string, std::string> kVerifierCTypes = {
-    {"bool", "_Bool"},
-    {"char", "char"},
-    {"uchar", "unsigned char"},
-    {"short", "short"},
-    {"ushort", "unsigned short"},
-    {"int", "int"},
-    {"uint", "unsigned int"},
-    {"long", "long"},
-    {"ulong", "unsigned long"},
-    {"longlong", "long long"},
-    {"ulonglong", "unsigned long long"},
-    {"float", "float"},
-    {"double", "double"},
-};
-
-/**
  * @brief True for identifiers the pipeline itself injects (verifier nondet
- * externs/calls, the __havoc_* helpers, and reach_error).
+ * externs/calls, the __havoc_ runtime helpers, and reach_error).
  *
  * The verify stage uses this to exempt generated artifacts from the metric
  * re-check: they are scaffolding, not program logic.
@@ -62,19 +42,6 @@ inline const std::unordered_map<std::string, std::string> kVerifierCTypes = {
 inline bool isVerifierGenerated(const std::string &name) {
   return name.rfind("__VERIFIER_", 0) == 0 || name.rfind("__havoc_", 0) == 0 ||
          name == "reach_error";
-}
-
-/**
- * @brief Returns the C type spelling for a verifier suffix.
- *
- * @param suffix Verifier suffix (e.g. "uint").
- * @return The C type spelling (e.g. "unsigned int"), or std::nullopt if unknown.
- */
-inline std::optional<std::string> cTypeForSuffix(const std::string &suffix) {
-  auto it = kVerifierCTypes.find(suffix);
-  if (it == kVerifierCTypes.end())
-    return std::nullopt;
-  return it->second;
 }
 
 /**

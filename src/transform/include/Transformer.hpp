@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "HavocBounds.hpp"
 #include "IncludeIndex.hpp"
 
 #include <filesystem>
@@ -26,6 +27,8 @@ struct transformConfigs {
    * quoted #includes to -I paths. Empty means no local-header resolution.
    */
   std::string databaseDir;
+  /** Bounds MainGenConsumer emits as __HAVOC_* macros into each transformed file. */
+  HavocBounds havoc;
 };
 
 /**

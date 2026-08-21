@@ -5,6 +5,7 @@
 #include "MainGenConsumer.hpp"
 
 #include "DebugLog.hpp"
+#include "HarnessHeaderData.hpp"
 #include "VerifierNames.hpp"
 
 #include <clang/AST/Decl.h>
@@ -15,18 +16,27 @@
 #include <string>
 #include <vector>
 
-MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
-                                 std::shared_ptr<std::set<std::string>> noOpFunctions,
-                                 clang::Rewriter &rewriter)
-    : _NeededSuffixes(neededSuffixes), _NoOpFunctions(noOpFunctions), _Rewriter(rewriter) {}
+MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
+                                 clang::Rewriter &rewriter, const HavocBounds &havoc)
+    : _NoOpFunctions(noOpFunctions), _Rewriter(rewriter), _Havoc(havoc) {}
 
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &mgr = Context.getSourceManager();
 
-  // Collect every function defined in this file, in source order, renaming
-  // any existing main along the way so the generated main below is the sole
-  // entry point. The renamed original_main is then harnessed like any other
-  // function
+  // The generated harness always emits nondet calls, so the header is included
+  // unconditionally. Its __HAVOC_* bounds are emitted here rather than in the
+  // header itself: the header is one file shared by every benchmark and is
+  // rewritten each run, so per-benchmark bounds must live in the .c to survive
+  // hand-editing.
+  std::string prelude = "#define __HAVOC_ARGC_MIN " + std::to_string(_Havoc.argcMin) + "\n" +
+                        "#define __HAVOC_ARGC_MAX " + std::to_string(_Havoc.argcMax) + "\n" +
+                        "#define __HAVOC_STR_MAX " + std::to_string(_Havoc.strMax) + "\n" +
+                        "#define __HAVOC_BLOCK_MAX " + std::to_string(_Havoc.blockMax) + "\n" +
+                        "#include \"" + std::string(kArgvCHarnessHeaderName) + "\"\n";
+  _Rewriter.InsertTextBefore(mgr.translateLineCol(mgr.getMainFileID(), 1, 1), prelude + "\n");
+
+  // Rename any existing main so the generated one is the sole entry point;
+  // original_main is then harnessed like any other function.
   std::vector<const clang::FunctionDecl *> defined;
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
     const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
@@ -44,9 +54,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       debugLog(2, "Info: " + func->getNameAsString() + " body collapsed to no-ops; not harnessed");
       continue;
     }
-    // main has a known pointer contract (argc/argv), so synthesize a real
-    // call instead of skipping it like an arbitrary unsupported-param function
-    // (note no-op supercedes this)
+    // argc/argv is a known pointer contract, so synthesize a real call rather
+    // than skipping it as an unsupported-param function.
     if (func->isMain()) {
       harness += genMainHarness(func);
       continue;
@@ -57,7 +66,6 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     }
     std::string args;
-    std::set<std::string> argSuffixes;
     bool supported = true;
     for (const clang::ParmVarDecl *parm : func->parameters()) {
       std::optional<std::string> suffix = verifierSuffixForType(parm->getOriginalType());
@@ -68,18 +76,13 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       if (!args.empty())
         args += ", ";
       args += "__VERIFIER_nondet_" + *suffix + "()";
-      argSuffixes.insert(*suffix);
     }
-    // A parameter without a nondet equivalent (pointer, struct, ...): skip
-    // this function but keep harnessing the rest.
     if (!supported) {
       debugLog(2, "Warning: only primitive symbolics supported; " + func->getNameAsString() +
                       " not harnessed (filter's param check did not strip it)");
       continue;
     }
-    std::string name = func->isMain() ? "original_main" : func->getNameAsString();
-    harness += "  " + name + "(" + args + ");\n";
-    _NeededSuffixes->insert(argSuffixes.begin(), argSuffixes.end());
+    harness += "  " + func->getNameAsString() + "(" + args + ");\n";
   }
 
   std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
@@ -89,26 +92,13 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   unsigned numParams = mainFn->getNumParams();
 
-  // int main(void): no args to synthesize, just call it.
   if (numParams == 0)
     return "  original_main();\n";
 
-  // int main(int argc, char **argv[, char **envp]): build a nondet argc and
-  // an argv of havocked C strings, then call original_main(argc, argv).
-  // The bounds are __HAVOC_* macros emitted by AddVerifiersConsumer, so the
-  // generated benchmark stays retunable by hand.
-
+  // int main(int argc, char **argv[, char **envp]): argc and a matching argv
+  // are synthesized entirely by the argv_c_harness.h helpers.
   std::string body;
-  body += "  int argc = __VERIFIER_nondet_int();\n";
-  body += "  if (argc < __HAVOC_ARGC_MIN || argc > __HAVOC_ARGC_MAX) abort();\n";
-  body += "  char *argv[__HAVOC_ARGC_MAX + 1];\n";
-  body += "  for (int i = 0; i < argc; i++)\n";
-  body += "    argv[i] = __havoc_cstring(__HAVOC_STR_MAX);\n";
-  body += "  argv[argc] = 0;\n";
-  body += "  original_main(argc, argv);\n";
-
-  _NeededSuffixes->insert("int");
-  _NeededSuffixes->insert("__havoc_cstring");
-  _NeededSuffixes->insert("__havoc_argv");
+  body += "  int argc = __HAVOC_ARGC();\n";
+  body += "  original_main(argc, __havoc_argv_fill(argc));\n";
   return body;
 }
