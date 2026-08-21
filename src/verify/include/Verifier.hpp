@@ -6,6 +6,7 @@
 
 #include "ConfigParser.hpp"
 #include "CountingVisitor.hpp"
+#include "WorkerPool.hpp"
 
 #include <filesystem>
 #include <string>
@@ -27,7 +28,7 @@ struct verifyConfigs {
   std::string transformDir; ///< Input directory of transformed C files to verify.
   std::string benchmarkDir; ///< Output directory for finalized benchmarks.
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated verify child.
-  int nproc;                ///< Worker pool size (0 = default to hardware concurrency).
+  int nproc;                ///< Worker pool size (0 = auto, three quarters of detected cores).
 };
 
 /**
@@ -77,14 +78,13 @@ public:
   /**
    * @brief Recursively walks a directory tree, verifying every .c file found.
    *
-   * Collects the matching files, then runs them through a worker pool sized
-   * by {@code configuration.nproc} (each file still isolated in its own
-   * forked child), instead of the old one-file-at-a-time fork+wait.
+   * Collects the matching files, then runs them through a worker pool sized by
+   * {@code configuration.nproc}, each file isolated in its own forked child.
    *
    * @param path Root path to search (file or directory).
-   * @return Total count of finalized benchmarks produced.
+   * @return Per-outcome counts across the tree.
    */
-  int verifyAll(std::filesystem::path path);
+  WorkerPoolResult verifyAll(std::filesystem::path path);
 
   /**
    * @brief Recursively collects every .c file under path into `files`.

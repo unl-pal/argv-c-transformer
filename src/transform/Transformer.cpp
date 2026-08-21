@@ -99,8 +99,6 @@ bool Transformer::transformFile(std::filesystem::path path) {
   return true;
 }
 
-// Remove any .c a crashed or timed-out child left half-written, so
-// downstream steps never see a partial file.
 void Transformer::cleanupPartialOutput(std::filesystem::path path) {
   std::error_code ec;
   std::filesystem::remove(flattenedOutputPath(path), ec);
@@ -129,7 +127,7 @@ void Transformer::collectCFiles(std::filesystem::path path, std::vector<std::fil
   debugLog(3, "[transform] ignored: " + path.filename().string());
 }
 
-int Transformer::transformAll(std::filesystem::path path) {
+WorkerPoolResult Transformer::transformAll(std::filesystem::path path) {
   std::vector<std::filesystem::path> files;
   collectCFiles(path, files);
   _totalProcessed = static_cast<int>(files.size());
@@ -144,11 +142,12 @@ int Transformer::transformAll(std::filesystem::path path) {
     bool produced = transformFile(p);
     std::cout.flush();
     std::cerr.flush();
-    _exit(produced ? 0 : 1);
+    _exit(produced ? kProducedExit : kDeclinedExit);
   };
   work.runInProcess = [this](const std::filesystem::path &p) { return transformFile(p); };
   work.cleanupPartial = [this](const std::filesystem::path &p) { cleanupPartialOutput(p); };
   work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[transform] " + msg); };
+  work.label = "transform";
 
   return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work);
 }
@@ -179,11 +178,11 @@ int Transformer::run() {
   // Built before any fork; each child inherits the index as-is.
   headerIndex.emplace(configuration.databaseDir);
 
-  int result = transformAll(path);
-  int discarded = _totalProcessed - result;
+  WorkerPoolResult result = transformAll(path);
   std::cout << "\n=== Transform summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"
-            << "  Files transformed:      " << result << "\n"
-            << "  Discarded/failed:       " << discarded << std::endl;
-  return result;
+            << "  Files transformed:      " << result.produced << "\n"
+            << "  Declined (no output):   " << result.declined << "\n"
+            << "  Failed:                 " << result.failed << std::endl;
+  return result.produced;
 }

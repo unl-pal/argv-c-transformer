@@ -24,14 +24,13 @@ void UnknownTypeDiagConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level,
   if (!isUnknownTypename && !isUndeclaredVarUse)
     return;
 
-  // Clang does not guarantee a diagnostic ID always carries its name
-  // argument with the same encoding: err_undeclared_var_use_suggest (and
-  // presumably its siblings) has been observed emitting the same identifier
-  // as an IdentifierInfo* in one call and a DeclarationName in another,
-  // for the same diagnostic ID, in the same TU. Handle both. Recording
-  // nothing for a genuinely unrecognized encoding is safe: at worst
-  // AddStdIncludesConsumer misses one header, which checkCompilable()
-  // catches downstream -- never worth aborting the whole file over.
+  // Clang does not guarantee a diagnostic ID always carries its name argument
+  // with the same encoding: err_undeclared_var_use_suggest emits the same
+  // identifier as an IdentifierInfo* in one call and a DeclarationName in
+  // another, for the same diagnostic ID within one TU. Handle both. Recording
+  // nothing for an unrecognized encoding is safe: at worst
+  // AddStdIncludesConsumer misses one header, which checkCompilable() catches
+  // downstream -- never worth aborting the whole file over.
   switch (Info.getArgKind(0)) {
   case clang::DiagnosticsEngine::ak_identifierinfo:
     _UnresolvedTypeNames->insert(Info.getArgIdentifier(0)->getName().str());

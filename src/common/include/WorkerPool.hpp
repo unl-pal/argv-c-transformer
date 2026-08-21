@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "DebugLog.hpp"
+
 #include <algorithm>
 #include <cerrno>
 #include <csignal>
@@ -22,36 +24,56 @@
 #include <vector>
 
 /**
- * @brief Resolves the {@code nproc} config setting to an actual worker
- * count: the configured value if positive, else the detected hardware
- * concurrency (floored at 1 if detection fails).
+ * @brief Resolves the {@code nproc} config setting to an actual worker count:
+ * the configured value if positive, else three quarters of the detected cores
+ * (floored at 1).
+ *
+ * Auto-sizing leaves headroom deliberately: each worker holds a full Clang AST,
+ * and each file's {@code timeoutSecs} budget is wall-clock, so contention for
+ * cores pushes slow files past it and makes benchmark yield machine-dependent.
  */
 inline int resolveWorkerCount(int configuredNproc) {
   if (configuredNproc > 0)
     return configuredNproc;
   unsigned hw = std::thread::hardware_concurrency();
-  return static_cast<int>(std::max(1u, hw));
+  if (hw == 0)
+    return 1;
+  return static_cast<int>(std::max(1u, hw * 3 / 4));
 }
+
+/** Child exit code for "produced an output file". */
+inline constexpr int kProducedExit = 0;
+
+/**
+ * Child exit code for "ran fine, produced nothing" - a declined file, not an
+ * error. Deliberately not 1: any other code counts as a failure, so a stray
+ * `exit(1)` inside Clang/LLVM is reported rather than read as a decline.
+ */
+inline constexpr int kDeclinedExit = 2;
+
+/** Per-outcome file counts for one {@code runWorkerPool} call. */
+struct WorkerPoolResult {
+  int produced = 0; ///< Children that exited {@code kProducedExit}.
+  int declined = 0; ///< Children that exited {@code kDeclinedExit}.
+  int failed = 0;   ///< Crashed, timed out, or exited any other code.
+};
 
 /**
  * @brief The per-file work a worker pool isolates, shared by every caller of
  * {@code runWorkerPool}.
- *
- * Child exits with its result, has an in-process fallback
- * for when fork() itself fails, and cleanup for any child that got killed.
  */
 struct IsolatedWork {
   /**
-   * Runs in the forked child. Must not return: do the work, flush stdout
-   * and stderr (`_exit` skips C++ stream flushing), then `_exit(0)` on
-   * success or any nonzero code otherwise. Standard Unix convention,
-   * chosen deliberately: it means a stray `exit()`/`std::exit()` call deep
-   * in Clang/LLVM internals (or anywhere else in the call stack) defaults
-   * to being read as failure rather than silently counted as success
+   * Runs in the forked child. Must not return: do the work, flush stdout and
+   * stderr (`_exit` skips C++ stream flushing), then `_exit(kProducedExit)`
+   * or `_exit(kDeclinedExit)`.
    */
   std::function<void(const std::filesystem::path &)> child;
 
-  /** Fallback run synchronously in the parent when fork() itself fails. */
+  /**
+   * Fallback run synchronously in the parent when fork() itself fails.
+   * Returning false counts as a decline, not a failure.
+   */
   std::function<bool(const std::filesystem::path &)> runInProcess;
 
   /** Removes any output a killed/crashed/timed-out child left behind. */
@@ -59,22 +81,24 @@ struct IsolatedWork {
 
   /** (debugLevel, message) - routed to each stage's own debugLog. */
   std::function<void(int, const std::string &)> debugLog;
+
+  /** Stage name used to tag the pool's progress line, e.g. "filter". */
+  std::string label;
 };
 
+/** One forked child the pool is currently waiting on. */
 struct WorkerPoolJob {
   pid_t pid;
   std::filesystem::path file;
-  time_t deadline;
-  std::filesystem::path logPath;
+  time_t deadline;               ///< Absolute wall-clock time after which the child is killed.
+  std::filesystem::path logPath; ///< Private file this child's fd 2 is redirected to.
 };
 
 /**
- * @brief Prints a reaped child's buffered stderr (from debugLog calls made
- * inside the child) as one block, tagged with its file, then deletes the log
- * file. A no-op if the child wrote nothing (e.g. debugLevel 0).
+ * @brief Prints a reaped child's buffered stderr as one block tagged with its
+ * file, then deletes the log. A no-op if the child wrote nothing.
  *
- * Each child has its own fd 2 redirected to a private file (see the fork
- * site below), and only the parent prints the finished block.
+ * Only the parent ever prints, so concurrent children's logs never interleave.
  */
 inline void flushChildLog(const WorkerPoolJob &job) {
   std::ifstream in(job.logPath);
@@ -99,10 +123,10 @@ inline void flushChildLog(const WorkerPoolJob &job) {
  * Each file gets its own wall-clock budget of {@code timeoutSecs} starting
  * from when its child is forked.
  *
- * @return count of files whose child exited reporting success (status 0).
+ * @return per-outcome counts; see {@code WorkerPoolResult}.
  */
-inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int workers,
-                          int timeoutSecs, const IsolatedWork &work) {
+inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &files, int workers,
+                                      int timeoutSecs, const IsolatedWork &work) {
   std::error_code ec;
   std::filesystem::path logDir =
       std::filesystem::temp_directory_path(ec) / ("argv-c-pool-" + std::to_string(getpid()));
@@ -112,7 +136,18 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
 
   std::vector<WorkerPoolJob> inFlight;
   size_t next = 0;
-  int produced = 0;
+  WorkerPoolResult result;
+
+  // Only readable at level 0: debugLog writes to stderr and would break up the
+  // carriage-returned line. The flush also keeps stdout empty at every fork
+  // below - an inherited dirty buffer gets flushed again by every child.
+  bool showProgress = globalDebugLevel() == 0 && !files.empty();
+  auto reportProgress = [&]() {
+    if (showProgress)
+      std::cout << "\r[" << work.label << "] " << (result.produced + result.declined + result.failed)
+                << "/" << files.size() << " processed" << std::flush;
+  };
+  reportProgress();
 
   auto killAndReap = [&](WorkerPoolJob &job, const char *reason) {
     int status = 0;
@@ -131,7 +166,11 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
       pid_t pid = fork();
       if (pid < 0) {
         work.debugLog(0, "fork failed, running in-process: " + file.string());
-        produced += work.runInProcess(file) ? 1 : 0;
+        if (work.runInProcess(file))
+          result.produced++;
+        else
+          result.declined++;
+        reportProgress();
         continue;
       }
       if (pid == 0) {
@@ -154,15 +193,20 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
       pid_t done = waitpid(it->pid, &status, WNOHANG);
       if (done == it->pid) {
         flushChildLog(*it);
-        if (WIFEXITED(status)) {
-          if (WEXITSTATUS(status) == 0) {
-            produced += 1;
-          } else {
-            work.debugLog(0, "failed (exit " + std::to_string(WEXITSTATUS(status)) +
-                                  "), skipping: " + it->file.string());
-            work.cleanupPartial(it->file);
-          }
+        if (WIFEXITED(status) && WEXITSTATUS(status) == kProducedExit) {
+          result.produced++;
+        } else if (WIFEXITED(status) && WEXITSTATUS(status) == kDeclinedExit) {
+          // Above level 0, so a run that declines most of its input stays quiet.
+          result.declined++;
+          work.debugLog(1, "no output: " + it->file.string());
+          work.cleanupPartial(it->file);
+        } else if (WIFEXITED(status)) {
+          result.failed++;
+          work.debugLog(0, "failed (exit " + std::to_string(WEXITSTATUS(status)) +
+                                "), skipping: " + it->file.string());
+          work.cleanupPartial(it->file);
         } else {
+          result.failed++;
           work.debugLog(0, "crashed (signal " + std::to_string(WTERMSIG(status)) +
                                 "), skipping: " + it->file.string());
           work.cleanupPartial(it->file);
@@ -171,16 +215,21 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
         reaped = true;
       } else if (done < 0 && errno != EINTR) {
         killAndReap(*it, "waitpid failed, killing");
+        result.failed++;
         it = inFlight.erase(it);
         reaped = true;
       } else if (time(nullptr) >= it->deadline) {
         killAndReap(*it, "Timeout, killing");
+        result.failed++;
         it = inFlight.erase(it);
         reaped = true;
       } else {
         ++it;
       }
     }
+
+    if (reaped)
+      reportProgress();
 
     // Nothing to reap and no free slot (or nothing left to submit): avoid a
     // busy-spin while children run.
@@ -190,6 +239,9 @@ inline int runWorkerPool(const std::vector<std::filesystem::path> &files, int wo
     }
   }
 
+  if (showProgress)
+    std::cout << std::endl;
+
   std::filesystem::remove_all(logDir, ec);
-  return produced;
+  return result;
 }

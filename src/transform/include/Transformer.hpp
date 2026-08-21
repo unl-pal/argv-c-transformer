@@ -6,6 +6,7 @@
 
 #include "HavocBounds.hpp"
 #include "IncludeIndex.hpp"
+#include "WorkerPool.hpp"
 
 #include <filesystem>
 #include <optional>
@@ -23,7 +24,7 @@ struct transformConfigs {
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string transformDir; ///< Output directory for transformed files (verify-stage input).
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
-  int nproc;                ///< Worker pool size (0 = default to hardware concurrency).
+  int nproc;                ///< Worker pool size (0 = auto, three quarters of detected cores).
   /**
    * Original repo tree the filtered files came from, used only to resolve
    * quoted #includes to -I paths. Empty means no local-header resolution.
@@ -89,14 +90,13 @@ public:
   /**
    * @brief Recursively walks a directory tree, transforming every .c file found.
    *
-   * Collects the matching files, then runs them through a worker pool sized
-   * by {@code configuration.nproc} (each file still isolated in its own
-   * forked child), instead of the old one-file-at-a-time fork+wait.
+   * Collects the matching files, then runs them through a worker pool sized by
+   * {@code configuration.nproc}, each file isolated in its own forked child.
    *
    * @param path Root path to search (file or directory).
-   * @return Total count of transformed files produced.
+   * @return Per-outcome counts across the tree.
    */
-  int transformAll(std::filesystem::path path);
+  WorkerPoolResult transformAll(std::filesystem::path path);
 
   /**
    * @brief Recursively collects every .c file under path into `files`.

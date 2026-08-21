@@ -209,21 +209,23 @@ int Filterer::run() {
     bool produced = filterFile(p);
     std::cout.flush();
     std::cerr.flush();
-    _exit(produced ? 0 : 1);
+    _exit(produced ? kProducedExit : kDeclinedExit);
   };
   work.runInProcess = [this](const std::filesystem::path &p) { return filterFile(p); };
   work.cleanupPartial = [this](const std::filesystem::path &p) { cleanupPartialOutput(p); };
   work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[filter] " + msg); };
+  work.label = "filter";
 
   std::cout << "[filter] processing " << toProcess.size() << " file(s) with " << workers
             << " worker(s)" << std::endl;
-  int produced = runWorkerPool(toProcess, workers, configuration.fileTimeoutSecs, work);
+  WorkerPoolResult result = runWorkerPool(toProcess, workers, configuration.fileTimeoutSecs, work);
 
   std::cout << "\n=== Filter summary ===\n"
             << "  Files found:            " << filesFound << "\n"
             << "  Passed pre-filter:      " << passed << "\n"
             << "  Skipped (pre-filter):   " << (filesFound - passed) << "\n"
-            << "  Files filtered:         " << produced << "\n"
-            << "  Discarded/failed:       " << (passed - produced) << std::endl;
-  return produced;
+            << "  Files filtered:         " << result.produced << "\n"
+            << "  Declined (no output):   " << result.declined << "\n"
+            << "  Failed:                 " << result.failed << std::endl;
+  return result.produced;
 }
