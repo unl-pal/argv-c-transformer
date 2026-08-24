@@ -9,12 +9,9 @@
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
 #include "HarnessHeaderData.hpp"
+#include "WorkerPool.hpp"
 
-#include <cerrno>
-#include <csignal>
 #include <cstdlib>
-#include <cstring>
-#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -24,7 +21,6 @@
 #include <optional>
 #include <regex>
 #include <string>
-#include <sys/wait.h>
 #include <system_error>
 #include <unistd.h>
 #include <vector>
@@ -38,6 +34,7 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  configuration.nproc = config.fileSettings.at("nproc");
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
   if (!inputPath.empty())
@@ -49,7 +46,7 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
 }
 
 bool Verifier::verifyFile(std::filesystem::path path) {
-  debugLog(1, "[verify] file " + std::to_string(_totalProcessed) + ": " + path.string());
+  debugLog(1, "[verify] file: " + path.string());
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[verify] path does not exist: " + path.string());
     return false;
@@ -77,13 +74,13 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   output.close();
   if (!ran) {
     debugLog(1, "[verify] clang tool failed on: " + path.string());
-    std::filesystem::remove(outPath);
+    cleanupPartialOutput(path);
     return false;
   }
 
   if (harnessIsEmpty(outPath)) {
     debugLog(1, "[verify] discarded (harness empty after re-check): " + outPath.string());
-    std::filesystem::remove(outPath);
+    cleanupPartialOutput(path);
     return false;
   }
 
@@ -91,10 +88,12 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   if (!checkCompilable(outPath)) {
     if (configuration.keepCompilesOnly) {
       debugLog(1, "[verify] discarded (fails compile check): " + outPath.string());
-      std::filesystem::remove(outPath);
+      cleanupPartialOutput(path);
       return false;
     }
-    // Kept for inspection, but not a benchmark: no task file, no .i.
+    // Kept for inspection, but not a benchmark: no task file, no .i. Left on
+    // disk deliberately, so no cleanup here - and none from the pool either,
+    // which never touches a child that exited under its own control.
     debugLog(1, "[verify] kept but not a benchmark (fails compile check): " + outPath.string());
     return false;
   }
@@ -102,64 +101,18 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   writeBenchmarkTask(outPath, *counts);
   if (!preprocess(outPath)) {
     debugLog(0, "Preprocessing failed, discarding: " + outPath.string());
-    std::filesystem::path ymlPath = outPath;
-    ymlPath.replace_extension(".yml");
-    std::filesystem::remove(outPath);
-    std::filesystem::remove(ymlPath);
+    cleanupPartialOutput(path);
     return false;
   }
   return true;
 }
 
-int Verifier::verifyFileIsolated(std::filesystem::path path) {
-  pid_t pid = fork();
-  if (pid < 0) {
-    debugLog(0, "fork failed, verifying in-process: " + path.string());
-    return verifyFile(path) ? 1 : 0;
-  }
-
-  if (pid == 0) {
-    int produced = verifyFile(path) ? 1 : 0;
-    std::cout.flush();
-    std::cerr.flush();
-    _exit(produced);
-  }
-
-  time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
-  int status = 0;
-  while (true) {
-    pid_t done = waitpid(pid, &status, WNOHANG);
-    if (done == pid)
-      break;
-    if (done < 0 && errno != EINTR) {
-      debugLog(0, "waitpid failed for " + path.string() + ", killing: " + strerror(errno));
-      kill(pid, SIGKILL);
-      waitpid(pid, &status, 0);
-      cleanupPartialOutput(path);
-      return 0;
-    }
-    if (time(nullptr) >= deadline) {
-      debugLog(0, "Timeout, killing verify of: " + path.string());
-      kill(pid, SIGKILL);
-      waitpid(pid, &status, 0);
-      cleanupPartialOutput(path);
-      return 0;
-    }
-    struct timespec nap = {0, 20 * 1000 * 1000}; // 20ms
-    nanosleep(&nap, nullptr);
-  }
-
-  if (WIFEXITED(status))
-    return WEXITSTATUS(status) == 1 ? 1 : 0;
-  debugLog(0, "Verify crashed (signal " + std::to_string(WTERMSIG(status)) +
-                  "), skipping: " + path.string());
-  cleanupPartialOutput(path);
-  return 0;
-}
-
 void Verifier::cleanupPartialOutput(std::filesystem::path path) {
   std::filesystem::path outPath =
       std::filesystem::path(configuration.benchmarkDir) / path.filename();
+  // transformDir == benchmarkDir makes the "partial output" the input itself.
+  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath))
+    return;
   std::error_code ec;
   std::filesystem::remove(outPath, ec);
   std::filesystem::path ymlPath = outPath;
@@ -170,31 +123,52 @@ void Verifier::cleanupPartialOutput(std::filesystem::path path) {
   std::filesystem::remove(iPath, ec);
 }
 
-int Verifier::verifyAll(std::filesystem::path path) {
+void Verifier::collectCFiles(std::filesystem::path path, std::vector<std::filesystem::path> &files) {
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[verify] path does not exist: " + path.string());
-    return 0;
+    return;
   }
   if (std::filesystem::is_directory(path)) {
-    int successes = 0;
     for (const std::filesystem::directory_entry &entry :
          std::filesystem::directory_iterator(path)) {
-      successes += verifyAll(entry.path());
+      collectCFiles(entry.path(), files);
     }
-    return successes;
+    return;
   }
   if (std::filesystem::is_regular_file(path)) {
     if (path.extension() == ".c") {
-      _totalProcessed++;
-      if (globalDebugLevel() == 0)
-        std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
-      return verifyFileIsolated(path);
+      files.push_back(path);
+    } else {
+      debugLog(3, "[verify] skipped (not .c): " + path.filename().string());
     }
-    debugLog(3, "[verify] skipped (not .c): " + path.filename().string());
-    return 0;
+    return;
   }
   debugLog(3, "[verify] ignored: " + path.filename().string());
-  return 0;
+}
+
+WorkerPoolResult Verifier::verifyAll(std::filesystem::path path) {
+  std::vector<std::filesystem::path> files;
+  collectCFiles(path, files);
+  _totalProcessed = static_cast<int>(files.size());
+
+  int workers = resolveWorkerCount(configuration.nproc);
+  debugLog(1, "[verify] worker pool size: " + std::to_string(workers));
+  std::cout << "[verify] processing " << files.size() << " file(s) with " << workers
+            << " worker(s)" << std::endl;
+
+  IsolatedWork work;
+  work.child = [this](const std::filesystem::path &p) {
+    bool produced = verifyFile(p);
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(produced ? kProducedExit : kDeclinedExit);
+  };
+  work.runInProcess = [this](const std::filesystem::path &p) { return verifyFile(p); };
+  work.cleanupPartial = [this](const std::filesystem::path &p) { cleanupPartialOutput(p); };
+  work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[verify] " + msg); };
+  work.label = "verify";
+
+  return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work);
 }
 
 // NOTE: cmd is passed to std::system (shell-interpreted), and path is not
@@ -349,11 +323,11 @@ int Verifier::run() {
     return 0;
   }
   writeHarnessHeader();
-  int result = verifyAll(path);
-  int discarded = _totalProcessed - result;
+  WorkerPoolResult result = verifyAll(path);
   std::cout << "\n=== Verify summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"
-            << "  Benchmarks produced:    " << result << "\n"
-            << "  Discarded/failed:       " << discarded << std::endl;
-  return result;
+            << "  Benchmarks produced:    " << result.produced << "\n"
+            << "  Declined (no output):   " << result.declined << "\n"
+            << "  Failed:                 " << result.failed << std::endl;
+  return result.produced;
 }

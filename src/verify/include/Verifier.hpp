@@ -6,6 +6,7 @@
 
 #include "ConfigParser.hpp"
 #include "CountingVisitor.hpp"
+#include "WorkerPool.hpp"
 
 #include <filesystem>
 #include <string>
@@ -27,6 +28,7 @@ struct verifyConfigs {
   std::string transformDir; ///< Input directory of transformed C files to verify.
   std::string benchmarkDir; ///< Output directory for finalized benchmarks.
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated verify child.
+  int nproc;                ///< Worker pool size (0 = auto, three quarters of detected cores).
 };
 
 /**
@@ -62,20 +64,15 @@ public:
    * non-compiling results and emits the .yml + .i for survivors.
    *
    * @param path Path to the transformed C source file.
-   * @return true if a finalized benchmark (.c + .yml + .i) was produced.
+   * @return true if a finalized benchmark (.c + .yml + .i) was produced. A
+   *         false return leaves nothing behind except under
+   *         keepCompilesOnly=false, which keeps the non-compiling .c on purpose.
    */
   bool verifyFile(std::filesystem::path path);
 
   /**
-   * @brief Runs {@code verifyFile} in a forked child for crash isolation.
-   *
-   * @param path Path to the transformed C source file.
-   * @return 1 if a finalized benchmark was produced, 0 otherwise.
-   */
-  int verifyFileIsolated(std::filesystem::path path);
-
-  /**
-   * @brief Removes any benchmark files a crashed or timed-out child left behind.
+   * @brief Removes this file's benchmark outputs. A no-op when benchmarkDir
+   * resolves to the input's own directory.
    *
    * @param path Path to the transformed C source file whose output to clean up.
    */
@@ -84,10 +81,21 @@ public:
   /**
    * @brief Recursively walks a directory tree, verifying every .c file found.
    *
+   * Collects the matching files, then runs them through a worker pool sized by
+   * {@code configuration.nproc}, each file isolated in its own forked child.
+   *
    * @param path Root path to search (file or directory).
-   * @return Total count of finalized benchmarks produced.
+   * @return Per-outcome counts across the tree.
    */
-  int verifyAll(std::filesystem::path path);
+  WorkerPoolResult verifyAll(std::filesystem::path path);
+
+  /**
+   * @brief Recursively collects every .c file under path into `files`.
+   *
+   * @param path  Root path to search (file or directory).
+   * @param files Output vector; matching file paths are appended.
+   */
+  void collectCFiles(std::filesystem::path path, std::vector<std::filesystem::path> &files);
 
   /**
    * @brief Checks whether a verified file compiles without errors.
