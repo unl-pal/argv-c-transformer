@@ -1,21 +1,17 @@
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #include "RemoveVisitor.hpp"
 #include "RemoveConsumer.hpp"
 
-#include <clang/AST/Type.h>
-#include <clang/ASTMatchers/ASTMatchFinder.h>
-#include <llvm/Support/raw_ostream.h>
-#include <vector>
+RemoveConsumer::RemoveConsumer(clang::Rewriter &rewriter,
+                               std::shared_ptr<std::vector<std::string>> toRemove)
+    : _Rewriter(rewriter), _ToRemove(toRemove) {}
 
-RemoveConsumer::RemoveConsumer(clang::Rewriter          &rewriter,
-                               std::vector<std::string> *toRemove,
-                               std::set<clang::QualType> *neededTypes)
-    : _Rewriter(rewriter), _toRemove(toRemove), _NeededTypes(neededTypes) {}
-
-void RemoveConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
-  llvm::outs() << "Starting Removal\n";
-  if (_toRemove->size()) {
-    RemoveFuncVisitor Visitor(&Context, _Rewriter, _toRemove, _NeededTypes);
-    Visitor.TraverseDecl(Context.getTranslationUnitDecl());
+void RemoveConsumer::HandleTranslationUnit(clang::ASTContext &context) {
+  if (!_ToRemove->empty()) {
+    RemoveVisitor visitor(_Rewriter, _ToRemove);
+    visitor.TraverseDecl(context.getTranslationUnitDecl());
   }
-  llvm::outs() << "Ending Removal\n";
 }

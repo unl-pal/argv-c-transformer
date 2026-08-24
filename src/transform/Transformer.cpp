@@ -1,302 +1,217 @@
-#include "include/Transformer.hpp"
-#include "ArgsFrontendActionFactory.hpp"
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+// SPDX-License-Identifier: Apache-2.0
 
-#include <clang/Basic/Diagnostic.h>
-#include <clang/Basic/DiagnosticIDs.h>
-#include <clang/Basic/DiagnosticOptions.h>
-#include <clang/Basic/FileManager.h>
-#include <clang/Basic/FileSystemOptions.h>
-#include <clang/Basic/SourceManager.h>
-#include <clang/Frontend/ASTUnit.h>
-#include <clang/Frontend/CompilerInvocation.h>
-#include <clang/Frontend/FrontendAction.h>
-#include <clang/Frontend/FrontendActions.h>
-#include <clang/Frontend/TextDiagnosticPrinter.h>
-#include <clang/Lex/Preprocessor.h>
-#include <clang/Serialization/PCHContainerOperations.h>
-#include <clang/Tooling/CommonOptionsParser.h>
-#include <clang/Tooling/Tooling.h>
+#include "include/Transformer.hpp"
+#include "TransformAction.hpp"
+#include "ClangToolUtils.hpp"
+#include "CliArgs.hpp"
+#include "ConfigParser.hpp"
+#include "DebugLog.hpp"
+#include "IncludeIndex.hpp"
+
+#include <cerrno>
+#include <csignal>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
-#include <fstream>
-#include <llvm/ADT/IntrusiveRefCntPtr.h>
-#include <llvm/ADT/StringRef.h>
 #include <iostream>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/VirtualFileSystem.h>
+#include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
-#include <memory>
-#include <regex>
 #include <string>
 #include <system_error>
 #include <vector>
+#include <sys/wait.h>
+#include <unistd.h>
 
 const int defaultDebugLevel = 0;
-const bool defaultKeepCompilesOnly = true;
-const std::string defaultFilterDir = "filteredFiles";
-const std::string defaultBenchmarkDir = "benchmarks";
-/// Not yet implemented in code - currently handled by scripts
-const bool defaultWipeOldBenchmarks = true;
+// Must match Filterer's fallback default, so a bare transform run lines up
+// with a bare filter run.
+const std::string defaultFilterDir = "repos-filtered";
+const int defaultFileTimeoutSecs = 60;
 
-Transformer::Transformer(std::string configFile) : configuration() {
-  /// Set default values - figure out if this
+Transformer::Transformer(std::string configFile, std::string inputPath) : configuration() {
   configuration.debugLevel = defaultDebugLevel;
-  configuration.keepCompilesOnly = defaultKeepCompilesOnly;
   configuration.filterDir = defaultFilterDir;
-  configuration.benchmarkDir = defaultBenchmarkDir;
-  configuration.wipeOldBenchmarks = defaultWipeOldBenchmarks;
-  parseConfig(configFile);
+  configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
+  if (!configFile.empty())
+    parseConfig(configFile);
+  if (configuration.transformDir.empty())
+    configuration.transformDir = inputBaseName(configuration.filterDir) + "-transformed";
+  if (!inputPath.empty()) {
+    configuration.filterDir = inputPath;
+    configuration.transformDir = inputBaseName(inputPath) + "-transformed";
+  }
+  globalDebugLevel() = configuration.debugLevel;
 }
 
-// Take an individual file and apply all transformations to it by generating 
-// the ast, visitors and regenerating the source code as precompiled .i file
-// returns false if the AST fails to build
+//   filtered-files/antirez/redis/src/endianconv.c
+//   -> transformed-files/antirez_redis_src_endianconv.c
+std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path path) {
+  std::filesystem::path relPath = std::filesystem::relative(path, configuration.filterDir);
+  // relative() yields "." when the input path IS the file (single-file mode).
+  if (relPath.empty() || *relPath.begin() == ".." || relPath == ".")
+    relPath = path.filename();
+  std::string flatName;
+  for (const std::filesystem::path &component : relPath) {
+    std::string part = component.string();
+    if (part == ".." || part == ".")
+      continue;
+    if (!flatName.empty())
+      flatName += "_";
+    flatName += part;
+  }
+  return std::filesystem::path(configuration.transformDir) / flatName;
+}
+
 bool Transformer::transformFile(std::filesystem::path path) {
-  std::cout << "Transforming: " << path.string() << std::endl;
-  if (!std::filesystem::exists(path)) return false;
-  std::filesystem::path full = std::filesystem::current_path() / path;
-
-  std::filesystem::path srcPath = std::filesystem::path(configuration.benchmarkDir);
-  /// May want this later for .i files that could be used for expanding macros
-  // std::filesystem::path preprocessedPath = std::filesystem::path("preprocessed");
-
-  // Keeps people from being able to write files outside of the project folder for now
-  // Eliminates the "filteredFiles" part of the path
-  for (const std::filesystem::path &component : path) {
-    if (component.string() != configuration.filterDir && component.string() != "..") {
-      srcPath /= component;
-    }
+  debugLog(1, "[transform] file " + std::to_string(_totalProcessed) + ": " + path.string());
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[transform] path does not exist: " + path.string());
+    return false;
   }
 
-  std::cout << "Creating resources for Transformation" << std::endl;
-
-  static llvm::cl::OptionCategory myToolCategory("transformer");
-
-  clang::IgnoringDiagConsumer diagConsumer;
-
-  std::string resourceDir;
-  try {
-    resourceDir = std::getenv("CLANG_RESOURCES");
-  } catch (...) {
-    std::cout << "Please set the CLANG_RESOURCES environment vairable "
-      "before proceeding"
-      << std::endl;
-    return 1;
-  }
-
-  std::cout << "Setting Comp Options" << std::endl;
-
-  // Arguments needed for Clang to accurately generate our ASTs
-  std::vector<std::string> compOptionsArgs({
-    "clang",
-    "-extra-arg=-xc",
-    "-extra-arg=-resource-dir=" + resourceDir,
-    "-extra-arg=-fparse-all-comments",
-    path.string(),
-  });
-
-  int argc = compOptionsArgs.size();
-
-  char** argv = new char*[argc + 1];
-
-  for (int i=0; i<argc; i++) {
-    argv[i] = new char[compOptionsArgs[i].length() + 1];
-    std::strcpy(argv[i], compOptionsArgs[i].c_str());
-  }
-
-  argv[argc] = nullptr;
-
-  if (argv == nullptr) {
-    return 0;
-  }
-
-  std::cout << "Setting Up Common Options Parser" << std::endl;
-
-  llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser = clang::tooling::CommonOptionsParser::create(argc, (const char**)argv, myToolCategory);
-
-  if (!expectedParser) {
-    llvm::errs() << expectedParser.takeError();
-    return 0;
-  }
-
-  clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
-
-  std::cout << "Building the Tool" << std::endl;
-
-  clang::tooling::ClangTool tool(optionsParser.getCompilations(),
-                                 optionsParser.getSourcePathList());
-
-  std::cout << "Diagnostic Options" << std::endl;
-
-  tool.setDiagnosticConsumer(&diagConsumer);
-
-  std::cout << "Factory" << std::endl;
+  std::filesystem::path srcPath = flattenedOutputPath(path);
 
   std::error_code ec;
-
   std::filesystem::create_directories(srcPath.parent_path());
   llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
+  if (ec) {
+    debugLog(0, "Cannot open output file " + srcPath.string() + ": " + ec.message());
+    return false;
+  }
 
-  ArgsFrontendFactory factory(output);
+  // Quoted #includes resolve against the source repo, not the filtered tree,
+  // which mirrors only .c files. An unset databaseDir leaves this empty.
+  std::vector<std::string> includeDirs =
+      headerIndex ? collectLocalIncludeDirs(path, *headerIndex) : std::vector<std::string>{};
 
-  std::cout << "Run the Tool" << std::endl;
-
-  llvm::outs() << tool.run(&factory) << "\n";
-
+  ArgsFrontendFactory factory(output, configuration.havoc);
+  bool ran = runToolOnFile(path.string(), factory, includeDirs);
   output.close();
+  if (!ran) {
+    debugLog(1, "[transform] clang tool failed on: " + path.string());
+    return false;
+  }
 
-  if (!checkCompilable(srcPath)) {
-    if (configuration.keepCompilesOnly) {
-      std::filesystem::remove(srcPath);
+  if (harnessIsEmpty(srcPath)) {
+    debugLog(2, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
+                    srcPath.string());
+    std::filesystem::remove(srcPath);
+    return false;
+  }
+  return true;
+}
+
+int Transformer::transformFileIsolated(std::filesystem::path path) {
+  _totalProcessed++;
+  if (globalDebugLevel() == 0)
+    std::cout << "\r[transform] " << _totalProcessed << " processed" << std::flush;
+  pid_t pid = fork();
+  if (pid < 0) {
+    debugLog(0, "fork failed, transforming in-process: " + path.string());
+    return transformFile(path) ? 1 : 0;
+  }
+
+  if (pid == 0) {
+    // Child: _exit skips C++ stream flushing, so flush explicitly first.
+    int produced = transformFile(path) ? 1 : 0;
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(produced);
+  }
+
+  // Parent: poll, killing the child if it overruns the budget.
+  time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
+  int status = 0;
+  while (true) {
+    pid_t done = waitpid(pid, &status, WNOHANG);
+    if (done == pid)
+      break;
+    if (done < 0 && errno != EINTR) {
+      debugLog(0, "waitpid failed for " + path.string() + ", killing: " + strerror(errno));
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(path);
+      return 0;
     }
-    return 0;
-  }
-  return 1;
-
-}
-
-// Recursive algorithm for traversing the file structure and searching for 
-// relavent c files to transform
-//     ideally files will have been filtered but some logic exists to prevent
-//     mishaps just incase
-// Returns false if any C files failed transformation
-int Transformer::transformAll(std::filesystem::path path, int count) {
-  if (std::filesystem::exists(path)) {
-    if (std::filesystem::is_directory(path)) {
-      int successes = 0;
-      for (const std::filesystem::directory_entry &entry :
-           std::filesystem::directory_iterator(path)) {
-        successes += transformAll(entry.path(), count);
-      }
-      return count + successes;
-    } else if (std::filesystem::is_regular_file(path)) {
-      if (path.has_extension() && path.extension() == ".c") {
-        return count + transformFile(path);
-      }
+    if (time(nullptr) >= deadline) {
+      debugLog(0, "Timeout, killing transform of: " + path.string());
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(path);
+      return 0;
     }
+    struct timespec nap = {0, 20 * 1000 * 1000}; // 20ms
+    nanosleep(&nap, nullptr);
   }
-  return count;
+
+  if (WIFEXITED(status))
+    return WEXITSTATUS(status) == 1 ? 1 : 0;
+  // WIFSIGNALED: harnessIsEmpty never ran, so a partial .c may be left behind.
+  debugLog(0, "Transform crashed (signal " + std::to_string(WTERMSIG(status)) + "), skipping: " +
+                  path.string());
+  cleanupPartialOutput(path);
+  return 0;
 }
 
-// Check if the benchmark is compilable after transformation and remove
-// non-compilable benchmarks if set to in the configuration file or keep for
-// debugging
-int Transformer::checkCompilable(std::filesystem::path path) {
-  static llvm::cl::OptionCategory myToolCategory("CheckCompiles");
-
-  std::string resourceDir = std::getenv("CLANG_RESOURCES");
-
-  std::vector<std::string> compOptionsArgs({
-    "clang",
-    "-extra-arg=-fsyntax-only",
-    "-extra-arg=-xc",
-    "-extra-arg=-resource-dir=" + resourceDir,
-    path.string(),
-    "verifier.c", // dummy verify file is needed to resolve extern Verifier Functions
-  });
-
-  int argc = compOptionsArgs.size();
-
-  char** argv = new char*[argc + 1];
-
-  for (int i=0; i<argc; i++) {
-    argv[i] = new char[compOptionsArgs[i].length() + 1];
-    std::strcpy(argv[i], compOptionsArgs[i].c_str());
-  }
-
-  argv[argc] = nullptr;
-
-  if (argv == nullptr) {
-    return 0;
-  }
-
-  llvm::Expected<clang::tooling::CommonOptionsParser> expectedParser = clang::tooling::CommonOptionsParser::create(argc, (const char**)argv, myToolCategory);
-
-  if (!expectedParser) {
-    llvm::errs() << expectedParser.takeError();
-    return 0;
-  }
-
-  clang::tooling::CommonOptionsParser &optionsParser = expectedParser.get();
-
-  clang::tooling::ClangTool tool(optionsParser.getCompilations(),
-                                 optionsParser.getSourcePathList());
-
-  // Show the number of errors only not the errors themselves to avoid clutter
-  // Can be changed for diagnostic purposes if desired
-  clang::DiagnosticConsumer diagConsumer;
-  tool.setDiagnosticConsumer(&diagConsumer);
-
-  // tool.run(clang::tooling::newFrontendActionFactory<clang::PreprocessOnlyAction>().get());
-  // This is the same as running "clang -xc -fsyntax-only `file-name` verifier.c"
-  tool.run(clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>().get());
-
-  // If there are errors do not count the file as compilable
-  if (diagConsumer.getNumErrors()) {
-    return 0;
-  }
-  return 1;
+void Transformer::cleanupPartialOutput(std::filesystem::path path) {
+  std::error_code ec;
+  std::filesystem::remove(flattenedOutputPath(path), ec);
 }
 
-/// TODO MAKE THE CONFIG PARSERS MORE SECURE!!
+int Transformer::transformAll(std::filesystem::path path) {
+  if (!std::filesystem::exists(path)) {
+    debugLog(1, "[transform] path does not exist: " + path.string());
+    return 0;
+  }
+  if (std::filesystem::is_directory(path)) {
+    int successes = 0;
+    for (const std::filesystem::directory_entry &entry :
+         std::filesystem::directory_iterator(path)) {
+      successes += transformAll(entry.path());
+    }
+    return successes;
+  }
+  if (std::filesystem::is_regular_file(path)) {
+    if (path.extension() == ".c")
+      return transformFileIsolated(path);
+    debugLog(3, "[transform] skipped (not .c): " + path.filename().string());
+    return 0;
+  }
+  debugLog(3, "[transform] ignored: " + path.filename().string());
+  return 0;
+}
+
 void Transformer::parseConfig(std::string configFile) {
-  std::ifstream file(configFile);
-  if (!std::filesystem::exists(configFile)) {
-    std::cout << "File: " << configFile << " Does Not Exist" << std::endl;
-    std::cout << "Using Default Settings" << std::endl;
-    return;
+  PipelineConfig config = parsePipelineConfig(configFile);
+  configuration.debugLevel = config.fileSettings.at("debugLevel");
+  configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  if (!config.transformDir.empty()) {
+    configuration.transformDir = config.transformDir;
   }
-  if (file.is_open()) {
-    std::cout << "Using: " << configFile << " Specified Settings" << std::endl;
-    std::regex pattern("^\\s*(\\w+)\\s*=\\s*([0-9]+|[\\w\\s,]+|[\\w/-_.]+)$");
-    std::string line;
-    std::smatch match;
-    while (std::getline(file, line)) {
-      if (std::regex_search(line, match, pattern)) {
-        std::string key = match[1];
-        std::string value = match[2];
-        // Add the value to the config if the key is a member of the map
-        if (key == "benchmarkDir") {
-          configuration.benchmarkDir = value;
-          if (!std::filesystem::exists(value)) {
-            std::filesystem::create_directory(value);
-          }
-        } else if (key == "filterDir") {
-          configuration.filterDir = value;
-          if (!std::filesystem::exists(value)) {
-            std::cout << "There is no directory: " << value
-                      << " to use as Filter Directory\n"
-                      << "Aborting Filtering Attempt"
-                      << std::endl;
-          }
-        } else if (key == "debugLevel") {
-          try {
-            configuration.debugLevel = std::stoi(value);
-          } catch (...) {
-            configuration.debugLevel = 0;
-          }
-        } else if (key == "keepCompilesOnly"){
-          configuration.keepCompilesOnly = (value == "true" || value == "True");
-        } else if (key == "wipeOldBenchmarks") {
-          configuration.wipeOldBenchmarks = (value == "true" || value == "True");
-        }
-      }
-    }
-    file.close();
-  } else {
-    std::cerr << "File Failed to Open" << std::endl;
-    std::cout << "Using Default Settings" << std::endl;
+  if (!config.filterDir.empty()) {
+    configuration.filterDir = config.filterDir;
   }
+  // argv-c injects this via setDatabaseDir(); a standalone `transform` run
+  // only has the config.
+  if (!config.databaseDir.empty())
+    configuration.databaseDir = config.databaseDir;
+  configuration.havoc.argcMin = config.havoc.at("havocArgcMin");
+  configuration.havoc.argcMax = config.havoc.at("havocArgcMax");
+  configuration.havoc.strMax = config.havoc.at("havocStrMax");
+  configuration.havoc.blockMax = config.havoc.at("havocBlockMax");
 }
 
-// Main function should be transfered to a driver for use via the full implementation
 int Transformer::run() {
   std::filesystem::path path(configuration.filterDir);
-  if (std::filesystem::exists(path)) {
-    // run the transformer on the file structure
-    int result = transformAll(path, 0);
-    std::cout << "Number of Compilable Benchmarks: " << result << std::endl;
-    return result;
-  }
-  return 0;
+  // Built before any fork; each child inherits the index as-is.
+  headerIndex.emplace(configuration.databaseDir);
+
+  int result = transformAll(path);
+  int discarded = _totalProcessed - result;
+  std::cout << "\n=== Transform summary ===\n"
+            << "  Files processed:        " << _totalProcessed << "\n"
+            << "  Files transformed:      " << result << "\n"
+            << "  Discarded/failed:       " << discarded << std::endl;
+  return result;
 }

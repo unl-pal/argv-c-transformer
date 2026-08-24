@@ -1,42 +1,48 @@
-# pragma once
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
 
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
-#include <clang/AST/Expr.h>
 #include <clang/AST/RecursiveASTVisitor.h>
-#include <clang/AST/Stmt.h>
-#include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
-#include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
-#include <set>
+#include <memory>
 #include <string>
 #include <vector>
 
-class RemoveFuncVisitor : public clang::RecursiveASTVisitor<RemoveFuncVisitor> {
+/**
+ * @brief Visitor that strips the bodies of filtered-out functions.
+ *
+ * {@code VisitFunctionDecl} replaces the {@code { ... }} body of each
+ * function in {@code _ToRemove} with {@code ;}, turning the definition into
+ * a bare declaration. The signature is left intact so that later transform
+ * passes (e.g. {@code HavocCallsVisitor}) still see the real return type for
+ * any remaining calls to it, instead of Clang's implicit-int fallback for an
+ * undeclared function.
+ */
+class RemoveVisitor : public clang::RecursiveASTVisitor<RemoveVisitor> {
 public:
-  /// Constructs a Visitor that removes functions specified in toRemove using
-  /// the rewriter
-  RemoveFuncVisitor(clang::ASTContext *C,
-                    clang::Rewriter &rewriter,
-                    std::vector<std::string>      *toRemove,
-                    std::set<clang::QualType> *neededTypes);
+  /**
+   * @brief Constructs the visitor with the shared pipeline state.
+   *
+   * @param rewriter     Shared rewriter; body replacements accumulate here.
+   * @param toRemove     Names of functions to strip, from {@code FilterFunctionsConsumer}.
+   */
+  RemoveVisitor(clang::Rewriter &rewriter, std::shared_ptr<std::vector<std::string>> toRemove);
 
-  /// Visits all function declarations checking the name agains the functions to
-  /// remove and handles the function declaration and any associated comments
+  /**
+   * @brief Replaces the body of each function in {@code _ToRemove} with {@code ;}.
+   *
+   * Skips macro-expanded locations (not writable by the Rewriter) and
+   * declarations with no body (already bare prototypes).
+   */
   bool VisitFunctionDecl(clang::FunctionDecl *D);
 
-  /// Currently not in use but could be implemented to handle Calls to the
-  /// deleted functions
-  bool VisitCallExpr(clang::CallExpr *E);
-
-  /// Tells the RecursiveASTVisitor wether to recurse depth or breadth first
-  bool shouldTraversePostOrder();
-
 private:
-  clang::ASTContext *_C;
-  clang::SourceManager &_mgr;
+  clang::SourceManager &_Mgr;
   clang::Rewriter &_Rewriter;
-  std::vector<std::string> *_toRemove;
-  std::set<clang::QualType> *_NeededTypes;
+  std::shared_ptr<std::vector<std::string>> _ToRemove;
 };

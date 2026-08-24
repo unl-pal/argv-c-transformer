@@ -1,0 +1,9 @@
+version = 1
+SPDX-PackageName = "argv-c-transformer"
+SPDX-PackageSupplier = "The ARG-V Project"
+SPDX-PackageDownloadLocation = "https://github.com/unl-pal/argv-c-transformer"
+
+[[annotations]]
+path = [".gitignore", "repos.csv", "tests/transform/cases/**"]
+SPDX-FileCopyrightText = "Copyright (C) 2026 The ARG-V Project"
+SPDX-License-Identifier = "Apache-2.0"

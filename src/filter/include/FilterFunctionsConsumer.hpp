@@ -1,38 +1,71 @@
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #pragma once
 
-#include <CountingVisitor.hpp>
+#include "ConfigParser.hpp"
+#include "CountingVisitor.hpp"
+
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclBase.h>
+#include <llvm/Support/Casting.h>
+#include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
-/// Consumer for filtering all counted functions and their attributes to find all the functions that should be removed
+/**
+ * @brief ASTConsumer that decides which functions to remove based on counted attributes.
+ *
+ * Does not use a visitor - by the time this consumer runs, {@code CountingConsumer}
+ * has already populated {@code toFilter} with per-function attribute counts. This
+ * consumer just reads that map and applies the configured complexity ranges and
+ * feature gates, writing any violating function names into {@code toRemove} for
+ * {@code RemoveConsumer} to act on.
+ */
 class FilterFunctionsConsumer : public clang::ASTConsumer {
 public:
-  /// @brief Constructor for consumer that sets the private variables used for
-  /// filtering
-  /// @detail this consumer does not use a Visitor or Handler, in the case of an
-  /// ASTMatcher, instead doing the work itself. It is being done this way so as
-  /// to operate on the same AST generated for the other filtering tasks
-  /// @param toFilter - all functions that will be checked
-  /// @param all functions that should be removed later
+  /**
+   * @brief Constructs the consumer with the shared pipeline state.
+   *
+   * @param toFilter          Map of function name → attribute counts, written by
+   *                          {@code CountingConsumer}.
+   * @param toRemove          Output vector; names of functions that fail thresholds
+   *                          are appended.
+   * @param complexityConfig  Per-metric [min, max] ranges, owned by {@code Filterer}.
+   * @param featureConfig     Per-feature require/forbid/ignore gates, owned by
+   *                          {@code Filterer}.
+   */
   FilterFunctionsConsumer(
-    std::unordered_map<std::string, CountNodesVisitor::attributes *> *toFilter,
-    std::vector<std::string> *toRemove, std::map<std::string, int> *config);
+      std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,
+      std::shared_ptr<std::vector<std::string>> toRemove,
+      std::map<std::string, std::pair<int, int>> *complexityConfig,
+      std::map<std::string, FeatureGate> *featureConfig);
 
-  /// Run all necessary tasks to filter
-  /// this does not use a visitor or matcher but is called by the action when
-  /// going through all consumer's HandleTranslationUnits, thus is used to
-  /// trigger in the correct order of operations rather than at creation or
-  /// needing a special call
-  void HandleTranslationUnit(clang::ASTContext &context);
+  void HandleTranslationUnit(clang::ASTContext &context) override;
 
-  /// Filter the Functions
-  void FilterFunctions();
+  /**
+   * @brief Applies complexity ranges, feature gates, and param-type checks to
+   * every function.
+   *
+   * A function is added to {@code _ToRemove} on the first violation found:
+   * first every complexity metric is checked against its configured [min, max]
+   * range, then (if still in the running) every feature flag is checked
+   * against its configured gate. After that, any function whose parameters
+   * include a type with no {@code __VERIFIER_nondet_*} equivalent is also
+   * removed (body stripped so the declaration survives for return-type
+   * resolution in the transform step).
+   */
+  void FilterFunctions(clang::ASTContext &context);
 
 private:
-std::unordered_map<std::string, CountNodesVisitor::attributes*> *_ToFilter;
-std::vector<std::string> *_ToRemove;
-std::map<std::string, int> *_Config;
+  std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> _ToFilter;
+  std::shared_ptr<std::vector<std::string>> _ToRemove;
+  std::map<std::string, std::pair<int, int>> *_ComplexityConfig;
+  std::map<std::string, FeatureGate> *_FeatureConfig;
 };

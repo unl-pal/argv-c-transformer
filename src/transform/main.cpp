@@ -1,17 +1,32 @@
-#include "include/Transformer.hpp"
-#include <iostream>
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
 
-/// Main function should be transfered to a driver for use via the full implementation
-int main(int argc, char** argv) {
-  if (argc == 2) {
-    Transformer transformer(argv[1]);
-    transformer.run();
-  } else if (argc > 1 ) {
-    Transformer transformer(argv[1]);
-    transformer.run();
-  }else {
-    std::cout << "Incorrect Number of Args" << std::endl;
-    std::cout << "Please Give the Location of the Configuration File" << std::endl;
+#include "include/Transformer.hpp"
+#include "ClangToolUtils.hpp"
+#include "CliArgs.hpp"
+#include <filesystem>
+#include <iostream>
+#include <optional>
+
+int main(int argc, char **argv) {
+  checkClangVersion();
+  std::optional<CliInvocation> invocation = parseCliArgs(argc, argv);
+  if (!invocation) {
+    printUsage("transform");
+    return 1;
   }
-  return 1;
+  if (!invocation->configFile.empty() && !std::filesystem::exists(invocation->configFile)) {
+    std::cerr << "No such file or directory: " << invocation->configFile << std::endl;
+    return 1;
+  }
+
+  Transformer transformer(invocation->configFile, invocation->inputPath);
+  if (!std::filesystem::exists(transformer.getFilterDir())) {
+    std::cerr << "Filter directory not found: " << transformer.getFilterDir() << std::endl;
+    return 1;
+  }
+
+  transformer.run();
+  return 0;
 }

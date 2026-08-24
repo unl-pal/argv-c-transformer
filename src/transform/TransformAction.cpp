@@ -1,118 +1,119 @@
-#include "TransformAction.hpp"
-#include "GenerateIncludeConsumer.hpp"
-#include "AddVerifiersConsumer.hpp"
-#include "ReplaceDeadCallsConsumer.hpp"
-#include "GenerateCodeConsumer.hpp"
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
 
-#include <IsThereMainConsumer.hpp>
-#include <clang/AST/ASTContext.h>
-#include <clang/AST/TemplateName.h>
+#include "TransformAction.hpp"
+#include "AddStdIncludesConsumer.hpp"
+#include "DebugLog.hpp"
+#include "HavocCallsConsumer.hpp"
+#include "MainGenConsumer.hpp"
+#include "UnknownTypeDiagConsumer.hpp"
+
 #include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/MultiplexConsumer.h>
+#include <clang/Lex/Lexer.h>
+#include <clang/Lex/MacroArgs.h>
 #include <clang/Lex/Preprocessor.h>
 #include <memory>
 #include <vector>
 
-// Overriden function for handling InclusionDirectives such as
-// import and include statements when found by the Preprocessor
-void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc,
-                        const clang::Token & IncludeTok,
-                        llvm::StringRef FileName,
-                        bool IsAngled,
-                        clang::CharSourceRange FilenameRange,
-                        clang::OptionalFileEntryRef File,
-                        llvm::StringRef SearchPath,
-                        llvm::StringRef RelativePath,
-                        const clang::Module * SuggestedModule,
-                        bool ModuleImported,
-                        clang::SrcMgr::CharacteristicKind FileType) {
-  // SearchPath == clang::DefaultArguments
-  // Identify all standard headers used in the code for tracking and inclusion purposes
-
-  // This functionality and default meta data on standard libraries can be used
-  // to replace the regex logic for filtering out files with unwanted inlcudes
-  // but would require building the AST before checking rather than a simple
-  // read
-
-  if (_Mgr.isInMainFile(HashLoc)) {
-    if (_AllStandardHeaders.count(FileName)) {
-      if (!_AlreadyIncluded.count(FileName)) {
-        _AlreadyIncluded.emplace(FileName);
-        // llvm::outs() << "Found include directive: " << FileName << " (";
-        if (IsAngled) {
-          // llvm::outs() << "<>";
-          // _Output << "#include <" << FileName << ">\n";
-        } else {
-          llvm::outs() << "\"\"";
-          // _Output << "#include \"" << FileName << "\"\n";
-        }
-        // llvm::outs() << ") at " << HashLoc.printToString(_Mgr) << "\n" ;
-      }
-    }
+// A quoted include is always project-local by convention and gets stripped
+// outright regardless of FileType.
+void IncludeFinder::InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &,
+                                       llvm::StringRef FileName, bool IsAngled,
+                                       clang::CharSourceRange FilenameRange,
+                                       clang::OptionalFileEntryRef, llvm::StringRef,
+                                       llvm::StringRef, const clang::Module *, bool,
+                                       clang::SrcMgr::CharacteristicKind FileType) {
+  if (!_Mgr.isInMainFile(HashLoc))
+    return;
+  if (!IsAngled || FileType == clang::SrcMgr::C_User) {
+    debugLog(3, "[transform] stripped project-local include: " + FileName.str());
+    _Rewriter.RemoveText(clang::CharSourceRange::getCharRange(HashLoc, FilenameRange.getEnd()));
+    return;
   }
+  _ExistingIncludes->insert(FileName.str());
 }
 
-// Constructor for the IncludeFinder that sets up the source manager and output
-// stream for regenerating the source code
-IncludeFinder::IncludeFinder(clang::SourceManager &SM, llvm::raw_fd_ostream &output)
-      : _Mgr(SM), _Output(output) {}
+IncludeFinder::IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter,
+                             std::shared_ptr<std::set<std::string>> existingIncludes)
+    : _Mgr(SM), _Rewriter(rewriter), _ExistingIncludes(existingIncludes) {}
 
-// Constructor for GenerateIncludeAction that sets up the output stream for
-// regenerating source code
-TransformAction::TransformAction(llvm::raw_fd_ostream &output) : _Output(output), _Rewriter() {}
+// assert(cond) expands with the macro name token first and the closing paren
+// last, so Range brackets exactly the text to replace.
+void AssertRewriter::MacroExpands(const clang::Token &MacroNameTok, const clang::MacroDefinition &MD,
+                                  clang::SourceRange Range, const clang::MacroArgs *) {
+  const clang::IdentifierInfo *id = MacroNameTok.getIdentifierInfo();
+  if (!id || id->getName() != "assert")
+    return;
+  const clang::MacroInfo *info = MD.getMacroInfo();
+  if (!info || !info->isFunctionLike())
+    return;
+  if (!Range.getBegin().isFileID() || !_Mgr.isInMainFile(Range.getBegin()))
+    return;
 
-// Overridden function that uses a ConsumerMultiplexer instead of a single
-// ASTConsumer to run many consumers, handlers and visitors over the same AST
+  clang::CharSourceRange charRange = clang::CharSourceRange::getTokenRange(Range);
+  bool invalid = false;
+  llvm::StringRef text = clang::Lexer::getSourceText(charRange, _Mgr, _LangOpts, &invalid);
+  if (invalid)
+    return;
+
+  auto openParen = text.find('(');
+  auto closeParen = text.rfind(')');
+  if (openParen == llvm::StringRef::npos || closeParen == llvm::StringRef::npos ||
+      closeParen <= openParen)
+    return;
+  llvm::StringRef cond = text.substr(openParen + 1, closeParen - openParen - 1);
+
+  debugLog(3, "[transform] rewrote assert(" + cond.str() + ") -> reach_error()");
+  _Rewriter.ReplaceText(charRange, ("if (!(" + cond + ")) reach_error()").str());
+}
+
+AssertRewriter::AssertRewriter(clang::SourceManager &SM, clang::Rewriter &rewriter,
+                               const clang::LangOptions &langOpts)
+    : _Mgr(SM), _Rewriter(rewriter), _LangOpts(langOpts) {}
+
+TransformAction::TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc)
+    : _Output(output), _Rewriter(),
+      _UnresolvedTypeNames(std::make_shared<std::set<std::string>>()), _Havoc(havoc) {}
+
 std::unique_ptr<clang::ASTConsumer>
-TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler,
-                                         llvm::StringRef          filename) {
-  // llvm::outs() << "Creating Ast Consumer for: " << filename << "\n";
+TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef) {
+  auto existingIncludes = std::make_shared<std::set<std::string>>();
+
   clang::Preprocessor &pp = compiler.getPreprocessor();
-  pp.addPPCallbacks(std::make_unique<IncludeFinder>(compiler.getSourceManager(), this->_Output));
+  pp.addPPCallbacks(
+      std::make_unique<IncludeFinder>(compiler.getSourceManager(), _Rewriter, existingIncludes));
+  pp.addPPCallbacks(
+      std::make_unique<AssertRewriter>(compiler.getSourceManager(), _Rewriter, pp.getLangOpts()));
 
-  // If only directives are expanded then standard library header code is not
-  // included in the AST. Look into other options or potential interest in this
-  // functionality
+  // HavocCallsConsumer fills this; MainGenConsumer skips harnessing them.
+  auto noOpFunctions = std::make_shared<std::set<std::string>>();
 
-  // pp.SetMacroExpansionOnlyInDirectives(); // Come Back To This
-
-  llvm::outs() << "CreateASTConsumer Method is about to run on: " << filename << "\n";
-
-  // All the verifiers functions that will be needed in the benchmark
-  std::set<clang::QualType> *neededTypes = new std::set<clang::QualType>();
-
-  // Temp vector is used to store the various consumers and copied to the multiplexor at a later stage.
-  // This prevents the compiler from trying to infer the type incorrectly or attempting to optimize the code detrimentally as seem in previous runs
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
-  tempVector.emplace_back(std::make_unique<GenerateIncludeConsumer>(_Output));
-  tempVector.emplace_back(std::make_unique<ReplaceDeadCallsConsumer>(neededTypes, _Rewriter));
-  tempVector.emplace_back(std::make_unique<AddVerifiersConsumer>(_Output, neededTypes, _Rewriter));
-  tempVector.emplace_back(std::make_unique<IsThereMainConsumer>(_Rewriter));
-  // Code Generation is not currently in use as it is designed to create pro compiled files
-  // tempVector.emplace_back(std::make_unique<GenerateCodeConsumer>(_Output));
+  tempVector.emplace_back(std::make_unique<HavocCallsConsumer>(noOpFunctions, _Rewriter));
+  tempVector.emplace_back(std::make_unique<MainGenConsumer>(noOpFunctions, _Rewriter, _Havoc));
+  tempVector.emplace_back(
+      std::make_unique<AddStdIncludesConsumer>(existingIncludes, _UnresolvedTypeNames, _Rewriter));
 
-  // Multiplexor of all consumers that will be run over the same AST
-  std::unique_ptr<clang::MultiplexConsumer> result =
-    std::make_unique<clang::MultiplexConsumer>(std::move(tempVector));
-  // copy in the tempVector for previously stated reasons
-
-  // Debug statement for when debug levels are implemented
-  llvm::outs() << "CreateASTConsumer Method ran on: " << filename << "\n";
-  return result;
+  return std::make_unique<clang::MultiplexConsumer>(std::move(tempVector));
 }
 
-// Function that runs before any of the consumers but after preprocessor steps
 bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
-  llvm::outs() << "Begin Source File Action" << "\n";
-  // Set the Rewriter fields before used in the consumers
   _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
-  bool result = clang::ASTFrontendAction::BeginSourceFileAction(compiler);
-  return result;
+  // Ownership passes to the DiagnosticsEngine, which outlives parsing.
+  compiler.getDiagnostics().setClient(new UnknownTypeDiagConsumer(_UnresolvedTypeNames),
+                                      /*ShouldOwnClient=*/true);
+  return clang::ASTFrontendAction::BeginSourceFileAction(compiler);
 }
 
-// Function that runs after all of the consumers but before the AST is cleaned up
 void TransformAction::EndSourceFileAction() {
-  llvm::outs() << "End Source File Action" << "\n";
-  // Retrieve the edited buffer and write to the new output location
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
+}
+
+ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_ostream &output, const HavocBounds &havoc)
+    : _Output(output), _Havoc(havoc) {}
+
+std::unique_ptr<clang::FrontendAction> ArgsFrontendFactory::create() {
+  return std::make_unique<TransformAction>(_Output, _Havoc);
 }

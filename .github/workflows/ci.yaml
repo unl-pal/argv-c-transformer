@@ -1,0 +1,60 @@
+# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: Build and Test CMake/Ninja on Multiple Platforms
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Install dependencies (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build \
+            clang-20 libclang-20-dev libclang-cpp20-dev llvm-20-dev lld-20 \
+            zlib1g-dev libzstd-dev libedit-dev
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja llvm@20 lld@20
+
+      - name: Put versioned clang on PATH (Ubuntu)
+        if: runner.os == 'Linux'
+        run: echo "/usr/lib/llvm-20/bin" >> "$GITHUB_PATH"
+
+      - name: Put versioned clang on PATH (macOS)
+        if: runner.os == 'macOS'
+        run: echo "$(brew --prefix llvm@20)/bin" >> "$GITHUB_PATH"
+
+      - name: Verify clang on PATH
+        run: |
+          command -v clang
+          clang --version
+
+      - name: Configure (Ubuntu)
+        if: runner.os == 'Linux'
+        run: CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja -DLLVM_DIR="$(llvm-config-20 --cmakedir)"
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: cmake -B build -S . -G Ninja -DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)
+
+      - name: Build
+        run: ninja -C build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Smoke test (end-to-end filter/transform/verify)
+        run: ./tests/smoke/run_smoke_test.sh ./build/filter ./build/transform ./build/verify

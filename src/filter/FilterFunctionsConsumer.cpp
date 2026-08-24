@@ -1,91 +1,90 @@
-#include "CountingVisitor.hpp"
-#include "FilterFunctionsConsumer.hpp"
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
 
-#include <llvm/Support/raw_ostream.h>
+#include "CountingVisitor.hpp"
+#include "DebugLog.hpp"
+#include "FilterFunctionsConsumer.hpp"
+#include "VerifierNames.hpp"
+
+#include <clang/AST/Decl.h>
+#include <clang/AST/DeclBase.h>
+#include <clang/Basic/SourceManager.h>
+#include <llvm/Support/Casting.h>
+#include <unordered_map>
 
 FilterFunctionsConsumer::FilterFunctionsConsumer(
-  std::unordered_map<std::string, CountNodesVisitor::attributes *> *toFilter,
-  std::vector<std::string> *toRemove, std::map<std::string, int> *config)
-    : _ToFilter(toFilter), _ToRemove(toRemove), _Config(config) {
-  llvm::outs() << "Remove Size: " << _ToRemove->size() << "\n";
-}
+    std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,
+    std::shared_ptr<std::vector<std::string>> toRemove,
+    std::map<std::string, std::pair<int, int>> *complexityConfig,
+    std::map<std::string, FeatureGate> *featureConfig)
+    : _ToFilter(toFilter), _ToRemove(toRemove), _ComplexityConfig(complexityConfig),
+      _FeatureConfig(featureConfig) {}
 
 void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &context) {
-  FilterFunctions();
+  FilterFunctions(context);
 }
 
-void FilterFunctionsConsumer::FilterFunctions() {
-  if (!_ToFilter->size()) return;
-  for (const std::pair<std::string, CountNodesVisitor::attributes*> func : *_ToFilter) {
+void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
+  if (_ToFilter->empty())
+    return;
+
+  // Build name → FunctionDecl* so the param-type check below can look up
+  // the actual declaration for each function in _ToFilter.
+  clang::SourceManager &mgr = context.getSourceManager();
+  std::unordered_map<std::string, const clang::FunctionDecl *> declByName;
+  for (clang::Decl *decl : context.getTranslationUnitDecl()->decls()) {
+    const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
+    if (func && func->isThisDeclarationADefinition() && mgr.isInMainFile(func->getLocation()))
+      declByName[func->getNameAsString()] = func;
+  }
+
+  for (const std::pair<const std::string, CountingVisitor::attributes> &func : *_ToFilter) {
     std::string key = func.first;
-    llvm::outs() << "Key: " << key << "\n";
-    CountNodesVisitor::attributes attr = *func.second;
-    if (key == "Program" || key == "main") {
+    const CountingVisitor::attributes &attr = func.second;
+    if (key == "FileScope")
       continue;
-    } else if (attr.ForLoops > _Config->at("maxForLoops")) {
+
+    bool reject = false;
+    for (const auto &[name, range] : *_ComplexityConfig) {
+      int value = complexityField(attr.Complexity, name);
+      if (value < range.first || value > range.second) {
+        debugLog(2, "[filter] " + key + ": " + name + " = " + std::to_string(value) +
+                        " outside [" + std::to_string(range.first) + "," +
+                        std::to_string(range.second) + "]");
+        reject = true;
+        break;
+      }
+    }
+    if (!reject) {
+      for (const auto &[name, gate] : *_FeatureConfig) {
+        bool present = featureField(attr.Features, name);
+        if ((gate == FeatureGate::Require && !present) ||
+            (gate == FeatureGate::Forbid && present)) {
+          debugLog(2, "[filter] " + key + ": feature gate '" + name + "' violated");
+          reject = true;
+          break;
+        }
+      }
+    }
+    if (reject) {
       _ToRemove->push_back(key);
-    } else if (attr.WhileLoops > _Config->at("maxWhileLoops")) {
-      _ToRemove->push_back(key);
-    } else if (attr.CallFunc > _Config->at("maxCallFunc")) {
-      _ToRemove->push_back(key);
-    } else if (attr.Functions > _Config->at("maxFunctions")) {
-      _ToRemove->push_back(key);
-    } else if (attr.IfStmt > _Config->at("maxIfStmt")) {
-      _ToRemove->push_back(key);
-    } else if (attr.Param > _Config->at("maxParam")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeArithmeticOperation > _Config->at("maxTypeArithmeticOperation")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeCompareOperation > _Config->at("maxTypeCompareOperation")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeComparisons > _Config->at("maxTypeComparisons")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeIfStmt > _Config->at("maxTypeIfStmt")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeParameters > _Config->at("maxTypeParameters")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypePostfix > _Config->at("maxTypePostfix")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypePrefix > _Config->at("maxTypePrefix")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeUnaryOperation > _Config->at("maxTypeUnaryOperation")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeVariableReference > _Config->at("maxTypeVariableReference")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeVariables > _Config->at("maxTypeVariables")) {
-      _ToRemove->push_back(key);
-    } else if (attr.CallFunc < _Config->at("minCallFunc")) {
-      _ToRemove->push_back(key);
-    } else if (attr.ForLoops < _Config->at("minForLoops")) {
-      _ToRemove->push_back(key);
-    } else if (attr.Functions < _Config->at("minFunctions")) {
-      _ToRemove->push_back(key);
-    } else if (attr.IfStmt < _Config->at("minIfStmt")) {
-      _ToRemove->push_back(key);
-    } else if (attr.Param < _Config->at("minParam")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeArithmeticOperation < _Config->at("minTypeArithmeticOperation")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeCompareOperation < _Config->at("minTypeCompareOperation")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeComparisons < _Config->at("minTypeComparisons")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeIfStmt < _Config->at("minTypeIfStmt")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeParameters < _Config->at("minTypeParameters")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypePostfix < _Config->at("minTypePostfix")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypePrefix < _Config->at("minTypePrefix")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeUnaryOperation < _Config->at("minTypeUnaryOperation")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeVariableReference < _Config->at("minTypeVariableReference")) {
-      _ToRemove->push_back(key);
-    } else if (attr.TypeVariables < _Config->at("minTypeVariables")) {
-      _ToRemove->push_back(key);
-    } else if (attr.WhileLoops < _Config->at("minWhileLoops")) {
-      _ToRemove->push_back(key);
+      continue;
+    }
+
+    // All threshold checks passed; now check whether every parameter has a
+    // nondet equivalent. If any param type is unsupported (pointer, struct,
+    // etc.), strip the body so HavocCallsVisitor can still use the return
+    // type from the remaining declaration. main is exempt here: its argc/argv
+    // params are handled specially by MainGenConsumer.
+    if (key != "main" && declByName.contains(key)) {
+      for (auto parm : declByName.at(key)->parameters()) {
+        if (!verifierSuffixForType(parm->getOriginalType())) {
+          debugLog(2, "[filter] " + key + ": unsupported parameter type, body stripped");
+          _ToRemove->push_back(key);
+          break;
+        }
+      }
     }
   }
 }

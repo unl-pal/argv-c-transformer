@@ -1,24 +1,17 @@
-result
-
-temp/
+# Build
 build/
-bin/
 
-/samples/TheAlgorithmsC/
-/samples/EggListener.c
-/samples/OG/
-/preprocessed/*
-/filteredFiles/*
-/benchmark/*
-/database/*
+# Pipeline I/O defaults
+repos/
+repos-filtered/
+repos-transformed/
+repos-benchmarks/
 
-compile_commands.json
+# Tutorial I/O (docs/tutorial/Tutorial.md)
+docs/tutorial/source-files/
+docs/tutorial/filtered-files/
+docs/tutorial/transformed-files/
+docs/tutorial/benchmark-files/
 
-*cmake_cache
-*.cache
-
-*.ast
-
-*.zig*
-
-/notes/
+# AI artifacts
+CLAUDE.md

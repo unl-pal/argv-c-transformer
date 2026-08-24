@@ -1,0 +1,99 @@
+// SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+//
+// SPDX-License-Identifier: Apache-2.0
+
+#include "ConfigParser.hpp"
+
+#include <filesystem>
+#include <fstream>
+#include <gtest/gtest.h>
+#include <map>
+#include <string>
+#include <unistd.h>
+
+namespace fs = std::filesystem;
+
+// ---------------------------------------------------------------------------
+// parseIniFile - every config both tools read goes through this one regex,
+// so pin down exactly which line shapes it accepts and skips.
+// ---------------------------------------------------------------------------
+
+class ParseIniFileTest : public ::testing::Test {
+protected:
+  fs::path iniPath;
+
+  void SetUp() override {
+    iniPath = fs::temp_directory_path() /
+              ("config_parser_test_" + std::to_string(getpid()) + ".config");
+  }
+
+  void TearDown() override { fs::remove(iniPath); }
+
+  std::map<std::string, std::string> parse(const std::string &content) {
+    std::ofstream(iniPath) << content;
+    return parseIniFile(iniPath.string());
+  }
+};
+
+TEST_F(ParseIniFileTest, ParsesSimpleKeyValue) {
+  auto m = parse("debugLevel = 2\n");
+  ASSERT_TRUE(m.count("debugLevel"));
+  EXPECT_EQ(m.at("debugLevel"), "2");
+}
+
+TEST_F(ParseIniFileTest, ParsesPathValue) {
+  auto m = parse("filterDir = /tmp/some-dir_1/sub.dir\n");
+  ASSERT_TRUE(m.count("filterDir"));
+  EXPECT_EQ(m.at("filterDir"), "/tmp/some-dir_1/sub.dir");
+}
+
+TEST_F(ParseIniFileTest, ParsesMinMaxPair) {
+  auto m = parse("ForLoops = 1, 9999\n");
+  ASSERT_TRUE(m.count("ForLoops"));
+  EXPECT_EQ(m.at("ForLoops"), "1, 9999");
+}
+
+TEST_F(ParseIniFileTest, SkipsSectionHeadersAndComments) {
+  auto m = parse("[File Locations]\n"
+                 "# a comment line\n"
+                 "; another comment style\n"
+                 "\n"
+                 "debugLevel = 1\n");
+  EXPECT_EQ(m.size(), 1u);
+  EXPECT_TRUE(m.count("debugLevel"));
+}
+
+TEST_F(ParseIniFileTest, StripsInlineComment) {
+  auto m = parse("debugLevel = 2 # verbose logging\n");
+  ASSERT_TRUE(m.count("debugLevel"));
+  EXPECT_EQ(m.at("debugLevel"), "2");
+}
+
+// Regression: a path value (forced onto the slash-permitting alternative,
+// which excludes \s) followed by an inline comment used to leave a trailing
+// space that broke the $ anchor, silently dropping the whole line.
+TEST_F(ParseIniFileTest, StripsInlineCommentAfterPathValue) {
+  auto m = parse("databaseDir=repos/Yabause/yabause/yabause/src # filter input\n");
+  ASSERT_TRUE(m.count("databaseDir"));
+  EXPECT_EQ(m.at("databaseDir"), "repos/Yabause/yabause/yabause/src");
+}
+
+TEST_F(ParseIniFileTest, LastDuplicateKeyWins) {
+  auto m = parse("debugLevel = 1\ndebugLevel = 3\n");
+  EXPECT_EQ(m.at("debugLevel"), "3");
+}
+
+TEST_F(ParseIniFileTest, MissingFileYieldsEmptyMap) {
+  EXPECT_TRUE(parseIniFile("/nonexistent/path/nowhere.config").empty());
+}
+
+// ---------------------------------------------------------------------------
+// Small string helpers
+// ---------------------------------------------------------------------------
+
+TEST(Trim, StripsSpacesAndTabs) {
+  EXPECT_EQ(trim("  hello \t"), "hello");
+  EXPECT_EQ(trim("hello"), "hello");
+  EXPECT_EQ(trim(" \t "), "");
+  EXPECT_EQ(trim(""), "");
+}
