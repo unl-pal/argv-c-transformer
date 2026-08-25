@@ -26,6 +26,7 @@ struct verifyConfigs {
   bool keepCompilesOnly;    ///< If true, delete output files that fail checkCompilable.
   std::string transformDir; ///< Input directory of transformed C files to verify.
   std::string benchmarkDir; ///< Output directory for finalized benchmarks.
+  int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated verify child.
 };
 
 /**
@@ -66,6 +67,21 @@ public:
   bool verifyFile(std::filesystem::path path);
 
   /**
+   * @brief Runs {@code verifyFile} in a forked child for crash isolation.
+   *
+   * @param path Path to the transformed C source file.
+   * @return 1 if a finalized benchmark was produced, 0 otherwise.
+   */
+  int verifyFileIsolated(std::filesystem::path path);
+
+  /**
+   * @brief Removes any benchmark files a crashed or timed-out child left behind.
+   *
+   * @param path Path to the transformed C source file whose output to clean up.
+   */
+  void cleanupPartialOutput(std::filesystem::path path);
+
+  /**
    * @brief Recursively walks a directory tree, verifying every .c file found.
    *
    * @param path Root path to search (file or directory).
@@ -76,8 +92,10 @@ public:
   /**
    * @brief Checks whether a verified file compiles without errors.
    *
-   * Runs `clang -fsyntax-only` against the file alongside a dummy
-   * `verifier.c` (to resolve extern `__VERIFIER_nondet_*` declarations).
+   * Runs `clang -fsyntax-only` against the file. No stub definitions are
+   * needed for `__VERIFIER_nondet_*`: syntax-only checking never links, and
+   * argv_c_harness.h (which every benchmark unconditionally `#include`s)
+   * already supplies the extern declarations.
    *
    * @param path Path to the C file to check.
    * @return true if the file compiles with no errors.
@@ -90,6 +108,13 @@ public:
    * @return The number of finalized benchmarks produced.
    */
   int run();
+
+  /**
+   * @brief Returns the resolved input directory of transformed files to verify.
+   *
+   * Lets the driver check this exists before calling run().
+   */
+  const std::string &getTransformDir() const { return configuration.transformDir; }
 
   /**
    * @brief Returns the set of verification properties for a benchmark.
@@ -127,11 +152,18 @@ public:
   bool preprocess(std::filesystem::path cPath);
 
 private:
-  /// Thresholds and feature gates re-applied post-transform - the same
-  /// PipelineConfig structure the filter stage applies pre-transform.
+  /**
+   * @brief Writes the embedded argv_c_harness.h into benchmarkDir.
+   */
+  void writeHarnessHeader();
+
+  /**
+   * Thresholds and feature gates re-applied post-transform - the same
+   * PipelineConfig structure the filter stage applies pre-transform.
+   */
   PipelineConfig config;
-  /// Path settings and flags for this stage.
+  /** Path settings and flags for this stage. */
   struct verifyConfigs configuration;
-  /// Count for the end-of-run summary.
+  /** Count for the end-of-run summary. */
   int _totalProcessed = 0;
 };

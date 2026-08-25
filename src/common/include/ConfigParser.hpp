@@ -4,9 +4,8 @@
 
 #pragma once
 
-#include "HavocPolicy.hpp"
-
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -30,14 +29,16 @@ enum class FeatureGate { Ignore, Require, Forbid };
  * driver applies its own defaults (and CLI overrides) on top.
  */
 struct PipelineConfig {
-  /// Per-function complexity thresholds: metric name → [min, max]. Defaults
-  /// to {0, 9999}, meaning no filtering unless explicitly configured.
+  /**
+   * Per-function complexity thresholds: metric name → [min, max]. Defaults
+   * to {0, 9999}, meaning no filtering unless explicitly configured.
+   */
   std::map<std::string, std::pair<int, int>> complexity = {
       {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}}, {"IfStmt", {0, 9999}},
       {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}}, {"Operations", {0,9999}},
   };
 
-  /// Per-function feature gates: feature name → ignore|require|forbid.
+  /** Per-function feature gates: feature name → ignore|require|forbid. */
   std::map<std::string, FeatureGate> features = {
       {"Concurrency", FeatureGate::Ignore},
       {"FloatingPoint", FeatureGate::Ignore},
@@ -47,20 +48,22 @@ struct PipelineConfig {
       {"MemFree", FeatureGate::Ignore},
   };
 
-  /// File-level integer settings (booleans are stored as 0/1).
+  /** File-level integer settings (booleans are stored as 0/1). */
   std::map<std::string, int> fileSettings = {
       {"debugLevel", 0},       {"minFileLoC", 0},        {"maxFileLoC", 9999},
       {"fileTimeoutSecs", 60}, {"keepCompilesOnly", 1},
   };
 
-  /// Bounds on synthesized symbolic state, emitted into benchmarks as
-  /// __HAVOC_* macros. Defaults come from HavocPolicy.hpp.
+  /**
+   * Bounds the transform stage emits as __HAVOC_* macros into each
+   * transformed file (see HavocBounds.hpp).
+   */
   std::map<std::string, int> havoc = {
-      {"havocArgcMin", static_cast<int>(kArgcMin)},
-      {"havocArgcMax", static_cast<int>(kArgcMax)},
-      {"havocStrMax", static_cast<int>(kStrMax)},
-      {"havocArrayElems", static_cast<int>(kArrayElems)},
-      {"havocOpaqueBytes", static_cast<int>(kOpaqueBytes)},
+      {"havocArgcMin", 1},
+      {"havocArgcMax", 4},
+      {"havocStrMax", 16},
+      {"havocBlockMax", 128},
+      {"havocArrayElems", 8},
   };
 
   std::string databaseDir;  ///< Input tree for the filter stage ("" = unset).
@@ -83,9 +86,12 @@ inline std::string trim(const std::string &s) {
 /**
  * @brief Parses an INI-style config file and returns raw key/value string pairs.
  *
- * Lines that do not match {@code key = value} (comments, blank lines,
- * section headers) are silently skipped. A trailing {@code # ...} is
- * stripped as an inline comment before matching.
+ * Blank lines and section headers ({@code [Section]}) are silently skipped. A
+ * trailing {@code # ...} is stripped as an inline comment before matching.
+ * Anything else that doesn't match {@code key = value} is a malformed line
+ * and aborts the process — a config typo should never be silently ignored
+ * and fall back to an unrelated default (e.g. a mistyped databaseDir path
+ * silently scanning the whole default "repos" tree instead).
  *
  * @param configFile Path to the INI-style properties file.
  * @return Map of key to raw string value, or empty if the file is missing.
@@ -98,14 +104,21 @@ inline std::map<std::string, std::string> parseIniFile(const std::string &config
   if (!file.is_open())
     return result;
   std::regex pattern(R"(^\s*(\w+)\s*=\s*([0-9]+|[\w\s,\-]+|[\w/\-_.]+)$)");
-  std::string line;
+  std::string rawLine, line;
+  int lineNum = 0;
   std::smatch match;
-  while (std::getline(file, line)) {
-    size_t hash = line.find('#');
-    if (hash != std::string::npos)
-      line = line.substr(0, hash);
-    if (std::regex_search(line, match, pattern))
-      result[match[1]] = trim(match[2]);
+  while (std::getline(file, rawLine)) {
+    lineNum++;
+    size_t hash = rawLine.find('#');
+    line = trim(hash != std::string::npos ? rawLine.substr(0, hash) : rawLine);
+    if (line.empty() || line.front() == ';' || (line.front() == '[' && line.back() == ']'))
+      continue;
+    if (!std::regex_search(line, match, pattern)) {
+      std::cerr << configFile << ":" << lineNum << ": malformed config line: '" << line << "'"
+                << std::endl;
+      std::exit(1);
+    }
+    result[match[1]] = trim(match[2]);
   }
   return result;
 }

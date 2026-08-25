@@ -22,6 +22,11 @@ int main(int argc, char **argv) {
   }
 
   Transformer transformer(invocation->configFile, invocation->inputPath);
+  if (!std::filesystem::exists(transformer.getFilterDir())) {
+    std::cerr << "Filter directory not found: " << transformer.getFilterDir() << std::endl;
+    return 1;
+  }
+
   transformer.run();
   return 0;
 }

@@ -21,20 +21,22 @@
  * @brief Havocs every in-file function call so bodies become intraprocedural.
  *
  * Primitive returns -> {@code __VERIFIER_nondet_<type>()} inline; pointer
- * returns -> stack storage filled with {@code __VERIFIER_nondet_memory},
- * hoisted above the enclosing statement (see {@code renderPointerStorage}); void
- * and discarded pointer returns dropped; aggregate returns left as-is. Dropped
- * calls are marked no-op, and enclosing loops/branches that become
- * side-effect-free no-ops are pruned.
+ * returns -> stack storage filled with {@code __VERIFIER_nondet_memory} (or,
+ * for a C string, {@code __havoc_cstring_fill}), hoisted above the enclosing
+ * statement (see {@code renderPointerStorage}); void and discarded pointer
+ * returns dropped; aggregate returns left as-is. Dropped calls are marked
+ * no-op, and enclosing loops/branches that become side-effect-free no-ops are
+ * pruned.
  */
 class HavocCallsVisitor : public clang::RecursiveASTVisitor<HavocCallsVisitor> {
 public:
   /**
-   * @param C              AST context, used for return-type resolution and source manager access.
-   * @param neededSuffixes Output set; verifier suffixes and havoc helper markers are inserted here.
-   * @param rewriter       Shared rewriter for modifying the source buffer.
+   * @param C               AST context, used for return-type resolution and source manager access.
+   * @param neededFwdDecls  Output set; file-scope forward declarations (e.g. "struct Rect")
+   *                        needed by a prototype-scope struct tag a havocked pointer casts to.
+   * @param rewriter        Shared rewriter for modifying the source buffer.
    */
-  HavocCallsVisitor(clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededSuffixes,
+  HavocCallsVisitor(clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededFwdDecls,
                     clang::Rewriter &rewriter);
 
   /**
@@ -88,18 +90,6 @@ public:
   bool shouldTraversePostOrder();
 
   /**
-   * @brief Publishes the verifier suffixes of every call that survived, into
-   *        the shared neededSuffixes set. Call once, after TraverseDecl.
-   *
-   * A call's suffix cannot be published when the call is rewritten: an
-   * enclosing statement may still turn out to be vacuous and erase it, and a
-   * suffix published for an erased call leaves a dangling extern declaration
-   * in the output. Buffering until traversal ends is exact and needs no
-   * reparse, since every erase decision is made by this visitor.
-   */
-  void finalizeSuffixes();
-
-  /**
    * @brief True if S contributes nothing once havocking is applied.
    *
    * Derived structurally from S (see computeNoOp), so it holds whenever it is
@@ -114,17 +104,10 @@ public:
 
 private:
   /**
-   * @brief Erases a statement's text, at most once per statement, and discards
-   *        the pending suffixes of every havocked call it contains.
+   * @brief Erases a statement's text, at most once per statement.
    * @param S The statement to remove from the output buffer.
    */
   void eraseStmt(const clang::Stmt *S);
-
-  /**
-   * @brief Forgets the pending suffixes of every havocked call within S.
-   * @param S Root of the subtree being erased, or nullptr.
-   */
-  void dropPendingIn(const clang::Stmt *S);
 
   /**
    * @brief True if E can be deleted without changing observable behaviour.
@@ -202,14 +185,12 @@ private:
   bool computeNoOp(const clang::Stmt *S) const;
 
   clang::ASTContext *_C;
-  std::shared_ptr<std::set<std::string>> _NeededSuffixes;
+  std::shared_ptr<std::set<std::string>> _NeededFwdDecls;
   clang::Rewriter &_Rewriter;
   /** Memoized computeNoOp results; mutable so the const isNoOp can fill it. */
   mutable std::map<const clang::Stmt *, bool> _NoOpMemo;
   /** Statements already removed from the buffer, so eraseStmt stays idempotent. */
   std::set<const clang::Stmt *> _ErasedStmts;
-  /** Suffixes owed by each havocked call, held until the call is known to survive. */
-  std::map<const clang::Expr *, std::set<std::string>> _PendingSuffixes;
   /** Names every hoisted pointer-return stub across the TU, keeping them unique. */
   unsigned _StubCounter = 0;
 };

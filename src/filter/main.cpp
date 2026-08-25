@@ -24,6 +24,11 @@ int main(int argc, char **argv) {
   }
 
   Filterer filter(invocation->configFile, invocation->inputPath);
+  if (!std::filesystem::exists(filter.getDatabaseDir())) {
+    std::cerr << "Database directory not found: " << filter.getDatabaseDir() << std::endl;
+    return 1;
+  }
+
   filter.run();
   return 0;
 }

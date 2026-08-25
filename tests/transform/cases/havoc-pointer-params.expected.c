@@ -1,10 +1,9 @@
-#include <stdlib.h>
+#define __HAVOC_ARGC_MIN 1
+#define __HAVOC_ARGC_MAX 4
 #define __HAVOC_STR_MAX 16
+#define __HAVOC_BLOCK_MAX 128
 #define __HAVOC_ARRAY_ELEMS 8
-#define __HAVOC_OPAQUE_BYTES 128
-extern int __VERIFIER_nondet_int(void);
-extern size_t __VERIFIER_nondet_size_t(void);
-extern void __VERIFIER_nondet_memory(void *, size_t);
+#include "argv_c_harness.h"
 
 struct Point {
   int x;
@@ -45,12 +44,8 @@ int main(void) {
   __VERIFIER_nondet_memory(__h2, sizeof(__h2));
   third(__h2);
   char __h3[__HAVOC_STR_MAX];
-  __VERIFIER_nondet_memory(__h3, sizeof(__h3));
-  size_t __h3_len = __VERIFIER_nondet_size_t();
-  if (__h3_len >= __HAVOC_STR_MAX) abort();
-  __h3[__h3_len] = '\0';
-  first_char(__h3);
-  _Alignas(16) unsigned char __h4[__HAVOC_OPAQUE_BYTES];
+  first_char(__havoc_cstring_fill(__h3, __HAVOC_STR_MAX));
+  _Alignas(16) unsigned char __h4[__HAVOC_BLOCK_MAX];
   __VERIFIER_nondet_memory(__h4, sizeof(__h4));
   opaque((void *)__h4);
   struct Point __h5[__HAVOC_ARRAY_ELEMS];

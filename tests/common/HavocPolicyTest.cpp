@@ -179,16 +179,15 @@ TEST(RenderPointerStorage, ArrayUsesDeclaredBound) {
 }
 
 TEST(RenderPointerStorage, CStringPlantsInBoundsTerminator) {
+  // The fill and in-bounds terminator both come from argv_c_harness.h's
+  // __havoc_cstring_fill helper, which hands back the same buffer, so it
+  // stands in for the call directly - only the declaration is hoisted.
   auto p = planFirstParam("void f(char *s) {}");
   PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "char *",
                                           p.ast->getASTContext().getPrintingPolicy());
   EXPECT_TRUE(s.cstring);
-  EXPECT_EQ(s.arg, "__h0");
-  EXPECT_EQ(s.decls, "  char __h0[__HAVOC_STR_MAX];\n"
-                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n"
-                     "  size_t __h0_len = __VERIFIER_nondet_size_t();\n"
-                     "  if (__h0_len >= __HAVOC_STR_MAX) abort();\n"
-                     "  __h0[__h0_len] = '\\0';\n");
+  EXPECT_EQ(s.arg, "__havoc_cstring_fill(__h0, __HAVOC_STR_MAX)");
+  EXPECT_EQ(s.decls, "  char __h0[__HAVOC_STR_MAX];\n");
 }
 
 TEST(RenderPointerStorage, OpaqueUsesAlignedByteBufferAndCasts) {
@@ -196,7 +195,7 @@ TEST(RenderPointerStorage, OpaqueUsesAlignedByteBufferAndCasts) {
   PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "void *",
                                           p.ast->getASTContext().getPrintingPolicy());
   EXPECT_EQ(s.arg, "(void *)__h0");
-  EXPECT_EQ(s.decls, "  _Alignas(16) unsigned char __h0[__HAVOC_OPAQUE_BYTES];\n"
+  EXPECT_EQ(s.decls, "  _Alignas(16) unsigned char __h0[__HAVOC_BLOCK_MAX];\n"
                      "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }
 

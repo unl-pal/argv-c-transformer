@@ -13,10 +13,12 @@
 
 /**
  * @file HavocPolicy.hpp
- * @brief Macro-emitted bounds governing how much symbolic state generated havoc code creates,
- * and the classifier deciding how a given pointer type gets havocked.
+ * @brief The classifier deciding how a given pointer type gets havocked.
  *
- * Nondet values are constrained with @c if (cond) abort().
+ * Nondet values are constrained with @c if (cond) abort(). The @c __HAVOC_*
+ * bound values themselves live in @c HavocBounds.hpp; this file only emits
+ * their macro *names*, so the generated source stays retunable by editing the
+ * benchmark.
  *
  * @ref planPointer is the single source of truth for pointer handling, shared
  * by the two sites that need it: pointer-returning calls and harnessed pointer
@@ -24,61 +26,11 @@
  */
 
 /**
- * @brief Lower bound on the synthesized @c argc.
- *
- * note that technically argc can be 0 but we assume not here
- */
-inline constexpr unsigned kArgcMin = 1;
-
-/**
- * @brief Upper bound on the synthesized @c argc.
- */
-inline constexpr unsigned kArgcMax = 4;
-
-/**
- * @brief Maximum size in bytes of each havocked C string, nondet terminator included.
- */
-inline constexpr unsigned kStrMax = 16;
-
-/**
- * @brief Element count assumed for a pointer with no declared bound.
- *
- * A bare @c T* is ambiguous. This doubles as the clamp applied to int parameters
- * of a function that also takes a pointer: bounding the indices to fit the block.
- */
-inline constexpr unsigned kArrayElems = 8;
-
-/**
- * @brief Byte size used when the pointee has no computable size.
- *
- * Applies to @c void* and to any type whose definition will not exist in the
- * transformed output (see @ref planPointer). Nothing better is available: the
- * real extent is unknown by construction.
- */
-inline constexpr unsigned kOpaqueBytes = 128;
-
-/**
- * @brief The bounds as actually applied to one run, after config overrides.
- *
- * Only the consumer that emits the @c __HAVOC_* macro definitions needs these
- * numbers. Everything else (@ref planPointer and the harness synthesis) emits
- * the macro *names*, so the generated source stays retunable by editing the
- * benchmark, and no other code has to be threaded with configuration.
- */
-struct HavocBounds {
-  unsigned argcMin = kArgcMin;
-  unsigned argcMax = kArgcMax;
-  unsigned strMax = kStrMax;
-  unsigned arrayElems = kArrayElems;
-  unsigned opaqueBytes = kOpaqueBytes;
-};
-
-/**
  * @brief How a pointer type should be havocked.
  */
 enum class PointerShape {
   CString,  ///< @c char* havocked bytes with a nondet-positioned terminator.
-  Block,    ///< Pointer to a sized type, no declared bound: @ref kArrayElems of them.
+  Block,    ///< Pointer to a sized type, no declared bound: HavocBounds::arrayElems of them.
   Array,    ///< Constant Array parameter @c T[N], using the declared bound N.
   Record,   ///< Pointer to a struct/union with a definition.
   Opaque,   ///< @c void*, incomplete.
@@ -266,15 +218,13 @@ inline PointerStorage renderPointerStorage(const PointerPlan &plan, clang::QualT
   if (!plan.viable)
     return out;
 
-  const std::string fill =
-      indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
-
   // Opaque has no pointee type to declare: a raw byte buffer stands in, cast to
   // the parameter's pointer type at the call. _Alignas(16) covers the real
   // pointee's unknown alignment need, since its actual type is exactly what's
   // unavailable here.
   if (plan.shape == PointerShape::Opaque) {
-    out.decls = indent + "_Alignas(16) unsigned char " + name + "[__HAVOC_OPAQUE_BYTES];\n" + fill;
+    out.decls = indent + "_Alignas(16) unsigned char " + name + "[__HAVOC_BLOCK_MAX];\n" + indent +
+               "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
     out.arg = castType.empty() ? name : "(" + castType + ")" + name;
     return out;
   }
@@ -305,17 +255,18 @@ inline PointerStorage renderPointerStorage(const PointerPlan &plan, clang::QualT
   // than the invalid "int[4] name[K]" bare concatenation would produce.
   std::string decl = name + "[" + count + "]";
   pointee.getUnqualifiedType().getAsStringInternal(decl, policy);
-  out.decls = indent + decl + ";\n" + fill;
-  out.arg = name;
+  out.decls = indent + decl + ";\n";
 
-  // A char block is a string, not raw bytes: plant a nondet-positioned
-  // terminator in bounds so the callee's string operations do not run off the
-  // end. This is the one type invariant nondet_memory alone cannot establish.
+  // A char block is a string, not raw bytes: the fill and the nondet-positioned,
+  // in-bounds terminator are both handled by argv_c_harness.h's helper, which
+  // hands back the same buffer so it can stand in for the call directly.
   if (plan.shape == PointerShape::CString) {
-    out.decls += indent + "size_t " + name + "_len = __VERIFIER_nondet_size_t();\n";
-    out.decls += indent + "if (" + name + "_len >= __HAVOC_STR_MAX) abort();\n";
-    out.decls += indent + name + "[" + name + "_len] = '\\0';\n";
+    out.arg = "__havoc_cstring_fill(" + name + ", " + count + ")";
     out.cstring = true;
+    return out;
   }
+
+  out.decls += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
+  out.arg = name;
   return out;
 }

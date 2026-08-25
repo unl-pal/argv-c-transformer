@@ -27,13 +27,10 @@ namespace {
 //   Inline  - primitive return: replace with a __VERIFIER_nondet_* expression.
 //   Pointer - pointer return: hoist stack storage and substitute it (the caller
 //             renders and places it; a pointer cannot be a bare expression).
-// `suffixes` carries the markers an Inline replacement owes; pointer markers are
-// added by the caller, which also knows whether the value is used.
 struct HavocAction {
   enum class Mode { Erase, Inline, Pointer } mode;
-  std::string replacement;         // Inline only.
-  PointerPlan plan;                // Pointer only.
-  std::set<std::string> suffixes;  // Inline only.
+  std::string replacement; // Inline only.
+  PointerPlan plan;        // Pointer only.
 };
 
 // Decides whether a call is havocked, and into what. Returns nullopt for every
@@ -68,11 +65,10 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
 
   // A void call yields no value to havoc, so it is erased rather than replaced.
   if (returnType->isVoidType())
-    return HavocAction{HavocAction::Mode::Erase, "", {}, {}};
+    return HavocAction{HavocAction::Mode::Erase, "", {}};
 
   if (std::optional<std::string> suffix = verifierSuffixForType(returnType))
-    return HavocAction{HavocAction::Mode::Inline, "__VERIFIER_nondet_" + *suffix + "()", {},
-                       {*suffix}};
+    return HavocAction{HavocAction::Mode::Inline, "__VERIFIER_nondet_" + *suffix + "()", {}};
 
   if (returnType->isAnyPointerType()) {
     // Pointer returns get a havocked-but-valid block (SV-COMP
@@ -86,7 +82,7 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
     PointerPlan plan = planPointer(returnType, mgr);
     if (!plan.viable)
       return std::nullopt;
-    return HavocAction{HavocAction::Mode::Pointer, "", plan, {}};
+    return HavocAction{HavocAction::Mode::Pointer, "", plan};
   }
 
   // Aggregate returns (structs, unions) have no expression-position nondet
@@ -246,9 +242,9 @@ bool HavocCallsVisitor::isInitSideEffectFree(
 }
 
 HavocCallsVisitor::HavocCallsVisitor(clang::ASTContext *C,
-                                     std::shared_ptr<std::set<std::string>> neededSuffixes,
+                                     std::shared_ptr<std::set<std::string>> neededFwdDecls,
                                      clang::Rewriter &rewriter)
-    : _C(C), _NeededSuffixes(neededSuffixes), _Rewriter(rewriter) {};
+    : _C(C), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter) {};
 
 bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   std::optional<HavocAction> action = classifyCall(E, *_C);
@@ -264,14 +260,8 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   if (action->mode == HavocAction::Mode::Pointer)
     return havocPointerReturn(E, action->plan, where);
 
-  // Inline primitive nondet. Overwriting the whole call also overwrites the
-  // replacement text of any call nested in its arguments, so those calls stop
-  // owing suffixes too.
-  for (const clang::Stmt *child : E->children())
-    dropPendingIn(child);
   debugLog(4, "[transform] " + where + ": havocked call -> " + action->replacement);
   _Rewriter.ReplaceText(E->getSourceRange(), action->replacement);
-  _PendingSuffixes[E] = action->suffixes;
   return true;
 }
 
@@ -320,21 +310,17 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
   PointerStorage store = renderPointerStorage(plan, returnType, stub, returnType.getAsString(),
                                               _C->getPrintingPolicy(), /*indent=*/"");
 
-  // The stub replaces the whole call, discarding any calls nested in its
-  // arguments along with the suffixes they owed.
-  for (const clang::Stmt *child : E->children())
-    dropPendingIn(child);
   // indentNewLines matches the hoisted lines to the anchor statement's column.
   _Rewriter.InsertText(anchor->getBeginLoc(), store.decls, /*InsertAfter=*/false,
                        /*indentNewLines=*/true);
   _Rewriter.ReplaceText(E->getSourceRange(), store.arg);
 
-  std::set<std::string> markers{"__havoc_mem", "__havoc_bounds"};
-  if (store.cstring)
-    markers.insert("__havoc_str");
+  // A struct tag named only inside a parameter/return type has prototype
+  // scope; hoisting it to file scope is needed regardless of whether this
+  // particular call site later turns out unreachable - a stray forward
+  // declaration is always legal C, so nothing needs to track its liveness.
   if (!plan.fwdDecl.empty())
-    markers.insert("__havoc_fwd:" + plan.fwdDecl);
-  _PendingSuffixes[E] = markers;
+    _NeededFwdDecls->insert(plan.fwdDecl);
   debugLog(4, "[transform] " + where + ": havocked pointer call -> stack " + stub);
   return true;
 }
@@ -342,31 +328,10 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
 // Erasing is idempotent: a statement can be reached both as a rewritten call
 // and later as a vacuous child of its enclosing block, and re-removing a range
 // that has already been removed would confuse the Rewriter's delta bookkeeping.
-//
-// Erasing a statement also un-owes the suffixes of every havocked call inside
-// it. Post-order traversal guarantees those calls were visited first, so their
-// pending entries are present to drop - including calls in a pruned loop's
-// condition, which is reachable precisely because a havocked call is pure.
 void HavocCallsVisitor::eraseStmt(const clang::Stmt *S) {
   if (!_ErasedStmts.insert(S).second)
     return;
   _Rewriter.ReplaceText(S->getSourceRange(), "");
-  dropPendingIn(S);
-}
-
-void HavocCallsVisitor::dropPendingIn(const clang::Stmt *S) {
-  if (!S)
-    return;
-  if (const auto *E = clang::dyn_cast<clang::CallExpr>(S))
-    _PendingSuffixes.erase(E);
-  for (const clang::Stmt *child : S->children())
-    dropPendingIn(child);
-}
-
-void HavocCallsVisitor::finalizeSuffixes() {
-  for (const auto &[call, suffixes] : _PendingSuffixes)
-    _NeededSuffixes->insert(suffixes.begin(), suffixes.end());
-  _PendingSuffixes.clear();
 }
 
 bool HavocCallsVisitor::isNoOp(const clang::Stmt *S) const {

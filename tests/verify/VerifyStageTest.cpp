@@ -94,6 +94,17 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   EXPECT_TRUE(fs::exists(benchmarkDir / "simple.i"));
   EXPECT_TRUE(fs::exists(benchmarkDir / "simple.yml"));
 
+  // Verifier::writeHarnessHeader copies the shared harness header into
+  // benchmarkDir once per run, and the #include for it must not survive into
+  // the preprocessed .i (preprocessing inlines it - the .i is what a
+  // verifier actually reads, so it must not depend on the header file
+  // existing on disk). reach_error()'s unconditional assert(0) does leave the
+  // header's path behind as an inert __FILE__ string in __assert_fail's
+  // arguments - that's fine, it's just a diagnostic string, not a real
+  // dependency.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "argv_c_harness.h"));
+  EXPECT_EQ(readFile(benchmarkDir / "simple.i").find("#include"), std::string::npos);
+
   std::string yml = readFile(benchmarkDir / "simple.yml");
   EXPECT_NE(yml.find("input_files: 'simple.i'"), std::string::npos);
   EXPECT_NE(yml.find("format_version: '2.0'"), std::string::npos);
@@ -125,7 +136,7 @@ TEST_F(VerifyStageTest, HeaderDefinedStructIsOpaqueAndStillCompiles) {
   EXPECT_EQ(out.find("struct Rect {"), std::string::npos);
   // Therefore the block must be the flat byte count, never sizeof.
   EXPECT_EQ(out.find("sizeof(struct Rect)"), std::string::npos);
-  EXPECT_NE(out.find("__HAVOC_OPAQUE_BYTES"), std::string::npos);
+  EXPECT_NE(out.find("__HAVOC_BLOCK_MAX"), std::string::npos);
   // A produced benchmark means checkCompilable passed under keepCompilesOnly.
   EXPECT_TRUE(fs::exists(benchmarkDir / "area.i"));
 }
@@ -205,11 +216,28 @@ TEST_F(VerifyStageTest, MainFileTypedefIsNotRedeclared) {
       << out;
   // Sized with the real type: the harness declares typed Range storage, not the
   // opaque `unsigned char[...]` byte buffer a header-only type would get. (The
-  // __HAVOC_OPAQUE_BYTES *macro* is always defined alongside the other bounds,
+  // __HAVOC_BLOCK_MAX *macro* is always defined alongside the other bounds,
   // so its presence is not the signal — the buffer declaration is.)
   EXPECT_NE(out.find("Range __h"), std::string::npos);
   EXPECT_EQ(out.find("unsigned char __h"), std::string::npos);
   EXPECT_TRUE(fs::exists(benchmarkDir / "local.i"));
+}
+
+TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
+  // <stdio.h> transitively pulls in glibc's bits/floatn-common.h, whose
+  // fallback typedefs for the C23 extended float types CBMC treats as
+  // reserved builtin names and aborts on. No generated code ever spells
+  // _Float32 etc., so Verifier::preprocess must strip those typedef lines
+  // from the .i without touching anything else.
+  writeFile(filterDir / "prints.c", "#include <stdio.h>\n"
+                                     "int identity(int x) { return x; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "prints.i"));
+  std::string i = readFile(benchmarkDir / "prints.i");
+  EXPECT_EQ(i.find("_Float"), std::string::npos);
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +291,7 @@ TEST_F(VerifyStageTest, PlainSourceGetsNoProperties) {
   std::string yml = readFile(benchmarkDir / "flat.yml");
   EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
   EXPECT_EQ(yml.find("no-overflow.prp"), std::string::npos);
-  EXPECT_NE(yml.find("properties:\n"), std::string::npos);
+  EXPECT_NE(yml.find("properties: []\n"), std::string::npos);
 }
 
 TEST_F(VerifyStageTest, LoopAndArithmeticAcrossFunctionsGetsBoth) {
@@ -288,6 +316,45 @@ TEST_F(VerifyStageTest, LoopAndArithmeticAcrossFunctionsGetsBoth) {
   std::string yml = readFile(benchmarkDir / "both.yml");
   EXPECT_NE(yml.find("termination.prp"), std::string::npos);
   EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
+}
+
+TEST_F(VerifyStageTest, PointerDerefSourceGetsMemsafetyProperty) {
+  // arr[i] is an ArraySubscriptExpr, which CountingVisitor flags as
+  // PointerDeref. Keep the array local rather than a pointer param: params
+  // are only harnessed when every one has a primitive nondet suffix
+  // (MainGenConsumer::verifierSuffixForType), so a pointer param currently
+  // leaves the function unharnessed and the file discarded (no calls at all).
+  writeFile(filterDir / "deref.c",
+            "void access(void) {\n"
+            "  int arr[4];\n"
+            "  int i = 0;\n"
+            "  arr[i] = 1;\n"
+            "}\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "deref.yml"));
+  std::string yml = readFile(benchmarkDir / "deref.yml");
+  EXPECT_NE(yml.find("valid-memsafety.prp"), std::string::npos);
+}
+
+TEST_F(VerifyStageTest, MallocFreeSourceGetsMemsafetyProperty) {
+  // malloc/free are MemAlloc/MemFree signals; either alone should select
+  // valid-memsafety.prp (it bundles deref/free/memtrack CHECKs in one file).
+  writeFile(filterDir / "alloc.c",
+            "#include <stdlib.h>\n"
+            "void make_and_drop(int n) {\n"
+            "  int *buf = malloc(n * sizeof(int));\n"
+            "  free(buf);\n"
+            "}\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "alloc.yml"));
+  std::string yml = readFile(benchmarkDir / "alloc.yml");
+  EXPECT_NE(yml.find("valid-memsafety.prp"), std::string::npos);
 }
 
 TEST_F(VerifyStageTest, DegradedFunctionIsStrippedAndUnharnessed) {
@@ -378,13 +445,11 @@ TEST_F(VerifyStageTest, AssertRewriteAddsUnreachCallProperty) {
   ASSERT_TRUE(fs::exists(benchmarkDir / "checked.yml"));
 
   std::string src = readFile(benchmarkDir / "checked.c");
-  EXPECT_NE(src.find("void reach_error(void) { assert(0); }"), std::string::npos);
+  // reach_error() is defined unconditionally in argv_c_harness.h now, not
+  // per-file; only the rewritten call site and the runtime include remain
+  // in the .c itself.
   EXPECT_NE(src.find("if (!(r >= a)) reach_error();"), std::string::npos);
-  // AddVerifiersConsumer unconditionally adds its own #include <assert.h>
-  // alongside the reach_error definition, so this may duplicate the one
-  // already in the source; that's harmless since assert.h is deliberately
-  // unguarded against re-inclusion, so only presence is checked here.
-  EXPECT_NE(src.find("#include <assert.h>"), std::string::npos);
+  EXPECT_NE(src.find("#include \"argv_c_harness.h\""), std::string::npos);
 
   std::string yml = readFile(benchmarkDir / "checked.yml");
   EXPECT_NE(yml.find("unreach-call.prp"), std::string::npos);
@@ -405,7 +470,5 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
   ASSERT_TRUE(fs::exists(benchmarkDir / "withmain.c"));
 
   std::string src = readFile(benchmarkDir / "withmain.c");
-  EXPECT_NE(src.find("original_main(argc, argv);"), std::string::npos);
-  // argv strings come from a stack buffer filled with nondet_memory, no heap.
-  EXPECT_NE(src.find("__argv_buf"), std::string::npos);
+  EXPECT_NE(src.find("original_main(argc, __havoc_argv_fill(argc));"), std::string::npos);
 }

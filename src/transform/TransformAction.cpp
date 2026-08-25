@@ -4,7 +4,6 @@
 
 #include "TransformAction.hpp"
 #include "AddStdIncludesConsumer.hpp"
-#include "AddVerifiersConsumer.hpp"
 #include "DebugLog.hpp"
 #include "HavocCallsConsumer.hpp"
 #include "MainGenConsumer.hpp"
@@ -40,9 +39,8 @@ IncludeFinder::IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter
                              std::shared_ptr<std::set<std::string>> existingIncludes)
     : _Mgr(SM), _Rewriter(rewriter), _ExistingIncludes(existingIncludes) {}
 
-// assert(cond) always expands with the macro name token first and the
-// closing paren as the invocation's last token, so Range brackets exactly
-// the text to replace
+// assert(cond) expands with the macro name token first and the closing paren
+// last, so Range brackets exactly the text to replace.
 void AssertRewriter::MacroExpands(const clang::Token &MacroNameTok, const clang::MacroDefinition &MD,
                                   clang::SourceRange Range, const clang::MacroArgs *) {
   const clang::IdentifierInfo *id = MacroNameTok.getIdentifierInfo();
@@ -60,8 +58,8 @@ void AssertRewriter::MacroExpands(const clang::Token &MacroNameTok, const clang:
   if (invalid)
     return;
 
-  size_t openParen = text.find('(');
-  size_t closeParen = text.rfind(')');
+  auto openParen = text.find('(');
+  auto closeParen = text.rfind(')');
   if (openParen == llvm::StringRef::npos || closeParen == llvm::StringRef::npos ||
       closeParen <= openParen)
     return;
@@ -69,43 +67,38 @@ void AssertRewriter::MacroExpands(const clang::Token &MacroNameTok, const clang:
 
   debugLog(3, "[transform] rewrote assert(" + cond.str() + ") -> reach_error()");
   _Rewriter.ReplaceText(charRange, ("if (!(" + cond + ")) reach_error()").str());
-  _NeededSuffixes->insert("__reach_error");
 }
 
 AssertRewriter::AssertRewriter(clang::SourceManager &SM, clang::Rewriter &rewriter,
-                               std::shared_ptr<std::set<std::string>> neededSuffixes,
                                const clang::LangOptions &langOpts)
-    : _Mgr(SM), _Rewriter(rewriter), _NeededSuffixes(neededSuffixes), _LangOpts(langOpts) {}
+    : _Mgr(SM), _Rewriter(rewriter), _LangOpts(langOpts) {}
 
 TransformAction::TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc)
     : _Output(output), _Rewriter(),
       _UnresolvedTypeNames(std::make_shared<std::set<std::string>>()), _Havoc(havoc) {}
 
-// unique_ptr can't be copied, so tempVector is built up and moved into MultiplexConsumer.
 std::unique_ptr<clang::ASTConsumer>
 TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef) {
   auto existingIncludes = std::make_shared<std::set<std::string>>();
-  // Verifier suffixes needed by call havocking and the generated main;
-  // AddVerifiersConsumer runs last and emits the extern declarations
-  auto neededSuffixes = std::make_shared<std::set<std::string>>();
 
   clang::Preprocessor &pp = compiler.getPreprocessor();
   pp.addPPCallbacks(
       std::make_unique<IncludeFinder>(compiler.getSourceManager(), _Rewriter, existingIncludes));
-  pp.addPPCallbacks(std::make_unique<AssertRewriter>(compiler.getSourceManager(), _Rewriter,
-                                                     neededSuffixes, pp.getLangOpts()));
+  pp.addPPCallbacks(
+      std::make_unique<AssertRewriter>(compiler.getSourceManager(), _Rewriter, pp.getLangOpts()));
 
-  // Functions HavocCallsConsumer found to have collapsed entirely to no-ops;
-  // MainGenConsumer skips harnessing them
+  // HavocCallsConsumer fills this; MainGenConsumer skips harnessing them.
   auto noOpFunctions = std::make_shared<std::set<std::string>>();
+  // Filled by both HavocCallsConsumer (a havocked pointer-returning call) and
+  // MainGenConsumer (a harnessed pointer parameter); MainGenConsumer emits the
+  // forward declarations into the file prelude once every call is known.
+  auto neededFwdDecls = std::make_shared<std::set<std::string>>();
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(
-      std::make_unique<HavocCallsConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
+      std::make_unique<HavocCallsConsumer>(noOpFunctions, neededFwdDecls, _Rewriter));
   tempVector.emplace_back(
-      std::make_unique<MainGenConsumer>(neededSuffixes, noOpFunctions, _Rewriter));
-  tempVector.emplace_back(
-      std::make_unique<AddVerifiersConsumer>(neededSuffixes, existingIncludes, _Rewriter, _Havoc));
+      std::make_unique<MainGenConsumer>(noOpFunctions, neededFwdDecls, _Rewriter, _Havoc));
   tempVector.emplace_back(
       std::make_unique<AddStdIncludesConsumer>(existingIncludes, _UnresolvedTypeNames, _Rewriter));
 
@@ -114,15 +107,13 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
 
 bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   _Rewriter.setSourceMgr(compiler.getSourceManager(), compiler.getLangOpts());
-  // Ownership passes to the DiagnosticsEngine; it outlives parsing, which is
-  // all this consumer needs to run for.
+  // Ownership passes to the DiagnosticsEngine, which outlives parsing.
   compiler.getDiagnostics().setClient(new UnknownTypeDiagConsumer(_UnresolvedTypeNames),
                                       /*ShouldOwnClient=*/true);
   return clang::ASTFrontendAction::BeginSourceFileAction(compiler);
 }
 
 void TransformAction::EndSourceFileAction() {
-  // Retrieve the edited buffer and write to the new output location
   _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
 }
 

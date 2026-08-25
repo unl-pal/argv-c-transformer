@@ -27,6 +27,10 @@ int main(int argc, char **argv) {
   }
 
   Filterer filter(invocation->configFile, invocation->inputPath);
+  if (!std::filesystem::exists(filter.getDatabaseDir())) {
+    std::cerr << "Database directory not found: " << filter.getDatabaseDir() << std::endl;
+    return 1;
+  }
   filter.run();
 
   // When an input was given on the command line, the transform must read the
@@ -38,11 +42,19 @@ int main(int argc, char **argv) {
   // filter's resolved input tree, so transform can resolve local #includes
   // against it too (filterDir only mirrors .c files, not headers).
   transformer.setDatabaseDir(filter.getDatabaseDir());
+  if (!std::filesystem::exists(transformer.getFilterDir())) {
+    std::cerr << "Filter directory not found: " << transformer.getFilterDir() << std::endl;
+    return 1;
+  }
   transformer.run();
 
   // Verify always reads the transform's resolved output directory, whichever
   // of default / config / derived-from-input won.
   Verifier verifier(invocation->configFile, transformer.getTransformDir());
+  if (!std::filesystem::exists(verifier.getTransformDir())) {
+    std::cerr << "Transform directory not found: " << verifier.getTransformDir() << std::endl;
+    return 1;
+  }
   verifier.run();
 
   // cleanup if user didn't specify intermediate dirs

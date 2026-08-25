@@ -175,9 +175,7 @@ TEST_F(TransformStageTest, ArgcArgvMainProducesTransformedSource) {
 
   std::string src = readFile(transformDir / "withmain.c");
   EXPECT_NE(src.find("original_main"), std::string::npos);
-  // argv strings are synthesized into a stack buffer, not heap-allocated.
-  EXPECT_NE(src.find("__argv_buf"), std::string::npos);
-  EXPECT_NE(src.find("__VERIFIER_nondet_memory"), std::string::npos);
-  EXPECT_NE(src.find("__VERIFIER_nondet_int"), std::string::npos);
-  EXPECT_NE(src.find("abort"), std::string::npos);
+  EXPECT_NE(src.find("#include \"argv_c_harness.h\""), std::string::npos);
+  EXPECT_NE(src.find("__HAVOC_ARGC"), std::string::npos);
+  EXPECT_NE(src.find("__havoc_argv_fill"), std::string::npos);
 }

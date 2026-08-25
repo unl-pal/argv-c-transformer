@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "HavocPolicy.hpp"
+#include "HavocBounds.hpp"
 #include "IncludeIndex.hpp"
 
 #include <filesystem>
@@ -22,10 +22,13 @@ struct transformConfigs {
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string transformDir; ///< Output directory for transformed files (verify-stage input).
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
-  /// Original repo tree the filtered files came from, used only to resolve
-  /// quoted #includes to -I paths. Empty means no local-header resolution.
+  /**
+   * Original repo tree the filtered files came from, used only to resolve
+   * quoted #includes to -I paths. Empty means no local-header resolution.
+   */
   std::string databaseDir;
-  HavocBounds havoc;        ///< Bounds emitted as __HAVOC_* macros into each benchmark.
+  /** Bounds MainGenConsumer emits as __HAVOC_* macros into each transformed file. */
+  HavocBounds havoc;
 };
 
 /**
@@ -125,6 +128,13 @@ public:
   const std::string &getTransformDir() const { return configuration.transformDir; }
 
   /**
+   * @brief Returns the resolved input directory of filtered files to transform.
+   *
+   * Lets the driver check this exists before calling run().
+   */
+  const std::string &getFilterDir() const { return configuration.filterDir; }
+
+  /**
    * @brief Points local-#include resolution at the original repo tree.
    *
    * filterDir only mirrors .c files, so a filtered file's quoted #includes
@@ -134,11 +144,13 @@ public:
   void setDatabaseDir(const std::string &dir) { configuration.databaseDir = dir; }
 
 private:
-  /// Path settings and flags loaded from the config file.
+  /** Path settings and flags loaded from the config file. */
   struct transformConfigs configuration;
-  /// Count of .c files attempted across the run, for the end-of-run summary.
+  /** Count of .c files attempted across the run, for the end-of-run summary. */
   int _totalProcessed = 0;
-  /// Header basename → directory index over databaseDir, built once in run()
-  /// and used to resolve each file's quoted #includes to -I search paths.
+  /**
+   * Header basename → directory index over databaseDir, built once in run()
+   * and used to resolve each file's quoted #includes to -I search paths.
+   */
   std::optional<HeaderIndex> headerIndex;
 };

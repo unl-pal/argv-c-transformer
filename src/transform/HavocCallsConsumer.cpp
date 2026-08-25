@@ -14,17 +14,14 @@
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <llvm/Support/Casting.h>
 
-HavocCallsConsumer::HavocCallsConsumer(std::shared_ptr<std::set<std::string>> neededSuffixes,
-                                       std::shared_ptr<std::set<std::string>> noOpFunctions,
+HavocCallsConsumer::HavocCallsConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
+                                       std::shared_ptr<std::set<std::string>> neededFwdDecls,
                                        clang::Rewriter &rewriter)
-    : _NeededSuffixes(neededSuffixes), _NoOpFunctions(noOpFunctions), _Rewriter(rewriter) {}
+    : _NoOpFunctions(noOpFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter) {}
 
 void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
-  HavocCallsVisitor Visitor(&Context, _NeededSuffixes, _Rewriter);
+  HavocCallsVisitor Visitor(&Context, _NeededFwdDecls, _Rewriter);
   Visitor.TraverseDecl(Context.getTranslationUnitDecl());
-  // Only now is it settled which havocked calls survived pruning, and so which
-  // verifier declarations the output actually needs.
-  Visitor.finalizeSuffixes();
 
   // Strip any function whose body collapsed entirely to no-ops
   clang::SourceManager &mgr = Context.getSourceManager();

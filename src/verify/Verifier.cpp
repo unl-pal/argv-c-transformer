@@ -8,8 +8,13 @@
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
+#include "HarnessHeaderData.hpp"
 
+#include <cerrno>
+#include <csignal>
 #include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -17,8 +22,12 @@
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
 #include <optional>
+#include <regex>
 #include <string>
+#include <sys/wait.h>
 #include <system_error>
+#include <unistd.h>
+#include <vector>
 
 // Mirrors Transformer's own fallback default, so a bare Verifier invocation
 // lines up with the rest of the "repos" -> "repos-benchmarks" chain.
@@ -28,13 +37,14 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   config = parsePipelineConfig(configFile);
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
+  configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
   if (!inputPath.empty())
     configuration.transformDir = inputPath;
   configuration.benchmarkDir = config.benchmarkDir.empty()
-                                    ? inputBaseName(configuration.transformDir) + "-benchmarks"
-                                    : config.benchmarkDir;
+                                   ? inputBaseName(configuration.transformDir) + "-benchmarks"
+                                   : config.benchmarkDir;
   globalDebugLevel() = configuration.debugLevel;
 }
 
@@ -101,6 +111,65 @@ bool Verifier::verifyFile(std::filesystem::path path) {
   return true;
 }
 
+int Verifier::verifyFileIsolated(std::filesystem::path path) {
+  pid_t pid = fork();
+  if (pid < 0) {
+    debugLog(0, "fork failed, verifying in-process: " + path.string());
+    return verifyFile(path) ? 1 : 0;
+  }
+
+  if (pid == 0) {
+    int produced = verifyFile(path) ? 1 : 0;
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(produced);
+  }
+
+  time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
+  int status = 0;
+  while (true) {
+    pid_t done = waitpid(pid, &status, WNOHANG);
+    if (done == pid)
+      break;
+    if (done < 0 && errno != EINTR) {
+      debugLog(0, "waitpid failed for " + path.string() + ", killing: " + strerror(errno));
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(path);
+      return 0;
+    }
+    if (time(nullptr) >= deadline) {
+      debugLog(0, "Timeout, killing verify of: " + path.string());
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      cleanupPartialOutput(path);
+      return 0;
+    }
+    struct timespec nap = {0, 20 * 1000 * 1000}; // 20ms
+    nanosleep(&nap, nullptr);
+  }
+
+  if (WIFEXITED(status))
+    return WEXITSTATUS(status) == 1 ? 1 : 0;
+  debugLog(0, "Verify crashed (signal " + std::to_string(WTERMSIG(status)) +
+                  "), skipping: " + path.string());
+  cleanupPartialOutput(path);
+  return 0;
+}
+
+void Verifier::cleanupPartialOutput(std::filesystem::path path) {
+  std::filesystem::path outPath =
+      std::filesystem::path(configuration.benchmarkDir) / path.filename();
+  std::error_code ec;
+  std::filesystem::remove(outPath, ec);
+  std::filesystem::path ymlPath = outPath;
+  ymlPath.replace_extension(".yml");
+  std::filesystem::remove(ymlPath, ec);
+  std::filesystem::path iPath = outPath;
+  iPath.replace_extension(".i");
+  std::filesystem::remove(iPath, ec);
+}
+
 int Verifier::verifyAll(std::filesystem::path path) {
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[verify] path does not exist: " + path.string());
@@ -119,7 +188,7 @@ int Verifier::verifyAll(std::filesystem::path path) {
       _totalProcessed++;
       if (globalDebugLevel() == 0)
         std::cout << "\r[verify] " << _totalProcessed << " processed" << std::flush;
-      return verifyFile(path) ? 1 : 0;
+      return verifyFileIsolated(path);
     }
     debugLog(4, "[verify] skipped (not .c): " + path.filename().string());
     return 0;
@@ -128,74 +197,16 @@ int Verifier::verifyAll(std::filesystem::path path) {
   return 0;
 }
 
-static constexpr const char *kVerifierStubs = R"(
-#include <stdbool.h>
-#include <stddef.h>
-bool __VERIFIER_nondet_bool(void) { return false; }
-char __VERIFIER_nondet_char(void) { return 'a'; }
-unsigned char __VERIFIER_nondet_uchar(void) { return 'a'; }
-short __VERIFIER_nondet_short(void) { return 0; }
-unsigned short __VERIFIER_nondet_ushort(void) { return 0; }
-int __VERIFIER_nondet_int(void) { return 0; }
-unsigned int __VERIFIER_nondet_uint(void) { return 0; }
-long __VERIFIER_nondet_long(void) { return 0; }
-unsigned long __VERIFIER_nondet_ulong(void) { return 0; }
-long long __VERIFIER_nondet_longlong(void) { return 0; }
-unsigned long long __VERIFIER_nondet_ulonglong(void) { return 0; }
-size_t __VERIFIER_nondet_size_t(void) { return 0; }
-float __VERIFIER_nondet_float(void) { return 0; }
-double __VERIFIER_nondet_double(void) { return 0; }
-void* __VERIFIER_nondet_pointer(void) { return (void*)(0); }
-void __VERIFIER_nondet_memory(void *mem, size_t size) {
-  unsigned char *p = (unsigned char *)mem;
-  for (size_t i = 0; i < size; i++) p[i] = __VERIFIER_nondet_uchar();
-}
-)";
-
-// Pulls the first few "error:" lines out of a clang -fsyntax-only stderr
-// capture and joins them into one compact line, so a failing compile can be
-// diagnosed at debugLevel 4 without dumping the whole diagnostic log.
-static std::string summarizeCompileErrors(const std::filesystem::path &errPath) {
-  std::ifstream in(errPath);
-  std::string line;
-  std::vector<std::string> errors;
-  while (errors.size() < 3 && std::getline(in, line)) {
-    if (line.find("error:") != std::string::npos)
-      errors.push_back(line);
-  }
-  std::string summary;
-  for (size_t i = 0; i < errors.size(); i++) {
-    if (i)
-      summary += " | ";
-    summary += errors[i];
-  }
-  return summary;
-}
-
-// NOTE: cmd is passed to std::system (shell-interpreted), and path/verifierPath
-// are not escaped. path originates from a cloned/downloaded repository, so a
+// NOTE: cmd is passed to std::system (shell-interpreted), and path is not
+// escaped. path originates from a cloned/downloaded repository, so a
 // pathological filename containing shell metacharacters could inject commands
 bool Verifier::checkCompilable(std::filesystem::path path) {
   std::optional<std::string> cmd = clangCommand("-fsyntax-only -xc");
   if (!cmd)
     return false;
 
-  std::filesystem::path verifierPath = path.parent_path() / "__verifier_stubs.c";
-  {
-    std::ofstream out(verifierPath);
-    out << kVerifierStubs;
-  }
-
-  std::filesystem::path errPath = path.parent_path() / "__compile_check.err";
-  *cmd += " " + path.string() + " " + verifierPath.string() + " 2>" + errPath.string();
-  int result = std::system(cmd->c_str());
-  std::filesystem::remove(verifierPath);
-
-  if (result != 0)
-    debugLog(3, "[verify] compile errors for " + path.string() + ": " +
-                    summarizeCompileErrors(errPath));
-  std::filesystem::remove(errPath);
-  return result == 0;
+  *cmd += " " + path.string() + " 2>/dev/null";
+  return std::system(cmd->c_str()) == 0;
 }
 
 std::vector<BenchmarkProperty> Verifier::selectProperties(
@@ -246,11 +257,15 @@ void Verifier::writeBenchmarkTask(
   out << "format_version: '2.0'\n"
       << "\n"
       << "input_files: '" << inputFile << "'\n"
-      << "\n"
-      << "properties:\n";
-  for (const BenchmarkProperty &prop : properties) {
-    out << "  - property_file: " << prop.propertyFile << "\n"
-        << "    expected_verdict: " << (prop.expectedVerdict ? "true" : "false") << "\n";
+      << "\n";
+  if (properties.empty()) {
+    out << "properties: []\n";
+  } else {
+    out << "properties:\n";
+    for (const BenchmarkProperty &prop : properties) {
+      out << "  - property_file: " << prop.propertyFile << "\n"
+          << "    expected_verdict: " << (prop.expectedVerdict ? "true" : "false") << "\n";
+    }
   }
   out << "\n"
       << "options:\n"
@@ -259,6 +274,52 @@ void Verifier::writeBenchmarkTask(
   if (properties.empty())
     debugLog(1, "[verify] WARN: no properties found for " + cPath.string());
 }
+
+namespace {
+
+// Lines matching one of these are pure header noise. Each entry is a case a specific verifier
+// frontend chokes on despite the declaration being semantically inert.
+//
+// - _Float16/32/64/128(x): glibc's <bits/floatn-common.h> fallback typedefs
+//   for the C23 extended float types, pulled in transitively by <stdio.h>
+const std::vector<std::regex> &knownNoiseTypedefs() {
+  static const std::vector<std::regex> patterns = {
+      std::regex(R"(^\s*typedef\s+.+\s_Float\d+x?\s*;\s*$)"),
+  };
+  return patterns;
+}
+
+// Strips knownNoiseTypedefs() lines from an already-preprocessed .i file.
+void stripNoiseTypedefs(const std::filesystem::path &iPath) {
+  std::ifstream in(iPath);
+  if (!in)
+    return;
+  std::vector<std::string> kept;
+  std::string line;
+  bool changed = false;
+  while (std::getline(in, line)) {
+    bool isNoise = false;
+    for (const std::regex &pattern : knownNoiseTypedefs()) {
+      if (std::regex_match(line, pattern)) {
+        isNoise = true;
+        break;
+      }
+    }
+    if (isNoise) {
+      changed = true;
+      continue;
+    }
+    kept.push_back(std::move(line));
+  }
+  in.close();
+  if (!changed)
+    return;
+  std::ofstream out(iPath, std::ios::trunc);
+  for (const std::string &l : kept)
+    out << l << "\n";
+}
+
+} // namespace
 
 // NOTE: same std::system/unescaped-path caveat as checkCompilable above.
 bool Verifier::preprocess(std::filesystem::path cPath) {
@@ -269,7 +330,16 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
   if (!cmd)
     return false;
   *cmd += " " + cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
-  return std::system(cmd->c_str()) == 0;
+  if (std::system(cmd->c_str()) != 0)
+    return false;
+  stripNoiseTypedefs(iPath);
+  return true;
+}
+
+void Verifier::writeHarnessHeader() {
+  std::filesystem::create_directories(configuration.benchmarkDir);
+  std::ofstream out(std::filesystem::path(configuration.benchmarkDir) / kArgvCHarnessHeaderName);
+  out << kArgvCHarnessHeaderContents;
 }
 
 int Verifier::run() {
@@ -279,6 +349,7 @@ int Verifier::run() {
     debugLog(0, "Transform directory not found: " + configuration.transformDir);
     return 0;
   }
+  writeHarnessHeader();
   int result = verifyAll(path);
   int discarded = _totalProcessed - result;
   std::cout << "\n=== Verify summary ===\n"

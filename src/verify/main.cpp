@@ -23,6 +23,11 @@ int main(int argc, char **argv) {
   }
 
   Verifier verifier(invocation->configFile, invocation->inputPath);
+  if (!std::filesystem::exists(verifier.getTransformDir())) {
+    std::cerr << "Transform directory not found: " << verifier.getTransformDir() << std::endl;
+    return 1;
+  }
+
   verifier.run();
   return 0;
 }

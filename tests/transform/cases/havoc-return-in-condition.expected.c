@@ -1,8 +1,9 @@
-#include <stdlib.h>
+#define __HAVOC_ARGC_MIN 1
+#define __HAVOC_ARGC_MAX 4
 #define __HAVOC_STR_MAX 16
+#define __HAVOC_BLOCK_MAX 128
 #define __HAVOC_ARRAY_ELEMS 8
-#define __HAVOC_OPAQUE_BYTES 128
-extern void __VERIFIER_nondet_memory(void *, size_t);
+#include "argv_c_harness.h"
 
 int *acquire(void);
 

@@ -6,11 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 
 # ArgV C Transformer - Design
 
-This document covers the *why* behind the pipeline: design choices, the
-trade-offs and roadblocks that motivated them, what's explicitly unsupported,
-and known downstream-verifier quirks. For what the pipeline does and how to
-run it, see [`README.md`](../README.md); for stage-by-stage architecture
-(consumer chains, source layout), see [`CLAUDE.md`](../CLAUDE.md).
+This document is intended to describe the pipeline's design choices, the
+trade-offs and roadblocks that motivated them, and what's explicitly unsupported.
+For what the pipeline does and how to run it, see [`README.md`](../README.md).
 
 Download, Filter, Transform, and Verify are four separate steps, not one
 uniformly-configured pipeline: Download reads its own config
@@ -115,10 +113,15 @@ which `__VERIFIER_nondet_*` variant to use.
 ### Pointer Returns in Havocking
 
 When havocking a call that returns a pointer, a raw nondet pointer value cannot be used
-(dereferencing an arbitrary address is undefined behavior). Instead, the replacement
-allocates a real block via `malloc` and fills it with nondeterministic content
-(`__VERIFIER_nondet_memory`). `char *` returns are null-terminated so that string
-operations on the result stay in bounds. Function pointer returns are left as-is.
+(dereferencing an arbitrary address is undefined behavior). Instead, `HavocCallsVisitor`
+hoists a uniquely-named stack buffer declaration to the top of the enclosing function
+(so it outlives the call, unlike a function's own stack storage would) and replaces the
+call with a plain-C expression that fills it and yields it: `__VERIFIER_nondet_memory`
+directly for a block, or `__havoc_cstring_fill` (from the shared `argv_c_harness.h`,
+copied into every benchmark) for a `char *` return, which additionally null-terminates
+the buffer so string operations on the result stay in bounds. No heap, so no `free`
+obligation. No GNU statement-expressions either - standard C only. Function pointer
+returns are left as-is.
 
 ### Cleaning Up After Havocking
 
@@ -149,8 +152,8 @@ would leave a dangling `extern` that no compiler warning would catch.
 The Transform step removes all non-system `#include` directives. Functions declared in
 project-local headers are havocked anyway, so the includes only leave unresolvable
 references. Standard types that were reaching the file transitively through a stripped
-project header are recovered by `AddStdIncludesConsumer` (see `CLAUDE.md`). Files that
-depend on *project* types or macros from a local header will still fail to compile after
+project header are recovered by `AddStdIncludesConsumer`. Files that depend on
+*project* types or macros from a local header will still fail to compile after
 stripping and are caught by the Verify stage's `keepCompilesOnly` compile check.
 
 An unresolved type isn't always AST-visible for `AddStdIncludesConsumer` to recover: a
@@ -240,11 +243,10 @@ flowchart TB
     end
 
     subgraph transformC["Transform consumers (in order)"]
-        T1["HavocCallsConsumer<br/>havoc in-file calls, record suffixes"]
-        T2["MainGenConsumer<br/>rename main, synthesize int main(void)"]
-        T3["AddVerifiersConsumer<br/>insert extern nondet decls"]
-        T4["AddStdIncludesConsumer<br/>re-inject needed standard headers"]
-        T1 --> T2 --> T3 --> T4
+        T1["HavocCallsConsumer<br/>havoc in-file calls"]
+        T2["MainGenConsumer<br/>rename main, synthesize int main(void),<br/>insert argv_c_harness.h include"]
+        T3["AddStdIncludesConsumer<br/>re-inject needed standard headers"]
+        T1 --> T2 --> T3
     end
 
     subgraph verifyC["Verify consumers (in order)"]
@@ -269,40 +271,3 @@ flowchart TB
 Verifier nondet naming, suffix→C-type mappings, and the `isVerifierGenerated`
 generated-artifact check live in `src/common/include/VerifierNames.hpp`, shared by all
 stages.
-
-## Downstream Verifier Frontend Compatibility
-
-Benchmarks that clang accepts can still be rejected by an SV-Comp verifier's own C
-frontend. Two classes of this have been characterized on full benchmark runs:
-
-### CPAchecker "parsing failed" (32/1,880 benchmarks)
-
-CPAchecker's Eclipse-CDT frontend is stricter than CBMC's and UAutomizer's about a
-handful of valid-but-unusual C constructs. All 32 failures traced back to constructs in
-the *original* downloaded source (none transform-introduced), in eight categories, the
-largest being non-const string literals initialized into `char *` (~11 files), K&R-style
-function definitions, and function-scope `extern` re-declarations, plus one-offs
-(`_Atomic(...)` typedefs from `<stdatomic.h>`, GCC vector-`mode` attributes, excess
-array initializers, scalar braced initializers). Four of the categories map onto clang
-warning flags (`-Wdeprecated-non-prototype`, `-Wwrite-strings`, `-Wexcess-initializers`,
-`-Wdeprecated-attributes`); the proposed mitigation is to enable those in the Verify
-stage's `checkCompilable` and record hits as a `verifier-frontend-risk` note rather than
-a filtering gate, since the other verifiers tolerate these files. Function-scope
-`extern` has no clang diagnostic and would need a small `VisitVarDecl` AST check.
-Full breakdown: [`cpachecker-parsing-failures.md`](./cpachecker-parsing-failures.md).
-
-### CBMC `_FloatNN` typedef conflict (~66% of CBMC runs)
-
-Preprocessing with `clang -E -P -std=gnu11` inlines glibc's fallback typedefs for the
-C23 extended float types (`typedef float _Float32;` etc., from `bits/floatn-common.h`)
-into the `.i` file. CBMC treats `_Float32`/`_Float64`/… as reserved built-in type names
-and aborts with `ERROR (6)` on the (semantically inert) redeclaration; CPAchecker and
-UAutomizer don't special-case the names and are unaffected. The fix is to strip exactly
-those `typedef <type> _FloatNN;` lines from the `.i` after preprocessing, safe because
-no generated code spells those names; they are pure header noise. A `stripFloatNNTypedefs`
-regex helper doing this was validated on a full run (identical benchmark counts, CBMC
-went from instant errors to real verdicts) but **is not currently in the tree**; its
-home would be `Verifier::preprocess`, now that preprocessing lives in the Verify stage.
-A same-shaped, currently 1-file gap exists for `<stdatomic.h>`'s
-`typedef _Atomic(_Bool) atomic_bool;` lines (a CPAchecker parse failure, category 4
-above). Details: [`cbmc-float-nn-typedef-fix.md`](./cbmc-float-nn-typedef-fix.md).
