@@ -154,9 +154,9 @@ TEST_F(HeaderClosureTest, MacroFromSurvivingSystemIncludeIsNotReEmitted) {
 
 TEST_F(HeaderClosureTest, HeaderStructIsInlinedAndSizedExactly) {
   // The payoff. Before closure, a header-defined struct was havocked as a flat
-  // __HAVOC_OPAQUE_BYTES block, because planPointer tests isInMainFile and the
-  // definition was about to be deleted. Inlining it makes that test true, so
-  // the exact layout is used with no change to HavocPolicy at all.
+  // __HAVOC_BLOCK_MAX byte block, because planPointer tests isInMainFile and
+  // the definition was about to be deleted. Inlining it makes that test true,
+  // so the harness declares real Point-typed storage instead.
   writeRepoFile("point.h", "struct Point { int x; int y; };\n");
   writeRepoFile("area.c", "#include \"point.h\"\n"
                           "int area(struct Point *p) { return p->x * p->y; }\n");
@@ -165,8 +165,9 @@ TEST_F(HeaderClosureTest, HeaderStructIsInlinedAndSizedExactly) {
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_NE(out.find("struct Point { int x; int y; };"), std::string::npos) << out;
-  EXPECT_NE(out.find("(struct Point *)__havoc_block(sizeof(struct Point)"), std::string::npos)
-      << out;
+  EXPECT_NE(out.find("struct Point __h"), std::string::npos) << out;
+  EXPECT_EQ(out.find("unsigned char __h"), std::string::npos)
+      << "sized Point storage should not fall back to the opaque byte block:\n" << out;
   EXPECT_TRUE(fs::exists(benchmarkDir / "area.i"));
 }
 
@@ -184,8 +185,11 @@ TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_NE(out.find("#include <stddef.h>"), std::string::npos) << out;
   EXPECT_NE(out.find("size_t n;"), std::string::npos) << out;
-  // Complete definition inlined, so the block is sized rather than opaque.
-  EXPECT_NE(out.find("sizeof(Buf)"), std::string::npos) << out;
+  // Complete definition inlined, so real Buf-typed storage is declared rather
+  // than falling back to the opaque byte block.
+  EXPECT_NE(out.find("Buf __h"), std::string::npos) << out;
+  EXPECT_EQ(out.find("unsigned char __h"), std::string::npos)
+      << "sized Buf storage should not fall back to the opaque byte block:\n" << out;
 }
 
 TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedButPrototypeIs) {

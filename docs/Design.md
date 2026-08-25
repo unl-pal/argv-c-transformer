@@ -271,7 +271,7 @@ Deleted volume is the least of it. Three sharper points:
   call in the initializer*, with no diagnostic and no AST node. All three exist only
   because the definition is absent.
 - **It costs benchmark precision, not just code.** A struct defined in a project header
-  is havocked as `__HAVOC_OPAQUE_BYTES` (an arbitrary flat byte count) because
+  is havocked as `__HAVOC_BLOCK_MAX` (an arbitrary flat byte count) because
   `isInMainFile` fails on its definition. With the definition present it would size
   exactly: `sizeof(T) * __HAVOC_ARRAY_ELEMS`. Every header-defined struct in the corpus
   is currently over- or under-allocated.
@@ -328,7 +328,7 @@ definitions regardless.
 include and type-recovery mechanisms above are kept, and with them their residual failure
 modes: types that resolve by string-matching rather than by Decl, the unrecoverable
 dropped-declarator cases in [`DiagnosticsHandoff.md`](./DiagnosticsHandoff.md), and
-`__HAVOC_OPAQUE_BYTES` standing in for every header-defined struct. Those are accepted
+`__HAVOC_BLOCK_MAX` standing in for every header-defined struct. Those are accepted
 because they fail *safe* - a wrong guess yields a file that does not compile and is
 discarded by `keepCompilesOnly`, rather than a benchmark that verifies incorrectly. The
 macro gap is the one that does not fail safe, which is why it is being closed directly
@@ -406,15 +406,15 @@ emptied by repair collapses back to that same verbatim text.
 - **`envp` (third `main` parameter)**: `int main(int, char**, char**)` is not explicitly
   handled; only the first two parameters (`argc`, `argv`) are synthesized
 - **Exact sizing of header-defined structs**: a struct whose definition came from a
-  stripped project header is havocked as a flat `__HAVOC_OPAQUE_BYTES` block, never
+  stripped project header is havocked as a flat `__HAVOC_BLOCK_MAX` block, never
   `sizeof(T)`. `pointeeFwdDecl` solves only the *naming* half of this - it emits an
   incomplete `typedef struct __havoc_T T;` so the harness cast compiles, which is
   sufficient precisely because the size is never taken. Sizing exactly would require
   re-emitting the full definition, and therefore transitive closure over its field types.
   Two things to know before attempting it:
-  - If the struct is larger than `__HAVOC_OPAQUE_BYTES`, the callee writes past the block
+  - If the struct is larger than `__HAVOC_BLOCK_MAX`, the callee writes past the block
     and a memory-safety verifier reports a violation that is an artifact of the harness.
-    Mitigable today without code changes: `havocOpaqueBytes` is emitted as a macro, so a
+    Mitigable today without code changes: `havocBlockMax` is emitted as a macro, so a
     benchmark can be retuned in place.
   - Completing these types would *reduce* coverage. The Opaque branch returns
     `viable = true` before reaching `recordHasPointerFields`, so an opaque record is
