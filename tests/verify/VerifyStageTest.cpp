@@ -409,12 +409,15 @@ TEST_F(VerifyStageTest, HarnessEmptyAfterRepairIsDiscarded) {
 TEST_F(VerifyStageTest, KeepCompilesOnlyDiscardsUndefinedTypes) {
   // Uses a type from a local header that gets stripped during transform -
   // the transformed file parses but won't compile, so keepCompilesOnly
-  // (default true) should discard it in the verify stage.
+  // (default true) should discard it in the verify stage. The param is an int
+  // so the function stays harnessable and the file actually reaches verify.
   writeFile(filterDir / "local_types.h",
             "typedef struct { int id; } widget_t;\n");
   writeFile(filterDir / "badtype.c",
             "#include \"local_types.h\"\n"
-            "int process(widget_t w) {\n"
+            "int process(int n) {\n"
+            "  widget_t w;\n"
+            "  w.id = n;\n"
             "  return w.id + 1;\n"
             "}\n");
 
@@ -471,4 +474,30 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
 
   std::string src = readFile(benchmarkDir / "withmain.c");
   EXPECT_NE(src.find("original_main(argc, __havoc_argv_fill(argc));"), std::string::npos);
+}
+
+// The counterpart to KeepCompilesOnlyDiscardsUndefinedTypes: with the flag
+// off, the non-compiling .c is kept for inspection - no .yml, no .i - and the
+// worker pool must not treat that decline as residue to clean up.
+TEST_F(VerifyStageTest, KeepCompilesOnlyFalseKeepsNonCompilingSource) {
+  writeConfig("keepCompilesOnly = false\n");
+  writeFile(filterDir / "local_types.h",
+            "typedef struct { int id; } widget_t;\n");
+  // An int param keeps the function harnessable, so transform emits a real
+  // main and the file survives to verify; widget_t is only declared in the
+  // local header transform strips, so the result parses but will not compile.
+  writeFile(filterDir / "badtype.c",
+            "#include \"local_types.h\"\n"
+            "int process(int n) {\n"
+            "  widget_t w;\n"
+            "  w.id = n;\n"
+            "  return w.id + 1;\n"
+            "}\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_EQ(count, 0);
+  EXPECT_TRUE(fs::exists(benchmarkDir / "badtype.c"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.yml"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.i"));
 }

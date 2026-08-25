@@ -22,6 +22,7 @@ add_executable(filter_tests
   common/ConfigParserTest.cpp
   common/HavocPolicyTest.cpp
   common/IncludeIndexTest.cpp
+  common/WorkerPoolTest.cpp
   filter/CountingVisitorTest.cpp
   filter/FilterFunctionsConsumerTest.cpp
   filter/FiltererStageTest.cpp

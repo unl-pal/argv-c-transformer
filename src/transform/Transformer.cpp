@@ -8,11 +8,8 @@
 #include "ConfigParser.hpp"
 #include "DebugLog.hpp"
 #include "IncludeIndex.hpp"
+#include "WorkerPool.hpp"
 
-#include <cerrno>
-#include <csignal>
-#include <cstring>
-#include <ctime>
 #include <filesystem>
 #include <iostream>
 #include <llvm/ADT/StringRef.h>
@@ -20,7 +17,6 @@
 #include <string>
 #include <system_error>
 #include <vector>
-#include <sys/wait.h>
 #include <unistd.h>
 
 const int defaultDebugLevel = 0;
@@ -33,6 +29,7 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
   configuration.debugLevel = defaultDebugLevel;
   configuration.filterDir = defaultFilterDir;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
+  configuration.nproc = 0;
   if (!configFile.empty())
     parseConfig(configFile);
   if (configuration.transformDir.empty())
@@ -64,7 +61,7 @@ std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path pat
 }
 
 bool Transformer::transformFile(std::filesystem::path path) {
-  debugLog(1, "[transform] file " + std::to_string(_totalProcessed) + ": " + path.string());
+  debugLog(1, "[transform] file: " + path.string());
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[transform] path does not exist: " + path.string());
     return false;
@@ -90,102 +87,83 @@ bool Transformer::transformFile(std::filesystem::path path) {
   output.close();
   if (!ran) {
     debugLog(1, "[transform] clang tool failed on: " + path.string());
+    // The stream above already created/truncated srcPath.
+    cleanupPartialOutput(path);
     return false;
   }
 
   if (harnessIsEmpty(srcPath)) {
     debugLog(1, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
                     srcPath.string());
-    std::filesystem::remove(srcPath);
+    cleanupPartialOutput(path);
     return false;
   }
   return true;
 }
 
-int Transformer::transformFileIsolated(std::filesystem::path path) {
-  _totalProcessed++;
-  if (globalDebugLevel() == 0)
-    std::cout << "\r[transform] " << _totalProcessed << " processed" << std::flush;
-  pid_t pid = fork();
-  if (pid < 0) {
-    debugLog(0, "fork failed, transforming in-process: " + path.string());
-    return transformFile(path) ? 1 : 0;
-  }
-
-  if (pid == 0) {
-    // Child: _exit skips C++ stream flushing, so flush explicitly first.
-    int produced = transformFile(path) ? 1 : 0;
-    std::cout.flush();
-    std::cerr.flush();
-    _exit(produced);
-  }
-
-  // Parent: poll, killing the child if it overruns the budget.
-  time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
-  int status = 0;
-  while (true) {
-    pid_t done = waitpid(pid, &status, WNOHANG);
-    if (done == pid)
-      break;
-    if (done < 0 && errno != EINTR) {
-      debugLog(0, "waitpid failed for " + path.string() + ", killing: " + strerror(errno));
-      kill(pid, SIGKILL);
-      waitpid(pid, &status, 0);
-      cleanupPartialOutput(path);
-      return 0;
-    }
-    if (time(nullptr) >= deadline) {
-      debugLog(0, "Timeout, killing transform of: " + path.string());
-      kill(pid, SIGKILL);
-      waitpid(pid, &status, 0);
-      cleanupPartialOutput(path);
-      return 0;
-    }
-    struct timespec nap = {0, 20 * 1000 * 1000}; // 20ms
-    nanosleep(&nap, nullptr);
-  }
-
-  if (WIFEXITED(status))
-    return WEXITSTATUS(status) == 1 ? 1 : 0;
-  // WIFSIGNALED: harnessIsEmpty never ran, so a partial .c may be left behind.
-  debugLog(0, "Transform crashed (signal " + std::to_string(WTERMSIG(status)) + "), skipping: " +
-                  path.string());
-  cleanupPartialOutput(path);
-  return 0;
-}
-
 void Transformer::cleanupPartialOutput(std::filesystem::path path) {
+  std::filesystem::path outPath = flattenedOutputPath(path);
+  // A top-level file flattens to its own name, so filterDir == transformDir
+  // makes the "partial output" the input itself.
+  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath))
+    return;
   std::error_code ec;
-  std::filesystem::remove(flattenedOutputPath(path), ec);
+  std::filesystem::remove(outPath, ec);
 }
 
-int Transformer::transformAll(std::filesystem::path path) {
+void Transformer::collectCFiles(std::filesystem::path path, std::vector<std::filesystem::path> &files) {
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[transform] path does not exist: " + path.string());
-    return 0;
+    return;
   }
   if (std::filesystem::is_directory(path)) {
-    int successes = 0;
     for (const std::filesystem::directory_entry &entry :
          std::filesystem::directory_iterator(path)) {
-      successes += transformAll(entry.path());
+      collectCFiles(entry.path(), files);
     }
-    return successes;
+    return;
   }
   if (std::filesystem::is_regular_file(path)) {
-    if (path.extension() == ".c")
-      return transformFileIsolated(path);
-    debugLog(4, "[transform] skipped (not .c): " + path.filename().string());
-    return 0;
+    if (path.extension() == ".c") {
+      files.push_back(path);
+    } else {
+      debugLog(3, "[transform] skipped (not .c): " + path.filename().string());
+    }
+    return;
   }
   debugLog(3, "[transform] ignored: " + path.filename().string());
-  return 0;
+}
+
+WorkerPoolResult Transformer::transformAll(std::filesystem::path path) {
+  std::vector<std::filesystem::path> files;
+  collectCFiles(path, files);
+  _totalProcessed = static_cast<int>(files.size());
+
+  int workers = resolveWorkerCount(configuration.nproc);
+  debugLog(1, "[transform] worker pool size: " + std::to_string(workers));
+  std::cout << "[transform] processing " << files.size() << " file(s) with " << workers
+            << " worker(s)" << std::endl;
+
+  IsolatedWork work;
+  work.child = [this](const std::filesystem::path &p) {
+    bool produced = transformFile(p);
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(produced ? kProducedExit : kDeclinedExit);
+  };
+  work.runInProcess = [this](const std::filesystem::path &p) { return transformFile(p); };
+  work.cleanupPartial = [this](const std::filesystem::path &p) { cleanupPartialOutput(p); };
+  work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[transform] " + msg); };
+  work.label = "transform";
+
+  return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work);
 }
 
 void Transformer::parseConfig(std::string configFile) {
   PipelineConfig config = parsePipelineConfig(configFile);
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  configuration.nproc = config.fileSettings.at("nproc");
   if (!config.transformDir.empty()) {
     configuration.transformDir = config.transformDir;
   }
@@ -209,13 +187,13 @@ int Transformer::run() {
   // Built before any fork; each child inherits the index as-is.
   headerIndex.emplace(configuration.databaseDir);
 
-  int result = transformAll(path);
-  int discarded = _totalProcessed - result;
+  WorkerPoolResult result = transformAll(path);
   std::cout << "\n=== Transform summary ===\n"
             << "  Files processed:        " << _totalProcessed << "\n"
-            << "  Files transformed:      " << result << "\n"
-            << "  Discarded/failed:       " << discarded << "\n"
+            << "  Files transformed:      " << result.produced << "\n"
+            << "  Declined (no output):   " << result.declined << "\n"
+            << "  Failed:                 " << result.failed << "\n"
             << "  Time elapsed:           "
             << formatElapsed(std::chrono::steady_clock::now() - startTime) << std::endl;
-  return result;
+  return result.produced;
 }

@@ -51,7 +51,7 @@ struct PipelineConfig {
   /** File-level integer settings (booleans are stored as 0/1). */
   std::map<std::string, int> fileSettings = {
       {"debugLevel", 0},       {"minFileLoC", 0},        {"maxFileLoC", 9999},
-      {"fileTimeoutSecs", 60}, {"keepCompilesOnly", 1},
+      {"fileTimeoutSecs", 60}, {"keepCompilesOnly", 1},  {"nproc", 0},
   };
 
   /**
@@ -224,6 +224,13 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
           std::cerr << "Warning: 'debugLevel' expects 0-4 - clamping value '" << value << "'"
                     << std::endl;
           level = std::clamp(level, 0, 4);
+        }
+      } else if (key == "nproc") {
+        int &workers = config.fileSettings.at(key);
+        if (workers < 0) {
+          std::cerr << "Warning: 'nproc' expects a non-negative count (0 = auto) - ignoring value '"
+                    << value << "'" << std::endl;
+          workers = 0;
         }
       }
     } else if (config.havoc.count(key)) {
