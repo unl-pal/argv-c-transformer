@@ -22,36 +22,21 @@
 
 namespace {
 
-// What a call becomes when havocked. One of three modes:
-//   Erase   - void return: drop the call.
-//   Inline  - primitive return: replace with a __VERIFIER_nondet_* expression.
-//   Pointer - pointer return: hoist stack storage and substitute it (the caller
-//             renders and places it; a pointer cannot be a bare expression).
 struct HavocAction {
   enum class Mode { Erase, Inline, Pointer } mode;
   std::string replacement; // Inline only.
   PointerPlan plan;        // Pointer only.
 };
 
-// Decides whether a call is havocked, and into what. Returns nullopt for every
-// call left alone: macro expansions, verifier calls the filter already
-// injected, system-header calls, aggregate returns, and pointer returns whose
-// plan is not viable.
-//
-// This is a pure function of the call and its type - it consults no traversal
-// state - which is what lets a later pass ask the same question again instead
-// of remembering the answer. It is the single source of truth for "do we
-// rewrite this call", so the rewrite and the purity check cannot drift apart.
+// Decides whether a call is havocked, and into what; nullopt leaves it alone.
+// Stateless, so callable repeatedly for the same call.
 std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTContext &C) {
   clang::SourceManager &mgr = C.getSourceManager();
   clang::SourceLocation loc = E->getExprLoc();
-  // Only rewrite calls spelled out in the file being transformed; a macro
-  // expansion has no rewritable source range of its own
-  if (!mgr.isInMainFile(loc) || loc.isMacroID())
+  if (!mgr.isInMainFile(loc) || loc.isMacroID()) // a macro expansion has no rewritable range
     return std::nullopt;
 
   if (const clang::FunctionDecl *callee = E->getDirectCallee()) {
-    // Keep nondet calls already injected by the filter step
     if (callee->getIdentifier() && callee->getName().starts_with("__VERIFIER_"))
       return std::nullopt;
     if (!callee->isImplicit() && !mgr.isInMainFile(callee->getLocation()) &&
@@ -63,7 +48,6 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
   if (returnType.isNull() || returnType.getTypePtrOrNull() == nullptr)
     return std::nullopt;
 
-  // A void call yields no value to havoc, so it is erased rather than replaced.
   if (returnType->isVoidType())
     return HavocAction{HavocAction::Mode::Erase, "", {}};
 
@@ -71,26 +55,15 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
     return HavocAction{HavocAction::Mode::Inline, "__VERIFIER_nondet_" + *suffix + "()", {}};
 
   if (returnType->isAnyPointerType()) {
-    // Pointer returns get a havocked-but-valid block (SV-COMP
-    // __VERIFIER_nondet_memory over stack storage). planPointer decides the
-    // shape and size from the pointee rather than guessing; the storage and its
-    // placement are the caller's job, since a pointer cannot be a bare
-    // expression the way a primitive nondet can.
-    //
-    // A non-viable plan (function pointer, or a record whose fields the callee
-    // could not legally dereference after a bulk havoc) leaves the call alone.
-    PointerPlan plan = planPointer(returnType, mgr);
+    PointerPlan plan = planPointer(returnType, mgr); // storage/placement are the caller's job
     if (!plan.viable)
       return std::nullopt;
     return HavocAction{HavocAction::Mode::Pointer, "", plan};
   }
 
-  // Aggregate returns (structs, unions) have no expression-position nondet
-  // equivalent; those calls are left as-is
-  return std::nullopt;
+  return std::nullopt; // aggregate return: no expression-position nondet equivalent
 }
 
-// Returns the set of loop-local variable declarations.
 std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
   std::set<const clang::VarDecl *> vars;
   if (const auto *declStmt = clang::dyn_cast_or_null<clang::DeclStmt>(init)) {
@@ -102,7 +75,6 @@ std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
   return vars;
 }
 
-// Returns the VarDecl behind an expression if it's a plain variable reference, else null.
 const clang::VarDecl *referencedVar(const clang::Expr *E) {
   if (!E)
     return nullptr;
@@ -111,12 +83,8 @@ const clang::VarDecl *referencedVar(const clang::Expr *E) {
   return nullptr;
 }
 
-// Consumes a `;` immediately following `S`, if there is one. Used to clean up
-// a no-op statement that's a direct child of a block: erasing just the
-// statement's own text (a dropped call, or a fully-pruned if/while/do/for
-// whose own grammar has no trailing `;`) can still leave that `;` behind, so
-// this is applied once the statement is known to sit directly in a `{ ... }`
-// list, where nothing needs to remain in its place.
+// Consumes a `;` immediately following `S`, if there is one - left behind by
+// erasing a dropped call or a pruned if/while/do/for with no trailing `;` of its own.
 void eatTrailingSemicolon(clang::ASTContext *C, clang::Rewriter &rewriter, const clang::Stmt *S) {
   std::optional<clang::Token> next =
       clang::Lexer::findNextToken(S->getEndLoc(), C->getSourceManager(), C->getLangOpts());
@@ -124,7 +92,6 @@ void eatTrailingSemicolon(clang::ASTContext *C, clang::Rewriter &rewriter, const
     rewriter.RemoveText(next->getLocation(), next->getLength());
 }
 
-// Formats a source location as "file:line" for per-decision debug logging.
 std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
   clang::PresumedLoc presumed = mgr.getPresumedLoc(loc);
   if (!presumed.isValid())
@@ -134,11 +101,8 @@ std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
 
 } // namespace
 
-// Conservative purity check to decide if an expression - an `if` condition
-// dropped with its no-op branches, or a hollowed-out expression statement -
-// can be deleted. Anything not explicitly recognized is treated as
-// side-effecting. `mutableVars` lists variables whose mutation is allowed
-// (a for-loop's init-declared variables, which die with the loop).
+// Anything not explicitly recognized is treated as side-effecting.
+// `mutableVars`: a for-loop's own init-declared variables.
 bool HavocCallsVisitor::isSideEffectFree(
     const clang::Expr *E, const std::set<const clang::VarDecl *> &mutableVars) const {
   if (!E)
@@ -154,23 +118,13 @@ bool HavocCallsVisitor::isSideEffectFree(
   case clang::Stmt::UnaryExprOrTypeTraitExprClass: // sizeof / alignof
     return true;
   case clang::Stmt::CallExprClass: {
-    // A havocked call is pure by construction: the transform is
-    // intraprocedural, so the callee's writes to globals and out-parameters
-    // are already discarded, leaving the return value as its only
-    // contribution. Deleting it where that value is unused therefore changes
-    // nothing. A call we do *not* havoc (system call, aggregate return,
-    // non-viable pointer plan) is a real call and stays side-effecting.
-    //
-    // A pointer return is the exception: havocking it hoists stack storage
-    // above the enclosing statement, so that statement must survive - it is
-    // pure only when its value is discarded and the call is dropped outright.
     const auto *CE = clang::cast<clang::CallExpr>(E);
     std::optional<HavocAction> action = classifyCall(CE, *_C);
     if (!action)
       return false;
     if (action->mode == HavocAction::Mode::Pointer) {
       bool discarded = false;
-      hoistAnchor(CE, discarded);
+      hoistAnchor(CE, discarded); // pure only if the hoisted storage goes unused
       return discarded;
     }
     return true;
@@ -206,10 +160,6 @@ bool HavocCallsVisitor::isSideEffectFree(
   }
 }
 
-// True if any part of `S` is a call this transform havocs. Paired with
-// isSideEffectFree, this is what keeps pruning to statements we ourselves
-// made vacuous: an author's own dead expression statement (`x;`) is pure but
-// contains nothing of ours, so it survives untouched.
 bool HavocCallsVisitor::containsHavocedCall(const clang::Stmt *S) const {
   if (!S)
     return false;
@@ -223,13 +173,7 @@ bool HavocCallsVisitor::containsHavocedCall(const clang::Stmt *S) const {
   return false;
 }
 
-// A `for` loop's init clause is a statement, not an expression: either a
-// declaration (`for (int i = 0; ...)`, checked via `mutableVars` - the
-// caller already derived it from this same `init` via loopLocalVars) or a
-// bare expression-statement. `dyn_cast_or_null` folds the null-init case
-// (no init clause at all) into the same side-effect-free fallthrough as an
-// unreachable non-DeclStmt/non-Expr init - Clang's AST never produces the
-// latter for a ForStmt, so the permissive default is never actually hit.
+// init is a declaration or a bare expression-statement, or null if omitted.
 bool HavocCallsVisitor::isInitSideEffectFree(
     const clang::Stmt *init, const std::set<const clang::VarDecl *> &mutableVars) const {
   for (const clang::VarDecl *varDecl : mutableVars) {
@@ -274,12 +218,9 @@ const clang::Stmt *HavocCallsVisitor::hoistAnchor(const clang::CallExpr *E, bool
       return nullptr;
     const clang::DynTypedNode &parent = parents[0];
     if (parent.get<clang::CompoundStmt>()) {
-      // `node` is a direct child of a block: the statement to hoist above.
       const clang::Stmt *anchor = node.get<clang::Stmt>();
       if (!anchor)
         return nullptr;
-      // The call is the whole statement (a bare expression statement) when the
-      // anchor, stripped of parens and implicit conversions, is the call itself.
       if (const auto *asExpr = clang::dyn_cast<clang::Expr>(anchor))
         discarded = asExpr->IgnoreParenImpCasts() == E;
       return anchor;
@@ -293,14 +234,11 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
   bool discarded = false;
   const clang::Stmt *anchor = hoistAnchor(E, discarded);
   if (discarded) {
-    // No handle survives on the block, so nothing needs synthesizing.
     debugLog(4, "[transform] " + where + ": dropped discarded pointer call");
     eraseStmt(E);
     return true;
   }
   if (!anchor) {
-    // Not inside a block (e.g. a global initializer): nowhere to hoist. Leaving
-    // the call is the only compilable option - the callee is defined in-file.
     debugLog(2, "[transform] " + where + ": pointer call has no statement to hoist above; left as-is");
     return true;
   }
@@ -310,24 +248,17 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
   PointerStorage store = renderPointerStorage(plan, returnType, stub, returnType.getAsString(),
                                               _C->getPrintingPolicy(), /*indent=*/"");
 
-  // indentNewLines matches the hoisted lines to the anchor statement's column.
   _Rewriter.InsertText(anchor->getBeginLoc(), store.decls, /*InsertAfter=*/false,
                        /*indentNewLines=*/true);
   _Rewriter.ReplaceText(E->getSourceRange(), store.arg);
 
-  // A struct tag named only inside a parameter/return type has prototype
-  // scope; hoisting it to file scope is needed regardless of whether this
-  // particular call site later turns out unreachable - a stray forward
-  // declaration is always legal C, so nothing needs to track its liveness.
   if (!plan.fwdDecl.empty())
     _NeededFwdDecls->insert(plan.fwdDecl);
   debugLog(4, "[transform] " + where + ": havocked pointer call -> stack " + stub);
   return true;
 }
 
-// Erasing is idempotent: a statement can be reached both as a rewritten call
-// and later as a vacuous child of its enclosing block, and re-removing a range
-// that has already been removed would confuse the Rewriter's delta bookkeeping.
+// Idempotent: re-removing an already-erased range confuses the Rewriter's delta bookkeeping.
 void HavocCallsVisitor::eraseStmt(const clang::Stmt *S) {
   if (!_ErasedStmts.insert(S).second)
     return;
@@ -340,25 +271,15 @@ bool HavocCallsVisitor::isNoOp(const clang::Stmt *S) const {
   auto cached = _NoOpMemo.find(S);
   if (cached != _NoOpMemo.end())
     return cached->second;
-  // Memoized because an enclosing statement re-asks about subtrees its children
-  // already answered for. Under post-order every child is cached before its
-  // parent asks, so the recursion below stays one level deep in practice.
-  return _NoOpMemo.emplace(S, computeNoOp(S)).first->second;
+  return _NoOpMemo.emplace(S, computeNoOp(S)).first->second; // an enclosing statement re-asks about its children
 }
 
-// Statement-level vacuity, derived from the statement rather than accumulated
-// during traversal, so it is correct whenever it is asked - not only once
-// traversal has passed the node.
 bool HavocCallsVisitor::computeNoOp(const clang::Stmt *S) const {
-  // A statement we could not rewrite anyway must never be called vacuous, or
-  // an enclosing block would try to erase a range that is not really there.
   clang::SourceLocation begin = S->getBeginLoc();
   if (begin.isMacroID() || !_C->getSourceManager().isInMainFile(begin))
-    return false;
+    return false; // unrewritable, so never vacuous
 
-  // An expression statement we hollowed out: what is left of it is pure, and
-  // at least one piece of it is our own rewrite. Both halves matter - the
-  // second is what stops us from tidying up dead code the author wrote.
+  // pure AND contains our own rewrite - never an author's own dead code
   if (const auto *E = clang::dyn_cast<clang::Expr>(S))
     return containsHavocedCall(E) && isSideEffectFree(E, {});
 
@@ -367,19 +288,14 @@ bool HavocCallsVisitor::computeNoOp(const clang::Stmt *S) const {
       if (!isNoOp(child))
         return false;
     }
-    return true; // an empty block is vacuous too
+    return true;
   }
 
-  // For `if`, pruning a dead branch can never change termination. For loops it
-  // can: an empty body spinning on a side-effect-free condition
-  // (`while (n > 0);`) may hang, and pruning turns that hang into termination -
-  // intentional, since such loops are havoc artifacts, not meaningful
-  // termination-benchmark content. A condition/increment with a real side
-  // effect is kept, since it may be observed after the loop.
   if (const auto *ifS = clang::dyn_cast<clang::IfStmt>(S))
     return isNoOp(ifS->getThen()) && isNoOp(ifS->getElse()) &&
            isSideEffectFree(ifS->getCond(), {});
 
+  // pruning may turn a hang into termination - accepted, these are havoc artifacts
   if (const auto *whileS = clang::dyn_cast<clang::WhileStmt>(S))
     return isNoOp(whileS->getBody()) && isSideEffectFree(whileS->getCond(), {});
 
@@ -400,11 +316,7 @@ bool HavocCallsVisitor::VisitCompoundStmt(clang::CompoundStmt *S) {
   for (const clang::Stmt *child : S->body()) {
     if (!isNoOp(child))
       continue;
-    // A no-op statement sitting directly in this block can simply vanish;
-    // unlike the mandatory single-statement slot of an unbraced if/while/do
-    // body, nothing needs to be left in its place. NullStmt and an
-    // already-empty nested block have nothing further to erase.
-    if (clang::isa<clang::NullStmt>(child) || clang::isa<clang::CompoundStmt>(child))
+    if (clang::isa<clang::NullStmt>(child) || clang::isa<clang::CompoundStmt>(child)) // nothing further to erase
       continue;
     eraseStmt(child);
     eatTrailingSemicolon(_C, _Rewriter, child);
@@ -412,9 +324,6 @@ bool HavocCallsVisitor::VisitCompoundStmt(clang::CompoundStmt *S) {
   return true;
 }
 
-// What makes an if/loop vacuous now lives entirely in computeNoOp, so this is
-// just the erase half: the statement's branches and clauses no longer have to
-// be destructured at the call site and passed back in.
 void HavocCallsVisitor::pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc) {
   if (!isNoOp(S))
     return;

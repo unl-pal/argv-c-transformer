@@ -64,10 +64,6 @@ public:
 private:
   /**
    * @brief A synthesized call: setup statements plus the argument list.
-   *
-   * Parameters, unlike havocked return values, are in statement position, so
-   * they can be preceded by setup. That is what makes bounded integer
-   * arguments possible.
    */
   struct HarnessCall {
     std::string prologue; ///< Indented, newline-terminated statements before the call.
@@ -97,11 +93,9 @@ private:
   /**
    * @brief Builds the harness body that invokes the renamed {@code original_main}.
    *
-   * Unlike an arbitrary function, {@code main}'s pointer params have a known
-   * contract, so instead of skipping it we synthesize a realistic call: a nondet,
-   * bounded {@code argc} from {@code __HAVOC_ARGC()} and a matching havocked
-   * {@code argv} from {@code __havoc_argv_fill()}, both helpers defined in
-   * argv_c_harness.h.
+   * Synthesizes a nondet, bounded {@code argc} from {@code __HAVOC_ARGC()} and
+   * a matching havocked {@code argv} from {@code __havoc_argv_fill()}, both
+   * helpers defined in argv_c_harness.h.
    *
    * @param mainFn The original {@code main} FunctionDecl (already renamed in
    *               the rewriter output).

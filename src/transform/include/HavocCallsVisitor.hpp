@@ -92,11 +92,9 @@ public:
   /**
    * @brief True if S contributes nothing once havocking is applied.
    *
-   * Derived structurally from S (see computeNoOp), so it holds whenever it is
-   * asked rather than only after traversal has passed the node. An expression
-   * statement qualifies only if it is side-effect-free *and* contains a call
-   * this transform havocs, so dead code the author wrote is never touched -
-   * only what we hollowed out.
+   * Derived structurally from S (see computeNoOp). An expression statement
+   * qualifies only if it is side-effect-free *and* contains a call this
+   * transform havocs.
    *
    * @param S The statement to classify, or nullptr.
    */
@@ -112,10 +110,8 @@ private:
   /**
    * @brief True if E can be deleted without changing observable behaviour.
    *
-   * Havocked calls count as pure - the transform being intraprocedural, a
-   * havocked call contributes only its return value - so an expression made
-   * entirely of them and of pure operands is removable. Calls left alone
-   * (system calls, aggregate returns, non-viable pointer plans) are not.
+   * Havocked calls count as pure; calls left alone (system calls, aggregate
+   * returns, non-viable pointer plans) do not.
    *
    * @param E           Expression to check, or nullptr (vacuously true).
    * @param mutableVars Variables whose mutation is unobservable, typically a
@@ -150,12 +146,10 @@ private:
    * @brief Havocs a pointer-returning call by hoisting stack storage above the
    *        enclosing statement and substituting it for the call.
    *
-   * A pointer cannot be synthesized as a bare expression the way a primitive
-   * nondet can, so the storage (@ref renderPointerStorage) is emitted as
-   * statements before the call's enclosing statement, and the call is replaced
-   * by a reference to it. A call whose value is discarded needs no storage and
-   * is dropped like a void call; a call with no block to hoist into (not inside
-   * a compound statement) is left as-is, the only compilable fallback.
+   * Storage (@ref renderPointerStorage) is emitted as statements before the
+   * call's enclosing statement, and the call is replaced by a reference to it.
+   * A call whose value is discarded is dropped like a void call; a call with
+   * no block to hoist into (not inside a compound statement) is left as-is.
    *
    * @param E     The pointer-returning call.
    * @param plan  Its viable pointer plan.
