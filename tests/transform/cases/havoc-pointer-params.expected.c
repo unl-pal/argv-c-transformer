@@ -45,7 +45,7 @@ int main(void) {
   third(__h2);
   char __h3[__HAVOC_STR_MAX];
   first_char(__havoc_cstring_fill(__h3, __HAVOC_STR_MAX));
-  _Alignas(16) unsigned char __h4[__HAVOC_BLOCK_MAX];
+  unsigned char __h4[__HAVOC_BLOCK_MAX];
   __VERIFIER_nondet_memory(__h4, sizeof(__h4));
   opaque((void *)__h4);
   struct Point __h5[__HAVOC_ARRAY_ELEMS];

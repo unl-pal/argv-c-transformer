@@ -85,7 +85,7 @@ private:
    * @param func    The function to synthesize a call for.
    * @param Context The AST context, for the SourceManager (telling types that
    *                survive into the output from those defined only in a stripped
-   *                header) and the PrintingPolicy (spelling storage declarations).
+   *                header).
    * @return The call; check {@code viable} before using it.
    */
   HarnessCall genCallHarness(const clang::FunctionDecl *func, clang::ASTContext &Context);

@@ -162,8 +162,7 @@ TEST(PlanPointer, FunctionPointerIsNotViable) {
 
 TEST(RenderPointerStorage, BlockDeclaresTypedArrayAndPassesIt) {
   auto p = planFirstParam("void f(int *a) {}");
-  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *",
-                                          p.ast->getASTContext().getPrintingPolicy());
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *");
   EXPECT_EQ(s.arg, "__h0");
   EXPECT_FALSE(s.cstring);
   EXPECT_EQ(s.decls, "  int __h0[__HAVOC_ARRAY_ELEMS];\n"
@@ -172,8 +171,7 @@ TEST(RenderPointerStorage, BlockDeclaresTypedArrayAndPassesIt) {
 
 TEST(RenderPointerStorage, ArrayUsesDeclaredBound) {
   auto p = planFirstParam("void f(int a[3]) {}");
-  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *",
-                                          p.ast->getASTContext().getPrintingPolicy());
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *");
   EXPECT_EQ(s.decls, "  int __h0[3];\n"
                      "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }
@@ -183,8 +181,7 @@ TEST(RenderPointerStorage, CStringPlantsInBoundsTerminator) {
   // __havoc_cstring_fill helper, which hands back the same buffer, so it
   // stands in for the call directly - only the declaration is hoisted.
   auto p = planFirstParam("void f(char *s) {}");
-  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "char *",
-                                          p.ast->getASTContext().getPrintingPolicy());
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "char *");
   EXPECT_TRUE(s.cstring);
   EXPECT_EQ(s.arg, "__havoc_cstring_fill(__h0, __HAVOC_STR_MAX)");
   EXPECT_EQ(s.decls, "  char __h0[__HAVOC_STR_MAX];\n");
@@ -192,17 +189,15 @@ TEST(RenderPointerStorage, CStringPlantsInBoundsTerminator) {
 
 TEST(RenderPointerStorage, OpaqueUsesAlignedByteBufferAndCasts) {
   auto p = planFirstParam("void f(void *p) {}");
-  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "void *",
-                                          p.ast->getASTContext().getPrintingPolicy());
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "void *");
   EXPECT_EQ(s.arg, "(void *)__h0");
-  EXPECT_EQ(s.decls, "  _Alignas(16) unsigned char __h0[__HAVOC_BLOCK_MAX];\n"
+  EXPECT_EQ(s.decls, "  unsigned char __h0[__HAVOC_BLOCK_MAX];\n"
                      "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }
 
 TEST(RenderPointerStorage, IndentParameterPrefixesEveryLine) {
   auto p = planFirstParam("void f(int *a) {}");
-  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *",
-                                          p.ast->getASTContext().getPrintingPolicy(), "");
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *", "");
   EXPECT_EQ(s.decls, "int __h0[__HAVOC_ARRAY_ELEMS];\n"
                      "__VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }

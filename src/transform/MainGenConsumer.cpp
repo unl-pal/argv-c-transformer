@@ -113,8 +113,7 @@ MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTConte
     if (!suffix) {
       std::string local = "__h" + std::to_string(counter++);
       PointerStorage store = renderPointerStorage(plans[i], declared, local,
-                                                  parm->getType().getAsString(),
-                                                  Context.getPrintingPolicy());
+                                                  parm->getType().getAsString());
       call.prologue += store.decls;
       call.args += store.arg;
       if (!plans[i].fwdDecl.empty())

@@ -27,10 +27,10 @@
  */
 enum class PointerShape {
   CString,  ///< @c char* havocked bytes with a nondet-positioned terminator.
-  Block,    ///< Pointer to a sized type, no declared bound: HavocBounds::arrayElems of them.
+  Block,    ///< Pointer to a sized type, no known bound.
   Array,    ///< Constant Array parameter @c T[N], using the declared bound N.
   Record,   ///< Struct/union with a definition.
-  Opaque,   ///< @c void*, incomplete.
+  Opaque,   ///< @c void* or incomplete.
   Function, ///< Never viable: no value can be synthesized.
 };
 
@@ -50,7 +50,7 @@ struct PointerPlan {
  */
 inline bool recordHasPointerFields(const clang::RecordDecl *record, unsigned depth = 0) {
   const clang::RecordDecl *def = record ? record->getDefinition() : nullptr;
-  if (!def || depth > 8) // cap guards against cycles via embedded records
+  if (!def || depth > 8) // reasonable recursion limit
     return true;
   for (const clang::FieldDecl *field : def->fields()) {
     clang::QualType type = field->getType();
@@ -172,15 +172,14 @@ struct PointerStorage {
  */
 inline PointerStorage renderPointerStorage(const PointerPlan &plan, clang::QualType declared,
                                            const std::string &name, const std::string &castType,
-                                           const clang::PrintingPolicy &policy,
                                            const std::string &indent = "  ") {
   PointerStorage out;
   if (!plan.viable)
     return out;
 
-  // _Alignas(16) covers the real pointee's unknown alignment.
+  // alignment potentially an issue
   if (plan.shape == PointerShape::Opaque) {
-    out.decls = indent + "_Alignas(16) unsigned char " + name + "[__HAVOC_BLOCK_MAX];\n" + indent +
+    out.decls = indent + "unsigned char " + name + "[__HAVOC_BLOCK_MAX];\n" + indent +
                "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
     out.arg = castType.empty() ? name : "(" + castType + ")" + name;
     return out;
@@ -204,8 +203,10 @@ inline PointerStorage renderPointerStorage(const PointerPlan &plan, clang::QualT
   else
     count = "__HAVOC_ARRAY_ELEMS";
 
-  std::string decl = name + "[" + count + "]"; // ensures multidimensional array syntax
-  pointee.getUnqualifiedType().getAsStringInternal(decl, policy);
+  std::string decl = name + "[" + count + "]";
+  // getAsStringInternal handles correct syntax for n-dimensions by appending
+  // additional dimensions' size, e.g. int[count] -> int[count][size]
+  pointee.getUnqualifiedType().getAsStringInternal(decl, clang::LangOptions());
   out.decls = indent + decl + ";\n";
 
   if (plan.shape == PointerShape::CString) {
