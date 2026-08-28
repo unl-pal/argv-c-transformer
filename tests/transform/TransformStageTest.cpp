@@ -44,14 +44,21 @@ protected:
   fs::path filterDir;
   fs::path transformDir;
   fs::path configPath;
+  /// Stand-in for the original repo tree: unlike filterDir it keeps headers.
+  fs::path dbDir;
+  /// Same as configPath but with databaseDir set, for local-header resolution.
+  fs::path dbConfigPath;
 
   void SetUp() override {
     tmpDir = fs::temp_directory_path() / ("transform_stage_test_" + std::to_string(getpid()));
     filterDir = tmpDir / "filtered";
     transformDir = tmpDir / "transformed";
+    dbDir = tmpDir / "repo";
     configPath = tmpDir / "test.config";
+    dbConfigPath = tmpDir / "test_db.config";
     fs::create_directories(filterDir);
     fs::create_directories(transformDir);
+    fs::create_directories(dbDir);
 
     std::ofstream cfg(configPath);
     cfg << "[File Locations]\n"
@@ -59,6 +66,14 @@ protected:
         << "transformDir = " << transformDir.string() << "\n"
         << "[Debug]\n"
         << "debugLevel = 0\n";
+
+    std::ofstream dbCfg(dbConfigPath);
+    dbCfg << "[File Locations]\n"
+          << "databaseDir = " << dbDir.string() << "\n"
+          << "filterDir = " << filterDir.string() << "\n"
+          << "transformDir = " << transformDir.string() << "\n"
+          << "[Debug]\n"
+          << "debugLevel = 0\n";
   }
 
   void TearDown() override { fs::remove_all(tmpDir); }
@@ -91,17 +106,59 @@ TEST_F(TransformStageTest, NestedPathFlattensWithUnderscores) {
 }
 
 TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
-  // All functions have pointer params → none can be harnessed → empty main
-  writeFile(filterDir / "ptrs_only.c",
-            "void process(int *data, int len) {\n"
-            "  for (int i = 0; i < len; i++) data[i]++;\n"
+  // Every function takes a struct by value, which has no nondet equivalent and
+  // is not a pointer either → none can be harnessed → empty main. (A pointer
+  // param would not do here any more: planPointer sizes those now.)
+  writeFile(filterDir / "aggregates_only.c",
+            "struct Point { int x; int y; };\n"
+            "int total(struct Point p) {\n"
+            "  return p.x + p.y;\n"
             "}\n");
 
   Transformer t(configPath.string());
   int count = t.run();
 
   EXPECT_EQ(count, 0);
-  EXPECT_FALSE(fs::exists(transformDir / "ptrs_only.c"));
+  EXPECT_FALSE(fs::exists(transformDir / "aggregates_only.c"));
+}
+
+// Regression: Transformer::parseConfig used to drop the config's databaseDir,
+// so a standalone `transform` run built an empty HeaderIndex and passed no -I
+// paths. The quoted #include then failed to resolve and clang error-recovered
+// by treating the unknown `Range *` as `int *` — silently producing a harness
+// that allocates a wrongly-sized block cast to a type the output never
+// declares. argv-c masked this by calling setDatabaseDir() explicitly.
+TEST_F(TransformStageTest, ConfigDatabaseDirResolvesLocalHeaders) {
+  // The original repo tree keeps the header; the filtered tree mirrors only .c
+  // files, so `mytypes.h` is reachable *only* via databaseDir.
+  writeFile(dbDir / "include" / "mytypes.h",
+            "typedef struct { int lo; int hi; } Range;\n"
+            "int rangeWidth(Range *r);\n");
+  const char *src = "#include \"mytypes.h\"\n"
+                    "int rangeWidth(Range *r) { return r->hi - r->lo; }\n"
+                    "int span(Range *r, int n) { return rangeWidth(r) + n; }\n";
+  writeFile(dbDir / "src" / "work.c", src);
+  writeFile(filterDir / "src" / "work.c", src);
+
+  Transformer t(dbConfigPath.string());
+  ASSERT_GE(t.run(), 1);
+
+  std::string out = readFile(transformDir / "src_work.c");
+
+  // `Range` resolved to a real RecordDecl whose definition is NOT in the main
+  // file (the #include is stripped textually), so planPointer returns Opaque.
+  // This pins the exact emission on purpose: if the Opaque policy changes,
+  // update this string to match the new intended output.
+  EXPECT_NE(out.find("span((Range *)__h"), std::string::npos)
+      << "harness did not emit the Opaque plan for Range *; output was:\n"
+      << out;
+  EXPECT_NE(out.find("unsigned char __h"), std::string::npos);
+
+  // The specific pre-fix symptom: with no -I path clang error-recovered by
+  // substituting `int` for the unknown `Range`, sizing the bogus `int *` as a
+  // Block — which would cast the harness argument to (int *), not (Range *).
+  EXPECT_EQ(out.find("span((int *)"), std::string::npos)
+      << "unknown-typename error recovery leaked into the harness";
 }
 
 TEST_F(TransformStageTest, ArgcArgvMainProducesTransformedSource) {

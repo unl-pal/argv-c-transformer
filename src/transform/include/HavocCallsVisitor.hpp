@@ -4,33 +4,40 @@
 
 #pragma once
 
+#include "HavocPolicy.hpp"
+
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/AST/Stmt.h>
 #include <clang/Rewrite/Core/Rewriter.h>
-#include <initializer_list>
+#include <map>
+#include <memory>
 #include <set>
+#include <string>
 
 /**
  * @brief Havocs every in-file function call so bodies become intraprocedural.
  *
- * Primitive returns -> {@code __VERIFIER_nondet_<type>()}; pointer returns ->
- * a uniquely-named buffer hoisted to the top of the enclosing function plus a
- * comma-expression at the call site that fills it and yields it (char
- * pointees go through {@code __havoc_cstring_fill}, from argv_c_harness.h,
- * for null-termination); void returns dropped; aggregate returns left as-is.
- * Dropped calls are marked no-op, and enclosing loops/branches that become
- * side-effect-free no-ops are pruned.
+ * Primitive returns -> {@code __VERIFIER_nondet_<type>()} inline; pointer
+ * returns -> stack storage filled with {@code __VERIFIER_nondet_memory} (or,
+ * for a C string, {@code __havoc_cstring_fill}), hoisted above the enclosing
+ * statement (see {@code renderPointerStorage}); void and discarded pointer
+ * returns dropped; aggregate returns left as-is. Dropped calls are marked
+ * no-op, and enclosing loops/branches that become side-effect-free no-ops are
+ * pruned.
  */
 class HavocCallsVisitor : public clang::RecursiveASTVisitor<HavocCallsVisitor> {
 public:
   /**
-   * @param C        AST context, used for return-type resolution and source manager access.
-   * @param rewriter Shared rewriter for modifying the source buffer.
+   * @param C               AST context, used for return-type resolution and source manager access.
+   * @param neededFwdDecls  Output set; file-scope forward declarations (e.g. "struct Rect")
+   *                        needed by a prototype-scope struct tag a havocked pointer casts to.
+   * @param rewriter        Shared rewriter for modifying the source buffer.
    */
-  HavocCallsVisitor(clang::ASTContext *C, clang::Rewriter &rewriter);
+  HavocCallsVisitor(clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededFwdDecls,
+                    clang::Rewriter &rewriter);
 
   /**
    * @brief Havocs a call if it should be (in-file, non-library, non-verifier, non-macro).
@@ -38,15 +45,6 @@ public:
    * @return false to stop traversal, true to continue.
    */
   bool VisitCallExpr(clang::CallExpr *E);
-
-  /**
-   * @brief Tracks the enclosing function's hoist point (just inside its
-   * opening brace) for the duration of its body, so a havocked pointer call
-   * anywhere inside can hoist its buffer declaration there.
-   * @param D The function declaration being traversed.
-   * @return true to continue traversal.
-   */
-  bool TraverseFunctionDecl(clang::FunctionDecl *D);
 
   /**
    * @brief Marks an empty or all-no-op compound statement as a no-op.
@@ -92,37 +90,101 @@ public:
   bool shouldTraversePostOrder();
 
   /**
-   * @brief True for NullStmt and anything previously recorded in _NoOpStmts.
+   * @brief True if S contributes nothing once havocking is applied.
+   *
+   * Derived structurally from S (see computeNoOp). An expression statement
+   * qualifies only if it is side-effect-free *and* contains a call this
+   * transform havocs.
+   *
    * @param S The statement to classify, or nullptr.
    */
   bool isNoOp(const clang::Stmt *S) const;
 
 private:
   /**
-   * @brief Shared prune rule for if/while/do/for.
-   *
-   * Erases S and marks it a no-op if every statement in branches is a no-op
-   * and cond/init/inc are all side-effect-free (init/inc only apply to for-loops).
-   *
-   * @param S        The statement to erase if it proves to be a no-op.
-   * @param keyLoc   Leading keyword location, used for the main-file/macro guard.
-   * @param branches Every branch/body statement that must be a no-op.
-   * @param cond     The controlling condition; must be side-effect-free.
-   * @param init     A for-loop's init clause, or nullptr.
-   * @param inc      A for-loop's increment clause, or nullptr.
-   * @return true if the statement was erased.
+   * @brief Erases a statement's text, at most once per statement.
+   * @param S The statement to remove from the output buffer.
    */
-  bool pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc,
-                   std::initializer_list<const clang::Stmt *> branches, const clang::Expr *cond,
-                   const clang::Stmt *init = nullptr, const clang::Expr *inc = nullptr);
+  void eraseStmt(const clang::Stmt *S);
+
+  /**
+   * @brief True if E can be deleted without changing observable behaviour.
+   *
+   * Havocked calls count as pure; calls left alone (system calls, aggregate
+   * returns, non-viable pointer plans) do not.
+   *
+   * @param E           Expression to check, or nullptr (vacuously true).
+   * @param mutableVars Variables whose mutation is unobservable, typically a
+   *                    for-loop's own init-declared variables; empty elsewhere.
+   */
+  bool isSideEffectFree(const clang::Expr *E,
+                        const std::set<const clang::VarDecl *> &mutableVars) const;
+
+  /**
+   * @brief isSideEffectFree for a for-loop's init clause, which may be a
+   *        declaration rather than an expression.
+   * @param init        The init clause, or nullptr.
+   * @param mutableVars As in isSideEffectFree.
+   */
+  bool isInitSideEffectFree(const clang::Stmt *init,
+                            const std::set<const clang::VarDecl *> &mutableVars) const;
+
+  /**
+   * @brief True if any call within S is one this transform havocs.
+   * @param S Subtree to search, or nullptr.
+   */
+  bool containsHavocedCall(const clang::Stmt *S) const;
+
+  /**
+   * @brief Shared prune rule for if/while/do/for: erases S if it is a no-op.
+   * @param S      The statement to erase if isNoOp accepts it.
+   * @param keyLoc Leading keyword location, used only for debug logging.
+   */
+  void pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc);
+
+  /**
+   * @brief Havocs a pointer-returning call by hoisting stack storage above the
+   *        enclosing statement and substituting it for the call.
+   *
+   * Storage (@ref renderPointerStorage) is emitted as statements before the
+   * call's enclosing statement, and the call is replaced by a reference to it.
+   * A call whose value is discarded is dropped like a void call; a call with
+   * no block to hoist into (not inside a compound statement) is left as-is.
+   *
+   * @param E     The pointer-returning call.
+   * @param plan  Its viable pointer plan.
+   * @param where Preformatted "file:line" for debug logging.
+   * @return true to continue traversal.
+   */
+  bool havocPointerReturn(clang::CallExpr *E, const PointerPlan &plan, const std::string &where);
+
+  /**
+   * @brief The statement a pointer call's storage must be hoisted above.
+   *
+   * Walks parents to the nearest node that is a direct child of a compound
+   * statement. Sets @p discarded when the call is that statement's whole value
+   * (a bare expression statement), meaning the value is unused.
+   *
+   * @param E         The call to locate.
+   * @param discarded Out: true if the call's return value is unused.
+   * @return The enclosing statement, or nullptr if the call is not inside a
+   *         compound statement (no safe place to hoist).
+   */
+  const clang::Stmt *hoistAnchor(const clang::CallExpr *E, bool &discarded) const;
+
+  /**
+   * @brief Computes statement-level vacuity structurally; isNoOp memoizes it.
+   * @param S The statement to classify; never null.
+   */
+  bool computeNoOp(const clang::Stmt *S) const;
 
   clang::ASTContext *_C;
+  std::shared_ptr<std::set<std::string>> _NeededFwdDecls;
   clang::Rewriter &_Rewriter;
-  std::set<const clang::Stmt *> _NoOpStmts;
-
-  /** @brief Insertion point just inside the current function's opening
-   * brace, or invalid outside any function body. Set by TraverseFunctionDecl. */
-  clang::SourceLocation _HoistPoint;
-  /** @brief Monotonic counter giving every hoisted buffer a unique name within the file. */
-  unsigned _HavocCounter = 0;
+  /** Memoized computeNoOp results; mutable so the const isNoOp can fill it. */
+  mutable std::map<const clang::Stmt *, bool> _NoOpMemo;
+  /** Statements already removed from the buffer, so eraseStmt stays idempotent. */
+  std::set<const clang::Stmt *> _ErasedStmts;
+  /** Names every hoisted pointer-return stub across the TU, keeping them unique. */
+  unsigned _StubCounter = 0;
 };

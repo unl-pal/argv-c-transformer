@@ -6,6 +6,7 @@
 
 #include "DebugLog.hpp"
 #include "HarnessHeaderData.hpp"
+#include "HavocPolicy.hpp"
 #include "VerifierNames.hpp"
 
 #include <clang/AST/Decl.h>
@@ -17,26 +18,14 @@
 #include <vector>
 
 MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
+                                 std::shared_ptr<std::set<std::string>> neededFwdDecls,
                                  clang::Rewriter &rewriter, const HavocBounds &havoc)
-    : _NoOpFunctions(noOpFunctions), _Rewriter(rewriter), _Havoc(havoc) {}
+    : _NoOpFunctions(noOpFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter),
+      _Havoc(havoc) {}
 
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &mgr = Context.getSourceManager();
 
-  // The generated harness always emits nondet calls, so the header is included
-  // unconditionally. Its __HAVOC_* bounds are emitted here rather than in the
-  // header itself: the header is one file shared by every benchmark and is
-  // rewritten each run, so per-benchmark bounds must live in the .c to survive
-  // hand-editing.
-  std::string prelude = "#define __HAVOC_ARGC_MIN " + std::to_string(_Havoc.argcMin) + "\n" +
-                        "#define __HAVOC_ARGC_MAX " + std::to_string(_Havoc.argcMax) + "\n" +
-                        "#define __HAVOC_STR_MAX " + std::to_string(_Havoc.strMax) + "\n" +
-                        "#define __HAVOC_BLOCK_MAX " + std::to_string(_Havoc.blockMax) + "\n" +
-                        "#include \"" + std::string(kArgvCHarnessHeaderName) + "\"\n";
-  _Rewriter.InsertTextBefore(mgr.translateLineCol(mgr.getMainFileID(), 1, 1), prelude + "\n");
-
-  // Rename any existing main so the generated one is the sole entry point;
-  // original_main is then harnessed like any other function.
   std::vector<const clang::FunctionDecl *> defined;
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
     const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
@@ -51,42 +40,104 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
     if (_NoOpFunctions->count(func->getNameAsString())) {
-      debugLog(2, "Info: " + func->getNameAsString() + " body collapsed to no-ops; not harnessed");
+      debugLog(2, "[transform] " + func->getNameAsString() + " body collapsed to no-ops; not harnessed");
       continue;
     }
-    // argc/argv is a known pointer contract, so synthesize a real call rather
-    // than skipping it as an unsupported-param function.
     if (func->isMain()) {
       harness += genMainHarness(func);
       continue;
     }
     if (func->isVariadic()) {
-      debugLog(2, "Warning: variadic functions unsupported; " + func->getNameAsString() +
+      debugLog(2, "[transform] variadic functions unsupported; " + func->getNameAsString() +
                       " not harnessed");
       continue;
     }
-    std::string args;
-    bool supported = true;
-    for (const clang::ParmVarDecl *parm : func->parameters()) {
-      std::optional<std::string> suffix = verifierSuffixForType(parm->getOriginalType());
-      if (!suffix) {
-        supported = false;
-        break;
-      }
-      if (!args.empty())
-        args += ", ";
-      args += "__VERIFIER_nondet_" + *suffix + "()";
-    }
-    if (!supported) {
-      debugLog(2, "Warning: only primitive symbolics supported; " + func->getNameAsString() +
-                      " not harnessed (filter's param check did not strip it)");
+    HarnessCall call = genCallHarness(func, Context);
+    if (!call.viable) {
+      debugLog(2, "[transform] unsupported parameter type; " + func->getNameAsString() +
+                      " not harnessed");
       continue;
     }
-    harness += "  " + func->getNameAsString() + "(" + args + ");\n";
+    harness += call.prologue;
+    harness += "  " + func->getNameAsString() + "(" + call.args + ");\n";
   }
 
   std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
   _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainFn);
+
+  // emitted here, not the shared header, so bounds survive hand-editing of the .c
+  std::string prelude = "#define __HAVOC_ARGC_MIN " + std::to_string(_Havoc.argcMin) + "\n" +
+                        "#define __HAVOC_ARGC_MAX " + std::to_string(_Havoc.argcMax) + "\n" +
+                        "#define __HAVOC_STR_MAX " + std::to_string(_Havoc.strMax) + "\n" +
+                        "#define __HAVOC_BLOCK_MAX " + std::to_string(_Havoc.blockMax) + "\n" +
+                        "#define __HAVOC_ARRAY_ELEMS " + std::to_string(_Havoc.arrayElems) + "\n" +
+                        "#include \"" + std::string(kArgvCHarnessHeaderName) + "\"\n";
+
+  // also populated by HavocCallsVisitor; must run after both
+  std::string fwdDecls;
+  for (const std::string &decl : *_NeededFwdDecls)
+    fwdDecls += decl + ";\n";
+  if (!fwdDecls.empty())
+    prelude += fwdDecls;
+
+  _Rewriter.InsertTextBefore(mgr.translateLineCol(mgr.getMainFileID(), 1, 1), prelude + "\n");
+}
+
+MainGenConsumer::HarnessCall
+MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTContext &Context) {
+  const clang::SourceManager &mgr = Context.getSourceManager();
+  HarnessCall call;
+
+  // classified up front: a pointer in the list changes integer synthesis below
+  std::vector<PointerPlan> plans;
+  bool anyPointer = false;
+  for (const clang::ParmVarDecl *parm : func->parameters()) {
+    PointerPlan plan;
+    if (!verifierSuffixForType(parm->getOriginalType())) {
+      plan = planPointer(parm->getOriginalType(), mgr);
+      if (!plan.viable)
+        return call;
+      anyPointer = true;
+    }
+    plans.push_back(plan);
+  }
+
+  unsigned counter = _LocalCounter;
+  for (size_t i = 0; i < plans.size(); ++i) {
+    const clang::ParmVarDecl *parm = func->parameters()[i];
+    clang::QualType declared = parm->getOriginalType();
+    if (!call.args.empty())
+      call.args += ", ";
+
+    std::optional<std::string> suffix = verifierSuffixForType(declared);
+    if (!suffix) {
+      std::string local = "__h" + std::to_string(counter++);
+      PointerStorage store = renderPointerStorage(plans[i], declared, local,
+                                                  parm->getType().getAsString());
+      call.prologue += store.decls;
+      call.args += store.arg;
+      if (!plans[i].fwdDecl.empty())
+        _NeededFwdDecls->insert(plans[i].fwdDecl);
+      continue;
+    }
+
+    // clamp every integer rather than guessing which one is "the length"
+    if (anyPointer && declared->isIntegerType() && !declared->isBooleanType()) {
+      std::string local = "__h" + std::to_string(counter++);
+      call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
+                       " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
+      if (declared->isSignedIntegerType())
+        call.prologue += local + " < 0 || ";
+      call.prologue += local + " > __HAVOC_ARRAY_ELEMS) abort();\n";
+      call.args += local;
+      continue;
+    }
+    call.args += "__VERIFIER_nondet_" + *suffix + "()";
+  }
+
+  _LocalCounter = counter;
+  call.viable = true;
+  return call;
 }
 
 std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
@@ -95,8 +146,6 @@ std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   if (numParams == 0)
     return "  original_main();\n";
 
-  // int main(int argc, char **argv[, char **envp]): argc and a matching argv
-  // are synthesized entirely by the argv_c_harness.h helpers.
   std::string body;
   body += "  int argc = __HAVOC_ARGC();\n";
   body += "  original_main(argc, __havoc_argv_fill(argc));\n";

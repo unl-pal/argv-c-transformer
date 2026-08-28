@@ -93,7 +93,7 @@ bool Transformer::transformFile(std::filesystem::path path) {
   }
 
   if (harnessIsEmpty(srcPath)) {
-    debugLog(2, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
+    debugLog(1, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
                     srcPath.string());
     cleanupPartialOutput(path);
     return false;
@@ -178,9 +178,11 @@ void Transformer::parseConfig(std::string configFile) {
   configuration.havoc.argcMax = config.havoc.at("havocArgcMax");
   configuration.havoc.strMax = config.havoc.at("havocStrMax");
   configuration.havoc.blockMax = config.havoc.at("havocBlockMax");
+  configuration.havoc.arrayElems = config.havoc.at("havocArrayElems");
 }
 
 int Transformer::run() {
+  auto startTime = std::chrono::steady_clock::now();
   std::filesystem::path path(configuration.filterDir);
   // Built before any fork; each child inherits the index as-is.
   headerIndex.emplace(configuration.databaseDir);
@@ -190,6 +192,8 @@ int Transformer::run() {
             << "  Files processed:        " << _totalProcessed << "\n"
             << "  Files transformed:      " << result.produced << "\n"
             << "  Declined (no output):   " << result.declined << "\n"
-            << "  Failed:                 " << result.failed << std::endl;
+            << "  Failed:                 " << result.failed << "\n"
+            << "  Time elapsed:           "
+            << formatElapsed(std::chrono::steady_clock::now() - startTime) << std::endl;
   return result.produced;
 }

@@ -34,13 +34,18 @@ public:
   /**
    * @brief Constructs the consumer with the shared pipeline state.
    *
-   * @param noOpFunctions Names of functions {@code HavocCallsConsumer} found
+   * @param noOpFunctions  Names of functions {@code HavocCallsConsumer} found
    *        to have an entirely no-op body; these are not harnessed.
-   * @param rewriter      Shared rewriter for modifying the source buffer.
-   * @param havoc         Bounds emitted as the __HAVOC_* macro definitions
-   *                      ahead of the argv_c_harness.h #include.
+   * @param neededFwdDecls Output set; file-scope forward declarations a
+   *        harnessed pointer parameter's prototype-scope struct tag needs,
+   *        shared with {@code HavocCallsVisitor}. Emitted into the same
+   *        prelude as the __HAVOC_* macros.
+   * @param rewriter       Shared rewriter for modifying the source buffer.
+   * @param havoc          Bounds emitted as the __HAVOC_* macro definitions
+   *                       ahead of the argv_c_harness.h #include.
    */
-  MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions, clang::Rewriter &rewriter,
+  MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
+                  std::shared_ptr<std::set<std::string>> neededFwdDecls, clang::Rewriter &rewriter,
                   const HavocBounds &havoc = {});
 
   /**
@@ -58,13 +63,39 @@ public:
 
 private:
   /**
+   * @brief A synthesized call: setup statements plus the argument list.
+   */
+  struct HarnessCall {
+    std::string prologue; ///< Indented, newline-terminated statements before the call.
+    std::string args;     ///< Comma-separated argument expressions.
+    bool viable = false;  ///< False means the function cannot be harnessed at all.
+  };
+
+  /**
+   * @brief Synthesizes arguments for one call to an arbitrary function.
+   *
+   * Primitive parameters become {@code __VERIFIER_nondet_*()} calls; pointer
+   * parameters are classified by {@code planPointer} and rendered by
+   * {@code renderPointerStorage} as stack storage filled with
+   * {@code __VERIFIER_nondet_memory}. When a pointer is present, integer
+   * parameters are emitted as locals clamped to {@code __HAVOC_ARRAY_ELEMS}
+   * instead, so that any index derived from them stays inside the block handed
+   * to the callee.
+   *
+   * @param func    The function to synthesize a call for.
+   * @param Context The AST context, for the SourceManager (telling types that
+   *                survive into the output from those defined only in a stripped
+   *                header).
+   * @return The call; check {@code viable} before using it.
+   */
+  HarnessCall genCallHarness(const clang::FunctionDecl *func, clang::ASTContext &Context);
+
+  /**
    * @brief Builds the harness body that invokes the renamed {@code original_main}.
    *
-   * Unlike an arbitrary function, {@code main}'s pointer params have a known
-   * contract, so instead of skipping it we synthesize a realistic call: a nondet,
-   * bounded {@code argc} from {@code __HAVOC_ARGC()} and a matching havocked
-   * {@code argv} from {@code __havoc_argv_fill()}, both helpers defined in
-   * argv_c_harness.h.
+   * Synthesizes a nondet, bounded {@code argc} from {@code __HAVOC_ARGC()} and
+   * a matching havocked {@code argv} from {@code __havoc_argv_fill()}, both
+   * helpers defined in argv_c_harness.h.
    *
    * @param mainFn The original {@code main} FunctionDecl (already renamed in
    *               the rewriter output).
@@ -74,6 +105,10 @@ private:
   std::string genMainHarness(const clang::FunctionDecl *mainFn);
 
   std::shared_ptr<std::set<std::string>> _NoOpFunctions;
+  std::shared_ptr<std::set<std::string>> _NeededFwdDecls;
   clang::Rewriter &_Rewriter;
+  /// Runs across every synthesized call, since all the locals they declare
+  /// share the generated main's single scope and so must not collide.
+  unsigned _LocalCounter = 0;
   HavocBounds _Havoc;
 };

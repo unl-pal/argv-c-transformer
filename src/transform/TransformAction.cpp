@@ -89,10 +89,16 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
 
   // HavocCallsConsumer fills this; MainGenConsumer skips harnessing them.
   auto noOpFunctions = std::make_shared<std::set<std::string>>();
+  // Filled by both HavocCallsConsumer (a havocked pointer-returning call) and
+  // MainGenConsumer (a harnessed pointer parameter); MainGenConsumer emits the
+  // forward declarations into the file prelude once every call is known.
+  auto neededFwdDecls = std::make_shared<std::set<std::string>>();
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
-  tempVector.emplace_back(std::make_unique<HavocCallsConsumer>(noOpFunctions, _Rewriter));
-  tempVector.emplace_back(std::make_unique<MainGenConsumer>(noOpFunctions, _Rewriter, _Havoc));
+  tempVector.emplace_back(
+      std::make_unique<HavocCallsConsumer>(noOpFunctions, neededFwdDecls, _Rewriter));
+  tempVector.emplace_back(
+      std::make_unique<MainGenConsumer>(noOpFunctions, neededFwdDecls, _Rewriter, _Havoc));
   tempVector.emplace_back(
       std::make_unique<AddStdIncludesConsumer>(existingIncludes, _UnresolvedTypeNames, _Rewriter));
 

@@ -189,4 +189,3 @@ private:
   clang::Rewriter &_Rewriter;
   const clang::LangOptions &_LangOpts;
 };
-

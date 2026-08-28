@@ -114,6 +114,115 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   EXPECT_NE(yml.find("data_model: LP64"), std::string::npos);
 }
 
+TEST_F(VerifyStageTest, HeaderDefinedStructIsOpaqueAndStillCompiles) {
+  // The main-file constraint, end to end. IncludeFinder strips the quoted
+  // #include as a *textual* edit after preprocessing has already run, so the
+  // AST still holds a complete definition of struct Rect while the output
+  // file will not declare it at all. Sizing the block with sizeof(struct Rect)
+  // would parse fine here and then fail to compile as a benchmark, which is
+  // why planPointer tests isInMainFile rather than isCompleteType.
+  writeFile(filterDir / "shapes.h", "struct Rect { int w; int h; };\n");
+  writeFile(filterDir / "area.c", "#include \"shapes.h\"\n"
+                                  "int tag(struct Rect *r) { return r != 0; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "area.c"));
+  std::string out = readFile(benchmarkDir / "area.c");
+
+  // The include is gone, so the definition is gone with it.
+  EXPECT_EQ(out.find("#include \"shapes.h\""), std::string::npos);
+  EXPECT_EQ(out.find("struct Rect {"), std::string::npos);
+  // Therefore the block must be the flat byte count, never sizeof.
+  EXPECT_EQ(out.find("sizeof(struct Rect)"), std::string::npos);
+  EXPECT_NE(out.find("__HAVOC_BLOCK_MAX"), std::string::npos);
+  // A produced benchmark means checkCompilable passed under keepCompilesOnly.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "area.i"));
+}
+
+TEST_F(VerifyStageTest, HeaderTypedefStructIsForwardDeclaredAndStillCompiles) {
+  // Same constraint as above, but the pointee is spelled through a typedef.
+  // Hoisting the struct tag is not enough here: the anonymous struct has no
+  // tag, and the name the harness casts to is the typedef, which vanished with
+  // the include. pointeeFwdDecl must re-declare the typedef itself against a
+  // synthesized tag.
+  writeFile(filterDir / "types.h", "typedef struct { int lo; int hi; } Range;\n");
+  writeFile(filterDir / "span.c", "#include \"types.h\"\n"
+                                  "int nonEmpty(Range *r) { return r != 0; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "span.c"));
+  std::string out = readFile(benchmarkDir / "span.c");
+
+  EXPECT_EQ(out.find("#include \"types.h\""), std::string::npos);
+  // The typedef name is re-declared, so the cast below has something to name.
+  EXPECT_NE(out.find("typedef struct __havoc_Range Range;"), std::string::npos)
+      << "missing typedef forward declaration; output was:\n"
+      << out;
+  // Opaque: an aligned byte buffer, nondet-filled on the stack, cast to Range*
+  // at the call. No sizeof(Range) — the type has no definition in the output.
+  EXPECT_NE(out.find("(Range *)__h"), std::string::npos);
+  EXPECT_NE(out.find("unsigned char __h"), std::string::npos);
+  EXPECT_EQ(out.find("sizeof(Range)"), std::string::npos);
+  // A produced benchmark means checkCompilable passed under keepCompilesOnly:
+  // without the typedef the cast is an unknown type name and this file is gone.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "span.i"));
+}
+
+TEST_F(VerifyStageTest, HeaderEnumPointerIsForwardDeclaredAndStillCompiles) {
+  // A complete enum defined only in a stripped header: the main-file test must
+  // treat it like any other tag, dropping it to Opaque rather than sizing a
+  // bare int-like Block that names an enum the output no longer declares. The
+  // enum tag is then hoisted so the cast compiles.
+  writeFile(filterDir / "palette.h", "enum Color { RED, GREEN, BLUE };\n");
+  writeFile(filterDir / "pick.c", "#include \"palette.h\"\n"
+                                  "int is_set(enum Color *c) { return c != 0; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "pick.c"));
+  std::string out = readFile(benchmarkDir / "pick.c");
+
+  EXPECT_EQ(out.find("#include \"palette.h\""), std::string::npos);
+  // The enum tag is hoisted, so the opaque cast to enum Color* has something to
+  // name; the storage is the aligned byte buffer, never sized as an enum array.
+  EXPECT_NE(out.find("enum Color;"), std::string::npos) << "missing enum forward declaration:\n"
+                                                        << out;
+  EXPECT_NE(out.find("(enum Color *)__h"), std::string::npos);
+  EXPECT_NE(out.find("unsigned char __h"), std::string::npos);
+  // A produced benchmark means checkCompilable passed under keepCompilesOnly.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "pick.i"));
+}
+
+TEST_F(VerifyStageTest, MainFileTypedefIsNotRedeclared) {
+  // The mirror case: a typedef defined in the .c itself survives into the
+  // output on its own. Re-declaring it against a synthesized tag would name a
+  // second, incompatible type, so pointeeFwdDecl must stay quiet — and because
+  // the definition is in the main file, the block is sized with sizeof.
+  writeFile(filterDir / "local.c", "typedef struct { int lo; int hi; } Range;\n"
+                                   "int nonEmpty(Range *r) { return r->hi > r->lo; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  std::string out = readFile(benchmarkDir / "local.c");
+
+  EXPECT_EQ(out.find("__havoc_Range"), std::string::npos)
+      << "synthesized tag leaked for a main-file typedef; output was:\n"
+      << out;
+  // Sized with the real type: the harness declares typed Range storage, not the
+  // opaque `unsigned char[...]` byte buffer a header-only type would get. (The
+  // __HAVOC_BLOCK_MAX *macro* is always defined alongside the other bounds,
+  // so its presence is not the signal — the buffer declaration is.)
+  EXPECT_NE(out.find("Range __h"), std::string::npos);
+  EXPECT_EQ(out.find("unsigned char __h"), std::string::npos);
+  EXPECT_TRUE(fs::exists(benchmarkDir / "local.i"));
+}
+
 TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
   // <stdio.h> transitively pulls in glibc's bits/floatn-common.h, whose
   // fallback typedefs for the C23 extended float types CBMC treats as

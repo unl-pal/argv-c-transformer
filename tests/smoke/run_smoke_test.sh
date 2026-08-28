@@ -116,8 +116,8 @@ EOF
 
 echo
 echo "--- Assertion: no live pthread/semaphore call survives Concurrency=forbid ---"
-if ls "$WORK/bench-forbid"/*.i >/dev/null 2>&1 && \
-   grep -lE 'pthread_create\(|pthread_mutex_lock\(|pthread_mutex_unlock\(|pthread_join\(|sem_wait\(|sem_post\(' "$WORK/bench-forbid"/*.i; then
+if ls "$WORK/bench-forbid"/*.c >/dev/null 2>&1 && \
+   grep -lE 'pthread_create\(|pthread_mutex_lock\(|pthread_mutex_unlock\(|pthread_join\(|sem_wait\(|sem_post\(' "$WORK/bench-forbid"/*.c; then
   echo "FAIL: concurrency call(s) survived under Concurrency=forbid (files listed above)"
   fail=1
 else

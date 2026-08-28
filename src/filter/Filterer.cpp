@@ -103,15 +103,15 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
   if (std::filesystem::is_regular_file(pathObject)) {
     if (pathObject.has_extension()) {
       if (pathObject.extension() == ".c") {
-        debugLog(3, "[filter] queued: " + pathObject.filename().string());
+        debugLog(4, "[filter] queued: " + pathObject.filename().string());
         filesToFilter.push_back(pathObject.string());
         return 1;
       } else {
-        debugLog(3, "[filter] skipped (not .c): " + pathObject.filename().string());
+        debugLog(4, "[filter] skipped (not .c): " + pathObject.filename().string());
         return 0;
       }
     } else {
-      debugLog(3, "[filter] skipped (no extension): " + pathObject.filename().string());
+      debugLog(4, "[filter] skipped (no extension): " + pathObject.filename().string());
       return 0;
     }
   } else if (std::filesystem::is_directory(pathObject)) {
@@ -186,6 +186,7 @@ void Filterer::cleanupPartialOutput(std::filesystem::path oldPath) {
 }
 
 int Filterer::run() {
+  auto startTime = std::chrono::steady_clock::now();
   std::filesystem::path pathObject(configuration.databaseDir);
   std::vector<std::string> filesToFilter;
 
@@ -233,6 +234,8 @@ int Filterer::run() {
             << "  Skipped (pre-filter):   " << (filesFound - passed) << "\n"
             << "  Files filtered:         " << result.produced << "\n"
             << "  Declined (no output):   " << result.declined << "\n"
-            << "  Failed:                 " << result.failed << std::endl;
+            << "  Failed:                 " << result.failed << "\n"
+            << "  Time elapsed:           "
+            << formatElapsed(std::chrono::steady_clock::now() - startTime) << std::endl;
   return result.produced;
 }
