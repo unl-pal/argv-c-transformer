@@ -71,6 +71,49 @@ unsupported, and a function taking one is body-stripped like any other. The filt
 on the same classifier the transform uses, so a pointer-param function survives filtering
 exactly when the harness can call it.
 
+An integer parameter alongside a pointer parameter is clamped rather than left as a raw
+nondet value: `MainGenConsumer::genCallHarness` bounds it with `if (n < 0 || n >
+__HAVOC_ARRAY_ELEMS) abort();` (the signedness check dropped for unsigned types). This
+sidesteps guessing which parameter is "the length" from its name — every integer is
+bounded by the element count of the storage that was actually declared for the pointer
+parameters, so a genuinely-undersized block can't be indexed out of bounds regardless of
+which parameter the callee treats as a length.
+
+### Pointer Shapes
+
+`planPointer` classifies every pointer or constant-array parameter/return into one
+`PointerShape` (`src/common/include/HavocPolicy.hpp`), and `renderPointerStorage` turns a
+viable plan into real stack storage for both a parameter or a hoisted return, so
+the two call sites can't drift:
+
+- **`CString`** : (`char*`/pointee is any character type) → `char b[__HAVOC_STR_MAX]`,
+  filled and null-terminated in bounds by `__havoc_cstring_fill`.
+- **`Array`** : a parameter spelled `T[N]`. `ParmVarDecl::getOriginalType()` preserves the
+  pre-decay `ConstantArrayType`, so storage uses the declared bound `N` exactly rather than
+  a generic size.
+- **`Block`** : any other pointer to a sized type, no declared bound available →
+  `T b[__HAVOC_ARRAY_ELEMS]`.
+- **`Record`** : a struct/union pointee with a definition, viable only when
+  `recordHasPointerFields` finds no pointer anywhere in it (transitively). A block filled
+  by `__VERIFIER_nondet_memory` would otherwise leave pointer-typed bytes the callee could
+  dereference. Not viable means the function isn't harnessed.
+- **`Opaque`** : `void*`, an incomplete type, or a record whose definition isn't in the
+  main file → `unsigned char b[__HAVOC_BLOCK_MAX]`, cast to the declared pointer type.
+- **`Function`** : never viable; no value can be synthesized for a function pointer.
+
+Every shape (besides `Function`) fills its storage with `__VERIFIER_nondet_memory`, so
+there's no heap and no `free` obligation, and its declared element count bounds whatever
+indexing the callee does into it.
+
+A struct or union tag first named inside a parameter list (`void f(struct Rect *r)`) has
+*prototype scope*, invisible outside that declaration, so a harness cast to it would
+name a distinct, incompatible type and fail to compile. `pointeeFwdDecl` detects this and
+emits a file-scope forward declaration (`struct Rect;`), collected into a set shared by
+`HavocCallsConsumer` (havocked pointer returns) and `MainGenConsumer` (harnessed pointer
+parameters); `MainGenConsumer` writes the whole set into the file's prelude once every
+call is known, since it runs last of the two. A repeated forward declaration is legal C
+even when a full definition follows.
+
 ### Intraprocedural by Design
 
 Each function body is made self-contained: calls to other functions *in the same file*
@@ -114,14 +157,12 @@ which `__VERIFIER_nondet_*` variant to use.
 
 When havocking a call that returns a pointer, a raw nondet pointer value cannot be used
 (dereferencing an arbitrary address is undefined behavior). Instead, `HavocCallsVisitor`
-hoists a uniquely-named stack buffer declaration to the top of the enclosing function
-(so it outlives the call, unlike a function's own stack storage would) and replaces the
-call with a plain-C expression that fills it and yields it: `__VERIFIER_nondet_memory`
-directly for a block, or `__havoc_cstring_fill` (from the shared `argv_c_harness.h`,
-copied into every benchmark) for a `char *` return, which additionally null-terminates
-the buffer so string operations on the result stay in bounds. No heap, so no `free`
-obligation. No GNU statement-expressions either - standard C only. Function pointer
-returns are left as-is.
+runs the return type through the same `planPointer`/`renderPointerStorage` pair the
+harness uses for parameters (see "Pointer Shapes" above), hoisting a uniquely-named stack
+buffer declaration above the call's enclosing statement so it outlives the call, and
+replacing the call with a plain-C reference to that storage. No heap, so no `free`
+obligation. A non-viable plan (function pointer, pointer-to-pointer, a record with
+pointer fields) is left as-is, and a pointer return whose value is discarded is dropped.
 
 ### Cleaning Up After Havocking
 
@@ -182,21 +223,63 @@ inactive `#ifdef` blocks (e.g. `#ifdef REDIS_TEST`) are invisible to all AST pas
 they are neither counted, filtered, havocked, nor harnessed. They pass through unchanged
 as raw text.
 
+### Assert Rewriting and Property Selection
+
+Transform installs a second `PPCallbacks` hook alongside `IncludeFinder`: `AssertRewriter`
+(`src/transform/include/TransformAction.hpp`, implemented in `TransformAction.cpp`) rewrites
+every `assert(cond)` invocation in the main file into `if (!(cond)) reach_error();`. It
+fires on `MacroExpands`, checks the expanded macro is function-like and named `assert`, and
+re-lexes the invocation's own source text to pull `cond` out from between the first `(` and
+the last `)` — no AST node for the call exists yet at that point in the pipeline, so there
+is nothing to rewrite from except the raw text. `reach_error` itself is defined
+unconditionally in `argv_c_harness.h` as `void reach_error(void) { assert(0); }`; that
+`assert` is never touched because it lives outside the main file, so there's no
+self-rewriting loop.
+
+SV-Comp's `unreach-call.prp` is checked as `LTL(G ! call(reach_error()))` — a property over
+calls to a function with that literal name, not over `assert` or any C-level "reachability"
+concept the verifier understands natively. Rewriting `assert` into `reach_error` is what
+makes a benchmark's assertions visible to that check at all.
+
+`CountingConsumer`'s `CountingVisitor` (reused unmodified between Filter and Verify) detects
+a call to `reach_error` and records a bare `reach_error` key in the counts map via
+`try_emplace` — deliberately excluded from every other count, alongside nondet/havoc-helper
+calls, so it doesn't skew a function's own metrics. `Verifier::selectProperties`
+(`src/verify/Verifier.cpp`) reads the *post-transform* counts — the same map
+`VerifyFunctionsConsumer` used for the threshold re-check — and picks `.prp` files by
+structural signal, independent of the reach_error check:
+
+- `reach_error` present in counts → `unreach-call.prp`
+- any function with `ForLoops` or `WhileLoops` → `termination.prp`
+- any function with `Operations` (a side-effecting op on a signed type) → `no-overflow.prp`
+- any function with `PointerDeref`, `MemAlloc`, or `MemFree` → `valid-memsafety.prp` (one
+  file bundling the deref/free/memtrack CHECKs)
+
+The loop over functions exits early once loops, integer arithmetic, and memory-safety have
+each matched once — the reach_error check runs separately up front, so it isn't part of
+that short-circuit. `writeBenchmarkTask` then emits the `.yml`: each selected property as an
+`expected_verdict: true` block (a generated benchmark is never a deliberately-planted-bug
+one, so every selected property is asserted to hold), pointing at `../properties/<name>.prp`
+relative to `benchmarkDir`. An empty property list still produces a valid `.yml` (`properties:
+[]`) but logs a warning, since a benchmark nothing was selected for is unlikely to be useful
+to a verifier run.
+
 ### Empty Benchmark Discard
 
-A benchmark whose generated `main` calls no functions is unconditionally deleted. This
-happens at two points: Transform does an early post-write text check coupled to
-`MainGenConsumer`'s generated-main format string (the exact verbatim empty main
-`int main(void) {\n  return 0;\n}`), and Verify does a structural recount after harness
-repair: the text check can't work there, because repaired calls leave `;` statements
-behind, so `HarnessRepairConsumer` counts the surviving harness calls instead and the
-benchmark is discarded when that count is zero.
+A benchmark whose generated `main` calls no functions is unconditionally deleted. Both
+Transform and Verify check for this with the same text-based `harnessIsEmpty`
+(`src/common/include/ClangToolUtils.hpp`): it looks for the exact verbatim empty main
+`int main(void) {\n  return 0;\n}` in the written output. This works after Verify's
+`HarnessRepairConsumer` too, because it erases a whole line per rejected call (indent,
+call, semicolon, trailing newline) rather than leaving a bare `;` behind, so a `main`
+emptied by repair collapses back to that same verbatim text.
 
 ### What Is Not Supported
 
-- **Struct / union / enum parameters**: no `__VERIFIER_nondet_*` equivalent exists for
-  aggregate types, so functions with these parameter types are body-stripped and not
-  harnessed
+- **Struct / union / enum parameters passed by value**: no `__VERIFIER_nondet_*`
+  equivalent exists for aggregate types, so functions with these parameter types are
+  body-stripped and not harnessed. A pointer *to* a struct/union is a separate case — see
+  "Pointer Shapes" above — and is supported when the pointee has no pointer fields
 - **Variadic functions** (e.g. `printf`-style): skipped with a warning; no way to
   synthesize a meaningful argument list
 - **Aggregate return types**: calls returning structs/unions are left as-is (not havocked),
@@ -219,11 +302,12 @@ benchmark is discarded when that count is zero.
 
 Filter, Transform, and Verify share the same Clang tooling skeleton. Each tool wires a
 sequence of AST consumers into a `MultiplexConsumer`; all consumers share one `Rewriter`
-and communicate through shared state (`toFilter` map, `toRemove` vector, `neededTypes`
-set). The Rewriter's edited buffer is flushed to the output file in
-`EndSourceFileAction`. Verify deliberately *reuses* Filter's `CountingConsumer` and
-`RemoveConsumer` rather than reimplementing them, so the counting and stripping
-semantics cannot drift between the two stages.
+and communicate through shared state passed into each consumer's constructor (Filter's
+`toFilter` map and `toRemove` vector; Verify's `counts` map and its own `toRemove`).
+The Rewriter's edited buffer is flushed to the output file in `EndSourceFileAction`.
+Verify deliberately *reuses* Filter's `CountingConsumer` and `RemoveConsumer` rather than
+reimplementing them, so the counting and stripping semantics cannot drift between the two
+stages.
 
 ```mermaid
 flowchart TB
@@ -236,10 +320,9 @@ flowchart TB
 
     subgraph filterC["Filter consumers (in order)"]
         F1["CountingConsumer<br/>count AST nodes per function → <code>toFilter</code>"]
-        F2["FilterFunctionsConsumer<br/>apply thresholds → <code>toRemove</code>"]
-        F3["RemoveConsumer<br/>delete rejected bodies → <code>neededTypes</code>"]
-        F4["AddVerifiersConsumerFilter<br/>insert extern nondet decls"]
-        F1 --> F2 --> F3 --> F4
+        F2["FilterFunctionsConsumer<br/>apply thresholds/param gate → <code>toRemove</code>"]
+        F3["RemoveConsumer<br/>strip rejected bodies to prototypes"]
+        F1 --> F2 --> F3
     end
 
     subgraph transformC["Transform consumers (in order)"]
@@ -261,7 +344,7 @@ flowchart TB
     MUX --> transformC
     MUX --> verifyC
 
-    RW[("shared Rewriter<br/>+ toFilter / toRemove / neededTypes")]
+    RW[("shared Rewriter<br/>+ per-stage toFilter/toRemove/counts state")]
     filterC -.-> RW
     transformC -.-> RW
     verifyC -.-> RW

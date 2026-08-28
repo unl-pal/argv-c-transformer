@@ -10,5 +10,7 @@
 /** @brief Filename the generated .c's `#include` and the copy in each benchmarkDir share. */
 inline constexpr const char *kArgvCHarnessHeaderName = "argv_c_harness.h";
 
-/** @brief Verbatim contents of src/common/argv_c_harness.h, embedded at build time. */
-inline constexpr const char *kArgvCHarnessHeaderContents = R"ARGVCHDR_RAW(@ARGV_C_HARNESS_HEADER_CONTENT@)ARGVCHDR_RAW";
+/** @brief Verbatim contents of src/common/argv_c_harness.h, embedded at build time.
+ * CMake generates a .hpp of this file with content of the harness copied into the @ delimited variable.
+ * R"()" allows the string to not be escaped etc.*/
+inline constexpr const char *kArgvCHarnessHeaderContents = R"(@ARGV_C_HARNESS_HEADER_CONTENT@)";
