@@ -7,23 +7,19 @@
 #include "ClangToolUtils.hpp"
 #include "CliArgs.hpp"
 #include "DebugLog.hpp"
+#include "WorkerPool.hpp"
 
 #include <clang/AST/Type.h>
 #include <clang/Lex/Preprocessor.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
-#include <cerrno>
-#include <csignal>
-#include <cstring>
-#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
 #include <string>
-#include <sys/wait.h>
 #include <unistd.h>
 
 const std::string defaultDatabaseDir = "repos";
@@ -33,6 +29,7 @@ const int defaultFileTimeoutSecs = 60;
 Filterer::Filterer(std::string configFile, std::string inputPath) {
   configuration.databaseDir = defaultDatabaseDir;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
+  configuration.nproc = 0;
   if (!configFile.empty())
     parseConfigFile(configFile);
   if (configuration.filterDir.empty())
@@ -53,6 +50,7 @@ void Filterer::parseConfigFile(std::string configFile) {
 
   globalDebugLevel() = config.fileSettings.at("debugLevel");
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  configuration.nproc = config.fileSettings.at("nproc");
 
   if (globalDebugLevel() >= 1) {
     std::string dump = "[filter] loaded config: " + configFile;
@@ -170,60 +168,21 @@ bool Filterer::filterFile(std::filesystem::path oldPath) {
   output.close();
   if (!ran) {
     debugLog(1, "[filter] clang tool failed on: " + oldPath.string());
+    // The stream above already created/truncated newPath.
+    cleanupPartialOutput(oldPath);
     return false;
   }
   return true;
 }
 
-int Filterer::filterFileIsolated(std::filesystem::path oldPath) {
-  pid_t pid = fork();
-  if (pid < 0) {
-    debugLog(0, "fork failed, filtering in-process: " + oldPath.string());
-    return filterFile(oldPath) ? 1 : 0;
-  }
-
-  if (pid == 0) {
-    int produced = filterFile(oldPath) ? 1 : 0;
-    std::cout.flush();
-    std::cerr.flush();
-    _exit(produced);
-  }
-
-  time_t deadline = time(nullptr) + configuration.fileTimeoutSecs;
-  int status = 0;
-  while (true) {
-    pid_t done = waitpid(pid, &status, WNOHANG);
-    if (done == pid)
-      break;
-    if (done < 0 && errno != EINTR) {
-      debugLog(0, "waitpid failed for " + oldPath.string() + ", killing: " + strerror(errno));
-      kill(pid, SIGKILL);
-      waitpid(pid, &status, 0);
-      cleanupPartialOutput(oldPath);
-      return 0;
-    }
-    if (time(nullptr) >= deadline) {
-      debugLog(0, "Timeout, killing filter of: " + oldPath.string());
-      kill(pid, SIGKILL);
-      waitpid(pid, &status, 0);
-      cleanupPartialOutput(oldPath);
-      return 0;
-    }
-    struct timespec nap = {0, 20 * 1000 * 1000}; // 20ms
-    nanosleep(&nap, nullptr);
-  }
-
-  if (WIFEXITED(status))
-    return WEXITSTATUS(status) == 1 ? 1 : 0;
-  debugLog(0, "Filter crashed (signal " + std::to_string(WTERMSIG(status)) + "), skipping: " +
-                  oldPath.string());
-  cleanupPartialOutput(oldPath);
-  return 0;
-}
-
 void Filterer::cleanupPartialOutput(std::filesystem::path oldPath) {
+  std::filesystem::path newPath = outputPath(oldPath);
+  // The same guard filterFile applies before writing: when databaseDir and
+  // filterDir resolve to one directory, the "partial output" is the input.
+  if (std::filesystem::weakly_canonical(oldPath) == std::filesystem::weakly_canonical(newPath))
+    return;
   std::error_code ec;
-  std::filesystem::remove(outputPath(oldPath), ec);
+  std::filesystem::remove(newPath, ec);
 }
 
 int Filterer::run() {
@@ -240,26 +199,40 @@ int Filterer::run() {
   headerIndex.emplace(configuration.databaseDir);
 
   int passed = 0;
-  int produced = 0;
-  int i = 0;
+  std::vector<std::filesystem::path> toProcess;
   for (const std::string &fileName : filesToFilter) {
-    std::cout << "\r[filter] " << ++i << "/" << filesFound << std::flush;
     debugLog(1, "[filter] file: " + fileName);
     if (!checkPotentialFile(fileName))
       continue;
     passed++;
-
-    std::filesystem::path oldPath(fileName);
-    produced += filterFileIsolated(oldPath);
+    toProcess.emplace_back(fileName);
   }
-  if (filesFound > 0)
-    std::cout << std::endl;
+
+  int workers = resolveWorkerCount(configuration.nproc);
+  debugLog(1, "[filter] worker pool size: " + std::to_string(workers));
+
+  IsolatedWork work;
+  work.child = [this](const std::filesystem::path &p) {
+    bool produced = filterFile(p);
+    std::cout.flush();
+    std::cerr.flush();
+    _exit(produced ? kProducedExit : kDeclinedExit);
+  };
+  work.runInProcess = [this](const std::filesystem::path &p) { return filterFile(p); };
+  work.cleanupPartial = [this](const std::filesystem::path &p) { cleanupPartialOutput(p); };
+  work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[filter] " + msg); };
+  work.label = "filter";
+
+  std::cout << "[filter] processing " << toProcess.size() << " file(s) with " << workers
+            << " worker(s)" << std::endl;
+  WorkerPoolResult result = runWorkerPool(toProcess, workers, configuration.fileTimeoutSecs, work);
 
   std::cout << "\n=== Filter summary ===\n"
             << "  Files found:            " << filesFound << "\n"
             << "  Passed pre-filter:      " << passed << "\n"
             << "  Skipped (pre-filter):   " << (filesFound - passed) << "\n"
-            << "  Files filtered:         " << produced << "\n"
-            << "  Discarded/failed:       " << (passed - produced) << std::endl;
-  return produced;
+            << "  Files filtered:         " << result.produced << "\n"
+            << "  Declined (no output):   " << result.declined << "\n"
+            << "  Failed:                 " << result.failed << std::endl;
+  return result.produced;
 }
