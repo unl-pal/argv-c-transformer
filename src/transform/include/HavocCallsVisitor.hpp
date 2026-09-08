@@ -100,6 +100,10 @@ public:
    */
   bool isNoOp(const clang::Stmt *S) const;
 
+  /// Functions containing a call this visitor could not havoc (aggregate
+  /// return, or a non-viable pointer return) — never safe to keep.
+  const std::set<const clang::FunctionDecl *> &tainted() const { return _Tainted; }
+
 private:
   /**
    * @brief Erases a statement's text, at most once per statement.
@@ -173,6 +177,14 @@ private:
   const clang::Stmt *hoistAnchor(const clang::CallExpr *E, bool &discarded) const;
 
   /**
+   * @brief The FunctionDecl containing E.
+   * @param E The call to locate.
+   * @return The enclosing function, or nullptr (should not happen: every call
+   *         site is inside some function body).
+   */
+  const clang::FunctionDecl *enclosingFunction(const clang::CallExpr *E) const;
+
+  /**
    * @brief Computes statement-level vacuity structurally; isNoOp memoizes it.
    * @param S The statement to classify; never null.
    */
@@ -185,6 +197,8 @@ private:
   mutable std::map<const clang::Stmt *, bool> _NoOpMemo;
   /** Statements already removed from the buffer, so eraseStmt stays idempotent. */
   std::set<const clang::Stmt *> _ErasedStmts;
+  /** Functions with an unhavockable call, per Mode::Reject. */
+  std::set<const clang::FunctionDecl *> _Tainted;
   /** Names every hoisted pointer-return stub across the TU, keeping them unique. */
   unsigned _StubCounter = 0;
 };

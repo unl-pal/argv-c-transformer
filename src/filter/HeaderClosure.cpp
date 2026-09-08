@@ -24,6 +24,9 @@
 #include <optional>
 #include <unordered_set>
 
+// ---------------------------------------------------------------------------
+// Declaration collecting and helpers
+// ---------------------------------------------------------------------------
 namespace {
 
 /** @brief True if `loc` sits in a real file that is neither the main file nor a system header. */
@@ -38,20 +41,13 @@ bool isLocalHeaderLoc(const clang::SourceManager &mgr, clang::SourceLocation loc
 }
 
 /**
- * @brief Walks the roots, collecting declarations that live in project-local
+ * @brief Walks the AST roots, collecting declarations that live in project-local
  * headers (to inline) and ones that live in system headers (to #include).
- *
- * Every declaration is recursed into regardless of where it lives, because a
- * main-file typedef can name a header struct and vice versa; only *recording*
- * is gated on origin.
  */
 class ClosureCollector : public clang::RecursiveASTVisitor<ClosureCollector> {
 public:
-  explicit ClosureCollector(clang::ASTContext &context)
-      : _Mgr(context.getSourceManager()) {}
+  explicit ClosureCollector(clang::ASTContext &context) : _Mgr(context.getSourceManager()) {}
 
-  // Casting away const is safe here: TraverseStmt only reads, and the AST is
-  // handed to consumers as non-const anyway.
   bool VisitTypeLoc(clang::TypeLoc typeLoc) {
     addType(typeLoc.getType());
     return true;
@@ -78,17 +74,16 @@ public:
     return true;
   }
 
-  /// Declarations to inline, in discovery order (reordered by the emitter).
+  /// declarations to inline
   const std::vector<const clang::Decl *> &needed() const { return _Needed; }
-  /// Declarations reached in system headers; each needs an #include, not a copy.
+  /// system header declarations, needing an #include.
   const std::vector<const clang::Decl *> &fromSystem() const { return _FromSystem; }
 
   void addDecl(const clang::Decl *decl) {
     if (!decl)
       return;
 
-    // A record is only useful with its layout; prefer the defining declaration
-    // over whichever forward declaration happened to be referenced.
+    // get a record's actual definition
     if (const auto *record = llvm::dyn_cast<clang::RecordDecl>(decl))
       if (const clang::RecordDecl *def = record->getDefinition())
         decl = def;
@@ -101,8 +96,6 @@ public:
     if (isLocalHeaderLoc(_Mgr, decl->getLocation())) {
       _Needed.push_back(decl);
     } else if (_Mgr.isInSystemHeader(_Mgr.getFileLoc(decl->getLocation()))) {
-      // Provided by reference. Recursing further would drag in the whole of
-      // glibc's internal type graph for no benefit.
       _FromSystem.push_back(decl);
       return;
     }
@@ -111,7 +104,6 @@ public:
   }
 
 private:
-  /// Chases whatever the declaration itself references.
   void recurse(const clang::Decl *decl) {
     if (const auto *typedefDecl = llvm::dyn_cast<clang::TypedefNameDecl>(decl)) {
       addType(typedefDecl->getUnderlyingType());
@@ -123,8 +115,7 @@ private:
         if (const clang::Expr *init = constant->getInitExpr())
           TraverseStmt(const_cast<clang::Expr *>(init));
     } else if (const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl)) {
-      // Prototype only: the body of a header function is never emitted, so it
-      // is not a root either.
+      // prototype only because we don't re-emit the body
       addType(func->getReturnType());
       for (const clang::ParmVarDecl *parm : func->parameters())
         addType(parm->getOriginalType());
@@ -147,9 +138,8 @@ private:
     if (!ptr || !_SeenTypes.insert(ptr).second)
       return;
 
-    // Typedefs are checked before records: the output has to name the type the
-    // source named, so the typedef itself is what must be inlined, and its
-    // underlying type follows from recursing through the decl.
+    // Typedefs need to be checked before records because either is gettable but a typedef
+    // can recurse into a record, and otherwise we'd lose the typedef identifier
     if (const auto *typedefType = ptr->getAs<clang::TypedefType>()) {
       addDecl(typedefType->getDecl());
       return;
@@ -185,7 +175,7 @@ private:
   std::unordered_set<const clang::Type *> _SeenTypes;
   std::vector<const clang::Decl *> _Needed;
   std::vector<const clang::Decl *> _FromSystem;
-};
+}; // ClosureCollector
 
 /** @brief One declaration rendered to text, keyed by its span for ordering and overlap checks. */
 struct EmittedDecl {
@@ -195,18 +185,7 @@ struct EmittedDecl {
 };
 
 /**
- * @brief Renders one declaration as the original spelling.
- *
- * getSourceText rather than a pretty-print from the AST: attributes, bitfields
- * and alignment specifiers are exactly the details that make a layout correct,
- * and exactly the ones an AST printer drops.
- *
- * Function definitions are cut at the opening brace and terminated, per the
- * emission policy: the transform is intraprocedural, so an inlined header body
- * is unreachable except through the generated harness, where it would only
- * inflate the benchmark and add spurious harness targets. A prototype gets the
- * desired behaviour — calls into header functions are havocked — with no dead
- * code. **This inverts when interprocedural analysis lands.**
+ * @brief Renders one declaration as EmittedDecl
  */
 std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::SourceManager &mgr,
                                       const clang::LangOptions &langOpts) {
@@ -214,15 +193,15 @@ std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::Sour
   const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
   bool isDefinition = func && func->doesThisDeclarationHaveABody() && func->getBody();
   if (isDefinition)
+    // remove body
     range.setEnd(func->getBody()->getBeginLoc().getLocWithOffset(-1));
 
-  // makeFileCharRange resolves macro locations to the enclosing expansion, so a
-  // declaration produced by a macro is emitted as the invocation that produced
-  // it — which works because the macro closure re-emits that macro too.
-  clang::CharSourceRange chars = clang::Lexer::makeFileCharRange(
-      isDefinition ? clang::CharSourceRange::getCharRange(range)
-                   : clang::CharSourceRange::getTokenRange(range),
-      mgr, langOpts);
+  // makeFileCharRange resolves macro locations, so a declaration produced by a macro is emitted
+  // as the invocation that produced it
+  clang::CharSourceRange chars =
+      clang::Lexer::makeFileCharRange(isDefinition ? clang::CharSourceRange::getCharRange(range)
+                                                   : clang::CharSourceRange::getTokenRange(range),
+                                      mgr, langOpts);
   if (chars.isInvalid())
     return std::nullopt;
 
@@ -232,33 +211,9 @@ std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::Sour
     return std::nullopt;
 
   std::string body = text.str();
-  if (func) {
-    // An inlined prototype with no definition would be a link error if anything
-    // still called it, and `static` narrows that to a hard compile error under
-    // -Wundefined-internal. External linkage on a declaration that is never
-    // defined is harmless, so drop the specifiers rather than the declaration.
-    static const char *specifiers[] = {"static", "inline", "__inline__", "__inline", "_Noreturn"};
-    bool stripped = true;
-    while (stripped) {
-      stripped = false;
-      size_t start = body.find_first_not_of(" \t\r\n");
-      if (start == std::string::npos)
-        break;
-      for (const char *specifier : specifiers) {
-        size_t len = std::string(specifier).size();
-        if (body.compare(start, len, specifier) != 0)
-          continue;
-        char after = start + len < body.size() ? body[start + len] : ' ';
-        if (std::isalnum(static_cast<unsigned char>(after)) || after == '_')
-          continue;
-        body.erase(0, start + len);
-        stripped = true;
-        break;
-      }
-    }
-  }
 
   size_t firstChar = body.find_first_not_of(" \t\r\n");
+  // remove whitespace
   if (firstChar != std::string::npos)
     body.erase(0, firstChar);
   // Trailing ';' is outside every one of these declarations' source ranges.
@@ -278,36 +233,25 @@ std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::Sour
 }
 
 /**
- * @brief The `#include <...>` that supplies a declaration reached in a system header.
- *
- * Layer 2 of the recovery: ask the SourceManager where the declaration actually
- * came from and emit that header if it is one a human may legally write. Layer
- * 3 falls back to the curated registry, which exists precisely because layer 2
- * cannot always answer — glibc defines `size_t` in `bits/types.h`, and
- * `#include <bits/types.h>` is not legal to write.
+ * @brief Gets the `#include <...>` that supplies a declaration reached in a system header.
  */
 std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
                                            const clang::SourceManager &mgr) {
   llvm::StringRef path = mgr.getFilename(mgr.getFileLoc(decl->getLocation()));
   if (!path.empty()) {
-    // Everything after the last "include/" is how the header is spelled. A
-    // remaining path separator means an internal header (bits/, gnu/, ...),
-    // except for the sys/ and arpa/ trees, which are written as-is.
+    // by convention most std/sys headers live under some include/ subdir
     size_t marker = path.rfind("include/");
-    llvm::StringRef spelling =
-        marker == llvm::StringRef::npos ? path : path.drop_front(marker + 8);
+    llvm::StringRef spelling = marker == llvm::StringRef::npos ? path : path.drop_front(marker + 8);
+    // exceptions for sys, arpa, and netinet because e.g sys/types.h is a valid/portable include
     bool topLevel = !spelling.contains('/') || spelling.starts_with("sys/") ||
                     spelling.starts_with("arpa/") || spelling.starts_with("netinet/");
-    // A leading "__" marks a compiler-internal fragment (clang's
-    // __stddef_size_t.h, gcc's __stddef_max_align_t.h). Those exist only in one
-    // toolchain's resource directory, so naming one destroys the portability
-    // that including by reference is *for*. Fall through to the registry, which
-    // knows the standard header the fragment stands in for.
+    // A leading "__" marks a compiler-internal fragment so fallback to the StdHeaders map
     if (topLevel && !spelling.empty() &&
         !llvm::StringRef(llvm::sys::path::filename(spelling)).starts_with("__"))
       return spelling.str();
   }
 
+  // fallback to the hardcoded map of known std headers
   const auto *named = llvm::dyn_cast<clang::NamedDecl>(decl);
   if (named) {
     auto it = StdHeaders.find(named->getNameAsString());
@@ -317,7 +261,11 @@ std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
   return std::nullopt;
 }
 
-/** @brief Appends every identifier appearing in `text` to `out`. */
+/** @brief Appends every identifier appearing in `text` to `out`.
+ *
+ *  This helper supports macro closure in local headers by re-lexing declarations that may have
+ *  nested macros.
+ */
 void collectIdentifiers(llvm::StringRef text, std::vector<std::string> &out) {
   size_t i = 0;
   while (i < text.size()) {
@@ -347,8 +295,8 @@ LocalHeaderPP::LocalHeaderPP(clang::SourceManager &SM, const clang::LangOptions 
 void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &,
                                        llvm::StringRef FileName, bool IsAngled,
                                        clang::CharSourceRange FilenameRange,
-                                       clang::OptionalFileEntryRef, llvm::StringRef, llvm::StringRef,
-                                       const clang::Module *, bool,
+                                       clang::OptionalFileEntryRef, llvm::StringRef,
+                                       llvm::StringRef, const clang::Module *, bool,
                                        clang::SrcMgr::CharacteristicKind FileType) {
   // A quoted include is project-local by convention regardless of FileType.
   bool localTarget = !IsAngled || FileType == clang::SrcMgr::C_User;
@@ -363,8 +311,7 @@ void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clan
   }
 
   // A system include written inside a project-local header. Re-emitting it is
-  // over-inclusive but never wrong, and never names something un-includable,
-  // because it is a directive a human wrote.
+  // over-inclusive but never wrong
   if (!localTarget && isLocalHeaderLoc(_Mgr, HashLoc))
     _State->systemIncludes.insert(FileName.str());
 }
@@ -392,7 +339,6 @@ void LocalHeaderPP::MacroDefined(const clang::Token &MacroNameTok,
   MacroRecord record;
   record.text = "#define " + text.str();
   record.order = defLoc.getRawEncoding();
-  // A later redefinition of the same name wins, matching what the compiler saw.
   _State->localMacros[id->getName().str()] = std::move(record);
 }
 
@@ -428,10 +374,8 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   std::set<std::string> rejected(_ToRemove->begin(), _ToRemove->end());
 
   // --- roots --------------------------------------------------------------
-  //
-  // Surviving function bodies plus all kept signatures, plus every other
-  // main-file declaration (a file-scope global or typedef survives into the
-  // output and can name a header type just as a body can).
+  // Traverse roots and collect decls: Surviving function bodies, signatures, and
+  // main-file declarations
   ClosureCollector collector(context);
   std::vector<std::pair<unsigned, unsigned>> rejectedBodies;
   for (clang::Decl *decl : context.getTranslationUnitDecl()->decls()) {
@@ -442,8 +386,6 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
       collector.TraverseDecl(decl);
       continue;
     }
-    // Signature always: RemoveVisitor leaves rejected signatures in place so
-    // transform still sees real return types, so their types are still live.
     collector.addDecl(func);
     if (!func->doesThisDeclarationHaveABody() || !func->getBody())
       continue;
@@ -451,6 +393,7 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
       collector.TraverseStmt(func->getBody());
       continue;
     }
+    // otherwise, dont traverse and remember its file range
     clang::SourceRange body = func->getBody()->getSourceRange();
     if (mgr.isInMainFile(body.getBegin()) && mgr.isInMainFile(body.getEnd()))
       rejectedBodies.emplace_back(mgr.getFileOffset(body.getBegin()),
@@ -463,8 +406,6 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   for (const clang::Decl *decl : collector.needed()) {
     std::optional<EmittedDecl> rendered = renderDecl(decl, mgr, langOpts);
     if (!rendered) {
-      // The win over reconstruction-from-absence: this is a real Decl with a
-      // real FileID, so an unrepresentable one is something we *know*.
       const auto *named = llvm::dyn_cast<clang::NamedDecl>(decl);
       debugLog(1, "[filter] closure could not render declaration: " +
                       (named ? named->getNameAsString() : std::string("<unnamed>")));
@@ -472,48 +413,41 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
     }
     emitted.push_back(std::move(*rendered));
 
-    // Cycles through pointers (struct node { struct node *next; }) and mutual
-    // references between records cannot be resolved by ordering alone. A repeat
-    // forward declaration is legal C even when a definition follows, so these
-    // are emitted unconditionally rather than only where a cycle exists.
+    // Emit forward decls for any record to protect against cyclic/mutual references
     if (const auto *record = llvm::dyn_cast<clang::RecordDecl>(decl))
       if (!record->getName().empty())
         forwardDecls.insert(std::string(record->getKindName()) + " " + record->getName().str() +
                             ";");
   }
 
-  // Source order is already a valid topological order: the headers compiled as
-  // written, and SourceLocation offsets are globally monotone in the order the
-  // preprocessor entered each file. Ties (a record and the variable declared
-  // with it) go to the wider span, which then subsumes the narrower one below.
+  // order declarations by their source location (tie break for overlapping decl types when same code range has multiple)
   std::sort(emitted.begin(), emitted.end(), [](const EmittedDecl &a, const EmittedDecl &b) {
     return a.begin != b.begin ? a.begin < b.begin : a.end > b.end;
   });
 
   std::string declText;
-  unsigned watermark = 0;
+  unsigned lastRange = 0;
   for (const EmittedDecl &decl : emitted) {
     // A "typedef struct { ... } X;" yields both a RecordDecl and a TypedefDecl
-    // whose spans overlap; emitting both would declare the struct twice.
-    if (decl.begin < watermark)
+    // skip a typedef it its record was already emitted
+    if (decl.begin < lastRange)
       continue;
-    watermark = decl.end;
+    lastRange = decl.end;
     declText += decl.text + "\n";
   }
 
   // --- macro closure ------------------------------------------------------
-  //
-  // Macros are invisible to the declaration closure: by the time an AST exists,
-  // `char buf[BUFSIZE]` is an array of 64 with a macro-expansion location and
-  // nothing to reach a definition from.
+  // we need to follow transitive macro references so we use a worklist and visited set
   std::deque<std::string> pending;
   std::set<std::string> neededMacros;
   auto require = [&](const std::string &name) {
+    // if not local header Macro or already in needed skip
     if (!_State->localMacros.count(name) || !neededMacros.insert(name).second)
       return;
     pending.push_back(name);
   };
 
+  // validate macro uses aren't in bodies that are being removed
   for (const std::pair<std::string, clang::SourceLocation> &use : _State->macroUses) {
     if (!mgr.isInMainFile(use.second))
       continue;
@@ -523,17 +457,15 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
       if (offset >= body.first && offset <= body.second)
         inRejected = true;
     if (!inRejected)
-      require(use.first);
+      require(use.first); // add to pending
   }
 
-  // A record emitted as `struct S { uint32_t x; } PACKED;` carries a macro the
-  // expansion-site scan above never sees, because the expansion happened while
-  // lexing the header rather than the main file.
+  // check emitted declaration for macro references
   std::vector<std::string> identifiers;
-  collectIdentifiers(declText, identifiers);
+  collectIdentifiers(declText, identifiers); // put macros in identifiers
   for (const std::string &name : identifiers)
     require(name);
-  while (!pending.empty()) {
+  while (!pending.empty()) { // follow nested references
     std::string name = pending.front();
     pending.pop_front();
     identifiers.clear();
@@ -575,9 +507,8 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
     return;
 
   debugLog(2, "[filter] header closure: " + std::to_string(includes.size()) + " include(s), " +
-                  std::to_string(macros.size()) + " macro(s), " +
-                  std::to_string(emitted.size()) + " declaration(s)");
-  // Line 1 rather than the stripped include's position: the block carries its
-  // own system includes, so it must not land below one it needs.
+                  std::to_string(macros.size()) + " macro(s), " + std::to_string(emitted.size()) +
+                  " declaration(s)");
+  // put it on line 1
   _Rewriter.InsertTextBefore(mgr.translateLineCol(mgr.getMainFileID(), 1, 1), block + "\n");
 }

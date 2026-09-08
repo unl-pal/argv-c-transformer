@@ -17,10 +17,10 @@
 #include <string>
 #include <vector>
 
-MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
+MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                                  std::shared_ptr<std::set<std::string>> neededFwdDecls,
                                  clang::Rewriter &rewriter, const HavocBounds &havoc)
-    : _NoOpFunctions(noOpFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter),
+    : _DiscardedFunctions(discardedFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter),
       _Havoc(havoc) {}
 
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
@@ -39,8 +39,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
-    if (_NoOpFunctions->count(func->getNameAsString())) {
-      debugLog(2, "[transform] " + func->getNameAsString() + " body collapsed to no-ops; not harnessed");
+    if (_DiscardedFunctions->count(func->getNameAsString())) {
+      debugLog(2, "[transform] " + func->getNameAsString() + " discarded; not harnessed");
       continue;
     }
     if (func->isMain()) {
