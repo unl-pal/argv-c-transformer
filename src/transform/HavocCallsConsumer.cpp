@@ -15,11 +15,12 @@
 #include <llvm/Support/Casting.h>
 
 HavocCallsConsumer::HavocCallsConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
+                                       std::shared_ptr<std::set<std::string>> neededFwdDecls,
                                        clang::Rewriter &rewriter)
-    : _NoOpFunctions(noOpFunctions), _Rewriter(rewriter) {}
+    : _NoOpFunctions(noOpFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter) {}
 
 void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
-  HavocCallsVisitor Visitor(&Context, _Rewriter);
+  HavocCallsVisitor Visitor(&Context, _NeededFwdDecls, _Rewriter);
   Visitor.TraverseDecl(Context.getTranslationUnitDecl());
 
   // Strip any function whose body collapsed entirely to no-ops

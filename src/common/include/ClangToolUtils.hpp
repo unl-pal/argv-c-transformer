@@ -10,10 +10,12 @@
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Error.h>
@@ -236,4 +238,16 @@ inline bool harnessIsEmpty(std::filesystem::path path) {
   buffer << in.rdbuf();
   std::string content = buffer.str();
   return content.find("int main(void) {\n  return 0;\n}") != std::string::npos;
+}
+
+/** @brief Formats a duration as "Xm YY.Ys" (minutes elided under 60s), for stage summary output. */
+inline std::string formatElapsed(std::chrono::steady_clock::duration d) {
+  double totalSeconds = std::chrono::duration<double>(d).count();
+  int minutes = static_cast<int>(totalSeconds) / 60;
+  double seconds = totalSeconds - minutes * 60;
+  std::ostringstream oss;
+  if (minutes > 0)
+    oss << minutes << "m ";
+  oss << std::fixed << std::setprecision(minutes > 0 ? 1 : 2) << seconds << "s";
+  return oss.str();
 }

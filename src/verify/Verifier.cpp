@@ -317,6 +317,7 @@ void Verifier::writeHarnessHeader() {
 }
 
 int Verifier::run() {
+  auto startTime = std::chrono::steady_clock::now();
   std::filesystem::path path(configuration.transformDir);
   if (!std::filesystem::exists(path)) {
     debugLog(0, "Transform directory not found: " + configuration.transformDir);
@@ -328,6 +329,8 @@ int Verifier::run() {
             << "  Files processed:        " << _totalProcessed << "\n"
             << "  Benchmarks produced:    " << result.produced << "\n"
             << "  Declined (no output):   " << result.declined << "\n"
-            << "  Failed:                 " << result.failed << std::endl;
+            << "  Failed:                 " << result.failed << "\n"
+            << "  Time elapsed:           "
+            << formatElapsed(std::chrono::steady_clock::now() - startTime) << std::endl;
   return result.produced;
 }

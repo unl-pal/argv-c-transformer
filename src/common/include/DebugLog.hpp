@@ -16,7 +16,9 @@
  * read it without threading {@code debugLevel} through every layer.
  *
  * Levels: 0 silent (summary + real errors only), 1 per-file progress,
- * 2 per-function decisions, 3 everything.
+ * 2 per-function decisions, 3 per-file detail (includes stripped, compile
+ * error summaries), 4 per-callsite verbose (one line per queued/skipped file
+ * or rewritten call expression -- very large output).
  */
 /**
  * @brief Accessor for the process-global verbosity level.

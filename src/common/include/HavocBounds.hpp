@@ -17,4 +17,6 @@ struct HavocBounds {
   int strMax = 16;
   /** Byte size for a havocked opaque-pointer block. */
   int blockMax = 128;
+  /** Element count for a havocked pointer to a sized type with no declared bound. */
+  int arrayElems = 8;
 };

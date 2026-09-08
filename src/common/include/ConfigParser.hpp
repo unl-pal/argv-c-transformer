@@ -63,6 +63,7 @@ struct PipelineConfig {
       {"havocArgcMax", 4},
       {"havocStrMax", 16},
       {"havocBlockMax", 128},
+      {"havocArrayElems", 8},
   };
 
   std::string databaseDir;  ///< Input tree for the filter stage ("" = unset).
@@ -219,10 +220,17 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       }
       if (key == "debugLevel") {
         int &level = config.fileSettings.at(key);
-        if (level < 0 || level > 3) {
-          std::cerr << "Warning: 'debugLevel' expects 0-3 - clamping value '" << value << "'"
+        if (level < 0 || level > 4) {
+          std::cerr << "Warning: 'debugLevel' expects 0-4 - clamping value '" << value << "'"
                     << std::endl;
-          level = std::clamp(level, 0, 3);
+          level = std::clamp(level, 0, 4);
+        }
+      } else if (key == "nproc") {
+        int &workers = config.fileSettings.at(key);
+        if (workers < 0) {
+          std::cerr << "Warning: 'nproc' expects a non-negative count (0 = auto) - ignoring value '"
+                    << value << "'" << std::endl;
+          workers = 0;
         }
       } else if (key == "nproc") {
         int &workers = config.fileSettings.at(key);
