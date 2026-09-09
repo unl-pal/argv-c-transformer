@@ -35,6 +35,21 @@ inline void checkClangVersion() {
   }
 }
 
+/**
+ * @brief Single-quotes a path for safe interpolation into a shell command.
+ */
+inline std::string shellQuote(const std::string &raw) {
+  std::string quoted = "'";
+  for (char c : raw) {
+    if (c == '\'')
+      quoted += "'\\''";
+    else
+      quoted += c;
+  }
+  quoted += "'";
+  return quoted;
+}
+
 /** @brief Runs a shell command, returns its stdout stripped of the trailing newline, or nullopt if it couldn't run or produced no output. */
 inline std::optional<std::string> readCommandOutput(const char *cmd) {
   FILE *pipe = popen(cmd, "r");
