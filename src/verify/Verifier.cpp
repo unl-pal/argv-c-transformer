@@ -11,6 +11,7 @@
 #include "HarnessHeaderData.hpp"
 #include "WorkerPool.hpp"
 
+#include <clang/Frontend/FrontendActions.h>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -18,7 +19,6 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
-#include <optional>
 #include <regex>
 #include <string>
 #include <system_error>
@@ -194,19 +194,10 @@ std::string summarizeCompileFailure(const std::string &diagnostics) {
 } // namespace
 
 bool Verifier::checkCompilable(std::filesystem::path path) {
-  std::optional<std::string> cmd = clangCommand("-fsyntax-only -xc");
-  if (!cmd)
-    return false;
-
-  *cmd += " " + shellQuote(path.string()) + " 2>&1";
-  FILE *pipe = popen(cmd->c_str(), "r");
-  if (!pipe)
-    return false;
-  char buf[512];
+  std::unique_ptr<clang::tooling::FrontendActionFactory> factory =
+      clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>();
   std::string diagnostics;
-  while (fgets(buf, sizeof(buf), pipe))
-    diagnostics += buf;
-  bool ok = pclose(pipe) == 0;
+  bool ok = runFrontendActionCheckingErrors(path.string(), {}, *factory, &diagnostics);
   if (!ok)
     debugLog(3, "[verify] compile check failed: " + path.string() + ": " +
                     summarizeCompileFailure(diagnostics));
@@ -329,11 +320,11 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
   std::filesystem::path iPath = cPath;
   iPath.replace_extension(".i");
 
-  std::optional<std::string> cmd = clangCommand("-E -P -std=gnu11");
-  if (!cmd)
-    return false;
-  *cmd += " " + shellQuote(cPath.string()) + " -o " + shellQuote(iPath.string()) + " 2>/dev/null";
-  if (std::system(cmd->c_str()) != 0)
+  std::unique_ptr<clang::tooling::FrontendActionFactory> factory =
+      clang::tooling::newFrontendActionFactory<clang::PrintPreprocessedAction>();
+  bool ok = runFrontendActionCheckingErrors(
+      cPath.string(), {"-E", "-P", "-std=gnu11", "-o", iPath.string()}, *factory);
+  if (!ok)
     return false;
   stripNoiseTypedefs(iPath);
   return true;

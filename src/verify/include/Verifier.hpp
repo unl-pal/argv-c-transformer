@@ -100,8 +100,9 @@ public:
   /**
    * @brief Checks whether a verified file compiles without errors.
    *
-   * Runs `clang -fsyntax-only` against the file. No stub definitions are
-   * needed for `__VERIFIER_nondet_*`: syntax-only checking never links, and
+   * Runs clang::SyntaxOnlyAction in-process via libTooling (the same class
+   * `clang -fsyntax-only` selects). No stub definitions are needed for
+   * `__VERIFIER_nondet_*`: syntax-only checking never links, and
    * argv_c_harness.h (which every benchmark unconditionally `#include`s)
    * already supplies the extern declarations.
    *
@@ -151,8 +152,9 @@ public:
   /**
    * @brief Preprocesses a finalized .c file into a .i file.
    *
-   * Runs {@code clang -E -P -std=gnu11} on the source file, writing the
-   * preprocessed output alongside it with a {@code .i} extension.
+   * Runs clang::PrintPreprocessedAction in-process via libTooling (the same
+   * class {@code clang -E -P -std=gnu11} selects), writing the preprocessed
+   * output alongside the source with a {@code .i} extension.
    *
    * @param cPath Path to the finalized .c benchmark file.
    * @return true if preprocessing succeeded, false otherwise.
