@@ -63,12 +63,66 @@ inline std::optional<std::string> getSysroot() {
 #endif
 }
 
-/** @brief Returns the clang resource directory: CLANG_RESOURCES if set, else `clang -print-resource-dir`. */
+/** @brief Returns the major version of the clang on PATH, or nullopt if there isn't one or its version is unparseable. */
+inline std::optional<int> getPathClangMajorVersion() {
+  std::optional<std::string> version = readCommandOutput("clang -dumpversion 2>/dev/null");
+  if (!version)
+    return std::nullopt;
+  try {
+    return std::stoi(*version);
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+/**
+ * @brief Returns the clang resource directory (builtin headers), preferring
+ * CLANG_RESOURCES or PATH's clang if it matches CLANG_VERSION_MAJOR, else
+ * falling back to whichever is available with a warning.
+ */
 inline std::optional<std::string> getResourceDir() {
   const char *r = std::getenv("CLANG_RESOURCES");
-  if (r)
-    return std::string(r);
-  return readCommandOutput("clang -print-resource-dir 2>/dev/null");
+  std::optional<std::string> envResourceDir = r ? std::optional<std::string>(std::string(r)) : std::nullopt;
+
+  if (envResourceDir) {
+    std::string basename = std::filesystem::path(*envResourceDir).filename().string();
+    try {
+      if (std::stoi(basename) == CLANG_VERSION_MAJOR)
+        return envResourceDir;
+      debugLog(0, "CLANG_RESOURCES (" + *envResourceDir + ") looks like Clang " + basename +
+                  ", but this was built against Clang " + std::to_string(CLANG_VERSION_MAJOR) +
+                  ". Preferring a matching clang on PATH if one is found.");
+    } catch (...) {
+      // Non-numeric basename; can't validate it, so trust it as given.
+      return envResourceDir;
+    }
+  }
+
+  std::optional<int> pathVersion = getPathClangMajorVersion();
+  if (pathVersion) {
+    if (*pathVersion != CLANG_VERSION_MAJOR)
+      debugLog(0, "`clang` on PATH is version " + std::to_string(*pathVersion) +
+                  ", but this was built against Clang " + std::to_string(CLANG_VERSION_MAJOR) + ".");
+    if (*pathVersion == CLANG_VERSION_MAJOR || !envResourceDir) {
+      std::optional<std::string> pathResourceDir = readCommandOutput("clang -print-resource-dir 2>/dev/null");
+      if (pathResourceDir) {
+        if (*pathVersion != CLANG_VERSION_MAJOR)
+          debugLog(0, "Using its resource directory anyway (" + *pathResourceDir +
+                      "); its builtin headers may not match this build.");
+        return pathResourceDir;
+      }
+    }
+  }
+
+  if (envResourceDir) {
+    debugLog(0, "Using CLANG_RESOURCES anyway (" + *envResourceDir +
+                "); its builtin headers may not match this build.");
+    return envResourceDir;
+  }
+
+  debugLog(0, "No `clang` found on PATH to supply the resource directory (builtin "
+              "headers). Set CLANG_RESOURCES to point at one, or put a clang on PATH.");
+  return std::nullopt;
 }
 
 /**
@@ -179,23 +233,8 @@ inline bool runToolOnFile(const std::string &filePath,
 }
 
 /**
- * @brief Runs a FrontendActionFactory over a single C file and reports
- * whether it completed with zero diagnosed errors.
- *
- * Unlike runToolOnFile() (which always returns true once the tool ran, since
- * its callers' downstream compile checks decide the file's fate), this is
- * the compile check itself: it runs the real Clang frontend in-process
- * (e.g. SyntaxOnlyAction for `-fsyntax-only`, PrintPreprocessedAction for
- * `-E`) instead of shelling out to a separate `clang` binary, so there is no
- * risk of it resolving a different, mismatched Clang version off PATH.
- *
- * Builds its own {@code FixedCompilationDatabase} rather than going through
- * {@code CommonOptionsParser::create} (which calls {@code cl::ParseCommandLineOptions}):
- * that entry point relies on process-global {@code llvm::cl} state and is
- * documented as safe to call only once per process, but Verifier calls this
- * helper twice per file (compile check, then preprocess) from the same
- * worker - a second call corrupted the global parser state and silently
- * broke compilation-database detection.
+ * @brief Runs a FrontendActionFactory over a single C file in-process and
+ * reports whether it completed with zero diagnosed errors.
  *
  * @param filePath      Path to the C source file to process.
  * @param extraArgs     Extra driver-style args appended after the standard
@@ -224,9 +263,7 @@ inline bool runFrontendActionCheckingErrors(const std::string &filePath,
 
   clang::tooling::FixedCompilationDatabase compilations(".", flags);
   clang::tooling::ClangTool tool(compilations, {filePath});
-  // ClangTool defaults to ClangSyntaxOnlyAdjuster, which would force
-  // "-fsyntax-only" onto every invocation - wrong for preprocess()'s "-E".
-  tool.clearArgumentsAdjusters();
+  tool.clearArgumentsAdjusters(); // clear -fsyntax-only
 
   std::string diagnosticText;
   llvm::raw_string_ostream diagStream(diagnosticText);
