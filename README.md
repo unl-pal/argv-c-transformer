@@ -131,7 +131,11 @@ Preprocessing and compile-checking (in `verify`) run in-process via libTooling
 `clang` binary, so there's no separate runtime version to keep in sync with
 the build. `clang` (or `CLANG_RESOURCES`) still needs to be resolvable at
 runtime so the tools can locate the Clang resource directory (builtin
-headers); see `getResourceDir()` in `ClangToolUtils.hpp`.
+headers). If a `clang` on `PATH` or an explicit `CLANG_RESOURCES` looks like
+a different major version than this binary was built against, a matching
+one (of either) is preferred, but a mismatch is only ever a warning - it
+still falls back to whatever resource directory it found rather than
+failing outright; see `getResourceDir()` in `ClangToolUtils.hpp`.
 
 ## macOS (Homebrew)
 
