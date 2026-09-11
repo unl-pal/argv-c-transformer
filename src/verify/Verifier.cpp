@@ -20,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <regex>
+#include <set>
 #include <string>
 #include <system_error>
 #include <unistd.h>
@@ -293,6 +294,35 @@ void stripNoiseTypedefs(const std::filesystem::path &iPath) {
     out << l << "\n";
 }
 
+// A typedef may legally repeat verbatim - glibc's own headers commonly reach the
+// same typedef (e.g. size_t) through more than one internal path, and C allows
+// redeclaring a typedef to the same type any number of times. Some verifier
+// frontends (e.g. Ultimate Automizer) reject the redeclaration anyway, even
+// though it is valid C
+void dedupeExactTypedefLines(const std::filesystem::path &iPath) {
+  static const std::regex typedefLine(R"(^\s*typedef\s+.+;\s*$)");
+  std::ifstream in(iPath);
+  if (!in)
+    return;
+  std::vector<std::string> kept;
+  std::set<std::string> seenTypedefs;
+  std::string line;
+  bool changed = false;
+  while (std::getline(in, line)) {
+    if (std::regex_match(line, typedefLine) && !seenTypedefs.insert(line).second) {
+      changed = true;
+      continue;
+    }
+    kept.push_back(std::move(line));
+  }
+  in.close();
+  if (!changed)
+    return;
+  std::ofstream out(iPath, std::ios::trunc);
+  for (const std::string &l : kept)
+    out << l << "\n";
+}
+
 } // namespace
 
 // NOTE: same std::system/unescaped-path caveat as checkCompilable above.
@@ -307,6 +337,7 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
   if (std::system(cmd->c_str()) != 0)
     return false;
   stripNoiseTypedefs(iPath);
+  dedupeExactTypedefLines(iPath);
   return true;
 }
 
