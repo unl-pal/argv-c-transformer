@@ -13,7 +13,7 @@ op_t get_op(void) {
   return add_one;
 }
 
-int use_op(int n) ;
+
 
 int untouched(void) {
   return 42;

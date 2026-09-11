@@ -5,7 +5,7 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
-extern int __VERIFIER_nondet_int(void);
+
 
 int pick(int n) {
   return n + __VERIFIER_nondet_int();

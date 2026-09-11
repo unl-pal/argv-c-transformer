@@ -15,7 +15,7 @@ struct Point make_point(void) {
   return p;
 }
 
-int caller(void) ;
+
 
 int untouched(void) {
   return 42;
