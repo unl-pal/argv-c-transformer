@@ -162,7 +162,24 @@ harness uses for parameters (see "Pointer Shapes" above), hoisting a uniquely-na
 buffer declaration above the call's enclosing statement so it outlives the call, and
 replacing the call with a plain-C reference to that storage. No heap, so no `free`
 obligation. A non-viable plan (function pointer, pointer-to-pointer, a record with
-pointer fields) is left as-is, and a pointer return whose value is discarded is dropped.
+pointer fields) can't be havocked, so the call is rejected and its enclosing function
+discarded (see "Rejected Calls" below); a pointer return whose value is discarded is dropped.
+
+### Rejected Calls
+
+A call whose return can't be havocked (aggregate/struct, or a non-viable pointer
+plan) is rejected: `classifyCall` returns `Reject` instead of `nullopt`.
+`VisitCallExpr` walks up to the enclosing `FunctionDecl` and taints it;
+`HavocCallsConsumer` strips a tainted function to a bare declaration — same as a
+no-op collapse — and excludes it from the harness.
+
+This is not a compile-check safety net: `checkCompilable` runs `clang
+-fsyntax-only`, which accepts a call to an undefined function regardless of
+linkage, so leaving the call in place would not have been caught downstream. The
+problem is semantic: the callee may have no definition anywhere in the output (a
+header-closure prototype, or a filter-rejected sibling), and even when it does,
+leaving the call real breaks the intraprocedural guarantee every other havocked
+call provides.
 
 ### Cleaning Up After Havocking
 
@@ -180,31 +197,31 @@ havocking never touched. Pure-but-untouched code stays exactly as written.
 
 A havocked call counts as side-effect-free because the transform is
 intraprocedural: the callee's writes to globals and out-parameters are discarded
-already, so the call contributes only its return value. Calls that are *not*
-havocked (library calls, aggregate returns, non-viable pointer plans) remain
-side-effecting and block removal.
+already, so the call contributes only its return value. A library call, or a
+rejected call (see "Rejected Calls" above), is real and stays side-effecting;
+it blocks removal, but a rejected call's enclosing function is discarded
+separately regardless.
 
 Because a statement can be erased after its inner calls were rewritten, verifier
 declarations are decided only once traversal ends — otherwise an erased call
 would leave a dangling `extern` that no compiler warning would catch.
 
-### Include Stripping
+### Include Stripping and Header Closure
 
-The Transform step removes all non-system `#include` directives. Functions declared in
-project-local headers are havocked anyway, so the includes only leave unresolvable
-references. Standard types that were reaching the file transitively through a stripped
-project header are recovered by `AddStdIncludesConsumer`. Files that depend on
-*project* types or macros from a local header will still fail to compile after
-stripping and are caught by the Verify stage's `keepCompilesOnly` compile check.
+Before Transform ever strips an include, the Filter step's `HeaderClosure`
+(`src/filter/HeaderClosure.{hpp,cpp}`, inlines by value whatever the surviving code
+references out of project-local headers: `RecordDecl`/`TypedefNameDecl`/`EnumDecl`/
+`VarDecl`/`FunctionDecl`, each emitted via `Lexer::getSourceText` over its own source
+range. System headers are left as `#include`s, since the target machine provides them.
 
-An unresolved type isn't always AST-visible for `AddStdIncludesConsumer` to recover: a
-local variable declared with an unrecognized type name (e.g. `mode_t m;` with no
-`sys/types.h` in scope) causes Clang to drop the whole `DeclStmt`, leaving no node to
-walk. `UnknownTypeDiagConsumer` closes this gap by hooking the parser's diagnostics
-directly (`err_unknown_typename`, and - the common case for a bare local declaration,
-which is syntactically ambiguous with an expression-statement - `err_undeclared_var_use`)
-and feeding the recovered names into the same `StdHeaders` lookup, name-only and
-backstopped by the same compile check.
+Transform then removes all non-system `#include` directives. Then for *standard/POSIX*
+types we enforce during transformation:
+
+- `AddStdIncludesConsumer` re-injects a standard header (`src/common/include/StdHeaders.hpp`)
+  for a standard type or function it finds by walking the AST.
+- `UnknownTypeDiagConsumer` patches the case where an unresolved standard type isn't even
+  AST-visible. It scrapes the name straight out of the parser's `err_unknown_typename`/
+  `err_undeclared_var_use` diagnostics and feeds it through the same `StdHeaders` lookup.
 
 ### Local Header Resolution
 
@@ -282,14 +299,23 @@ emptied by repair collapses back to that same verbatim text.
   "Pointer Shapes" above — and is supported when the pointee has no pointer fields
 - **Variadic functions** (e.g. `printf`-style): skipped with a warning; no way to
   synthesize a meaningful argument list
-- **Aggregate return types**: calls returning structs/unions are left as-is (not havocked),
-  since there is no expression-position nondet equivalent
-- **Function pointer returns**: calls returning function pointers are left as-is
+- **Aggregate return types**: no expression-position nondet equivalent exists, so a call
+  returning a struct/union is rejected and its enclosing function discarded (see
+  "Rejected Calls" above)
+- **Function pointer returns**: non-viable, so the call is rejected the same way
 - **`envp` (third `main` parameter)**: `int main(int, char**, char**)` is not explicitly
   handled; only the first two parameters (`argc`, `argv`) are synthesized
-- **Macro-expanded calls**: calls inside macro expansions have no rewritable source range
-  and are skipped by the havoc pass
-- **K&R-style (old-style) declarations**: the pipeline assumes ANSI-prototyped function
+- **Opaque definitions could introduce memsafety errors**: if for whatever reason some
+  type is unresolved, it is still havocked as a flat `unsigned char b[__HAVOC_BLOCK_MAX]`
+  block via the `Opaque` shape. However, if the real struct is larger, the callee could
+  attempt out-of-bounds access, and a memory-safety verifier reports a violation that is an
+  artifact of the harness. Mitigable today without code changes: `havocBlockMax` is
+  emitted as a macro, so a benchmark can be retuned in place.
+- **Macro-expanded calls and references**: macros are never expanded or analyzed. Any
+  unresolved references safely fail at compilation check, but valid calls are not
+  havocked. So it's possible for a generated benchmark to unintentionally become
+  **inter**-procedural due to a macro expanded call. Addressing this needs extended expansion handling.
+  - **K&R-style (old-style) declarations**: the pipeline assumes ANSI-prototyped function
   declarations throughout (parameter typing, the filter's parameter-type gate, and
   `HavocCallsVisitor`'s callee resolution all read from `FunctionDecl::parameters()`).
   Old-style `int f(a, b) int a, b; { ... }` definitions are not explicitly detected or

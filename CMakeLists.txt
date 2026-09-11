@@ -63,6 +63,7 @@ set(SOURCE_FILTER
   src/filter/FilterAction.cpp
   src/filter/Filterer.cpp
   src/filter/FilterFunctionsConsumer.cpp
+  src/filter/HeaderClosure.cpp
   src/filter/RemoveConsumer.cpp
   src/filter/RemoveVisitor.cpp
 )

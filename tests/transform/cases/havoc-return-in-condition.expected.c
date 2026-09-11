@@ -5,7 +5,7 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
-int *acquire(void);
+
 
 // Pointer-returning call inside an if condition: the storage must hoist above
 // the whole `if`, and the call is replaced in place.

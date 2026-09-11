@@ -5,11 +5,11 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
-int helper(void);
-void voidhelper(void);
+
+
 
 int ticks;
-int tick(void);
+
 
 void run(void) {
   

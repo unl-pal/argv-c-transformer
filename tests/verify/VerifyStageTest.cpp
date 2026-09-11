@@ -240,6 +240,45 @@ TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
   EXPECT_EQ(i.find("_Float"), std::string::npos);
 }
 
+TEST_F(VerifyStageTest, PreprocessDedupesExactDuplicateTypedefLines) {
+  // A duplicate typedef is legal C (redeclaring to the same type is allowed
+  // any number of times) and Transform never touches typedefs, so this
+  // survives untouched into the .i. Real occurrences come from glibc pulling
+  // the same typedef (e.g. size_t) in through more than one internal header
+  // path; some verifier frontends (Ultimate Automizer) reject the
+  // redeclaration anyway, so Verifier::preprocess drops the exact repeat.
+  writeFile(filterDir / "dup.c", "typedef unsigned int myuint;\n"
+                                 "typedef unsigned int myuint;\n"
+                                 "int identity(myuint x) { return x; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "dup.i"));
+  std::string i = readFile(benchmarkDir / "dup.i");
+  int occurrences = 0;
+  for (size_t pos = 0; (pos = i.find("typedef unsigned int myuint;", pos)) != std::string::npos;
+       pos += 1)
+    ++occurrences;
+  EXPECT_EQ(occurrences, 1) << i;
+}
+
+TEST_F(VerifyStageTest, PreprocessKeepsDifferingTypedefsOfSameName) {
+  // Negative: two typedefs of the same name to genuinely DIFFERENT types is a
+  // real conflict, not redundant noise. Deduping by exact text must not touch
+  // it - this is not something Verifier::preprocess should ever "fix" (the
+  // compile check upstream is what should have caught it).
+  writeFile(filterDir / "conflict.c", "typedef unsigned int myuint;\n"
+                                       "typedef int myuint;\n"
+                                       "int identity(int x) { return x; }\n");
+
+  transformAndVerify();
+
+  // The second, conflicting redeclaration makes this fail to compile, so
+  // under keepCompilesOnly (the default) it is never finalized to a .i.
+  EXPECT_FALSE(fs::exists(benchmarkDir / "conflict.i"));
+}
+
 // ---------------------------------------------------------------------------
 // selectProperties: which .prp files get attached, based on the fresh
 // per-function counts taken after transform (see CountingVisitor::Complexity).

@@ -6,6 +6,7 @@
 
 #include "ConfigParser.hpp"
 #include "CountingVisitor.hpp"
+#include "HeaderClosure.hpp"
 
 #include <clang/AST/ASTConsumer.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -79,6 +80,9 @@ private:
   std::map<std::string, FeatureGate> *_FeatureConfig;
   clang::Rewriter _Rewriter;
   llvm::raw_fd_ostream &_Output;
+  /// Shared between LocalHeaderPP (fills it during preprocessing) and
+  /// HeaderClosureConsumer (reads it once the AST is complete).
+  std::shared_ptr<HeaderClosureState> _ClosureState;
 };
 
 /**

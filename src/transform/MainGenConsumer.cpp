@@ -12,15 +12,16 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Lex/Lexer.h>
 #include <llvm/Support/Casting.h>
 #include <optional>
 #include <string>
 #include <vector>
 
-MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
+MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                                  std::shared_ptr<std::set<std::string>> neededFwdDecls,
                                  clang::Rewriter &rewriter, const HavocBounds &havoc)
-    : _NoOpFunctions(noOpFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter),
+    : _DiscardedFunctions(discardedFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter),
       _Havoc(havoc) {}
 
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
@@ -33,14 +34,23 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     if (func->isMain())
       _Rewriter.ReplaceText(func->getNameInfo().getSourceRange(), "original_main");
-    if (func->isThisDeclarationADefinition())
+    if (func->isThisDeclarationADefinition()) {
       defined.push_back(func);
+      continue;
+    }
+    // remove functions stripped by filter stage
+    clang::SourceLocation semiLoc = clang::Lexer::findLocationAfterToken(
+        func->getEndLoc(), clang::tok::semi, mgr, Context.getLangOpts(), false);
+    if (semiLoc.isValid())
+      _Rewriter.RemoveText(clang::SourceRange(func->getBeginLoc(), semiLoc));
   }
 
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
-    if (_NoOpFunctions->count(func->getNameAsString())) {
-      debugLog(2, "[transform] " + func->getNameAsString() + " body collapsed to no-ops; not harnessed");
+    if (_DiscardedFunctions->count(func->getNameAsString())) {
+      //remove functions stripped by havoc stage
+      _Rewriter.RemoveText(func->getSourceRange());
+      debugLog(2, "[transform] " + func->getNameAsString() + " discarded; not harnessed");
       continue;
     }
     if (func->isMain()) {
@@ -83,8 +93,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   _Rewriter.InsertTextBefore(mgr.translateLineCol(mgr.getMainFileID(), 1, 1), prelude + "\n");
 }
 
-MainGenConsumer::HarnessCall
-MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTContext &Context) {
+MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::FunctionDecl *func,
+                                                             clang::ASTContext &Context) {
   const clang::SourceManager &mgr = Context.getSourceManager();
   HarnessCall call;
 
@@ -112,8 +122,8 @@ MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTConte
     std::optional<std::string> suffix = verifierSuffixForType(declared);
     if (!suffix) {
       std::string local = "__h" + std::to_string(counter++);
-      PointerStorage store = renderPointerStorage(plans[i], declared, local,
-                                                  parm->getType().getAsString());
+      PointerStorage store =
+          renderPointerStorage(plans[i], declared, local, parm->getType().getAsString());
       call.prologue += store.decls;
       call.args += store.arg;
       if (!plans[i].fwdDecl.empty())

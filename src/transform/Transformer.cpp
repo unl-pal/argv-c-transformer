@@ -10,6 +10,7 @@
 #include "IncludeIndex.hpp"
 #include "WorkerPool.hpp"
 
+#include <cctype>
 #include <filesystem>
 #include <iostream>
 #include <llvm/ADT/StringRef.h>
@@ -41,6 +42,20 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
   globalDebugLevel() = configuration.debugLevel;
 }
 
+namespace {
+
+std::string sanitizePathComponent(const std::string &part) {
+  std::string sanitized;
+  sanitized.reserve(part.size());
+  for (char c : part) {
+    unsigned char uc = static_cast<unsigned char>(c);
+    sanitized += (std::isalnum(uc) || c == '.' || c == '-' || c == '_') ? c : '_';
+  }
+  return sanitized;
+}
+
+} // namespace
+
 //   filtered-files/antirez/redis/src/endianconv.c
 //   -> transformed-files/antirez_redis_src_endianconv.c
 std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path path) {
@@ -55,7 +70,7 @@ std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path pat
       continue;
     if (!flatName.empty())
       flatName += "_";
-    flatName += part;
+    flatName += sanitizePathComponent(part);
   }
   return std::filesystem::path(configuration.transformDir) / flatName;
 }

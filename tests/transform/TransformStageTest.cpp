@@ -105,6 +105,22 @@ TEST_F(TransformStageTest, NestedPathFlattensWithUnderscores) {
   EXPECT_TRUE(fs::exists(transformDir / "owner_repo_src_util.c"));
 }
 
+TEST_F(TransformStageTest, PathComponentsWithUnsafeCharactersAreSanitized) {
+  // A directory name pulled from an upstream repo can contain characters that
+  // are legal in a path but not in the output filename we build by joining
+  // components with '_' (a literal ':' or space would otherwise land in the
+  // flattened name unescaped).
+  writeFile(filterDir / "weird dir:name" / "file.c",
+            "int identity(int x) { return x; }\n");
+
+  Transformer t(configPath.string());
+  int count = t.run();
+
+  EXPECT_GE(count, 1);
+  EXPECT_TRUE(fs::exists(transformDir / "weird_dir_name_file.c"));
+  EXPECT_FALSE(fs::exists(transformDir / "weird dir:name_file.c"));
+}
+
 TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
   // Every function takes a struct by value, which has no nondet equivalent and
   // is not a pointer either → none can be harnessed → empty main. (A pointer

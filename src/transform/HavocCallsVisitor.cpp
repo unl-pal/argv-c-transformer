@@ -23,13 +23,16 @@
 namespace {
 
 struct HavocAction {
-  enum class Mode { Erase, Inline, Pointer } mode;
+  enum class Mode { Erase, Inline, Pointer, Reject } mode;
   std::string replacement; // Inline only.
   PointerPlan plan;        // Pointer only.
 };
 
-// Decides whether a call is havocked, and into what; nullopt leaves it alone.
-// Stateless, so callable repeatedly for the same call.
+// Decides whether a call is havocked, and into what. nullopt leaves a genuine
+// library/verifier call alone; Mode::Reject also leaves the call's text alone
+// but marks it unhavockable, so the caller taints the enclosing function
+// rather than emitting a real call into an unsound benchmark. Stateless, so
+// callable repeatedly for the same call.
 std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTContext &C) {
   clang::SourceManager &mgr = C.getSourceManager();
   clang::SourceLocation loc = E->getExprLoc();
@@ -57,11 +60,16 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
   if (returnType->isAnyPointerType()) {
     PointerPlan plan = planPointer(returnType, mgr); // storage/placement are the caller's job
     if (!plan.viable)
-      return std::nullopt;
+      return HavocAction{HavocAction::Mode::Reject, "", {}};
     return HavocAction{HavocAction::Mode::Pointer, "", plan};
   }
 
-  return std::nullopt; // aggregate return: no expression-position nondet equivalent
+  // Aggregate return: no expression-position nondet equivalent. Reject rather
+  // than leave the real call in place — the callee may have no definition in
+  // the output at all (a header-closure prototype, or a filter-rejected
+  // sibling), and even when it does, leaving the call real breaks the
+  // intraprocedural guarantee every other havocked call gives.
+  return HavocAction{HavocAction::Mode::Reject, "", {}};
 }
 
 std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
@@ -120,8 +128,8 @@ bool HavocCallsVisitor::isSideEffectFree(
   case clang::Stmt::CallExprClass: {
     const auto *CE = clang::cast<clang::CallExpr>(E);
     std::optional<HavocAction> action = classifyCall(CE, *_C);
-    if (!action)
-      return false;
+    if (!action || action->mode == HavocAction::Mode::Reject)
+      return false; // a rejected call is a real, unreplaced call: not pure
     if (action->mode == HavocAction::Mode::Pointer) {
       bool discarded = false;
       hoistAnchor(CE, discarded); // pure only if the hoisted storage goes unused
@@ -163,9 +171,11 @@ bool HavocCallsVisitor::isSideEffectFree(
 bool HavocCallsVisitor::containsHavocedCall(const clang::Stmt *S) const {
   if (!S)
     return false;
-  if (const auto *CE = clang::dyn_cast<clang::CallExpr>(S))
-    if (classifyCall(CE, *_C))
+  if (const auto *CE = clang::dyn_cast<clang::CallExpr>(S)) {
+    std::optional<HavocAction> action = classifyCall(CE, *_C);
+    if (action && action->mode != HavocAction::Mode::Reject)
       return true;
+  }
   for (const clang::Stmt *child : S->children()) {
     if (containsHavocedCall(child))
       return true;
@@ -196,6 +206,14 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     return true;
 
   std::string where = locString(_C->getSourceManager(), E->getExprLoc());
+  if (action->mode == HavocAction::Mode::Reject) {
+    if (const clang::FunctionDecl *enclosing = enclosingFunction(E)) {
+      debugLog(2, "[transform] " + where + ": unhavockable call taints " +
+                      enclosing->getNameAsString());
+      _Tainted.insert(enclosing);
+    }
+    return true;
+  }
   if (action->mode == HavocAction::Mode::Erase) {
     debugLog(4, "[transform] " + where + ": dropped void call");
     eraseStmt(E);
@@ -207,6 +225,21 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   debugLog(4, "[transform] " + where + ": havocked call -> " + action->replacement);
   _Rewriter.ReplaceText(E->getSourceRange(), action->replacement);
   return true;
+}
+
+// Walks parents to the CallExpr's nearest enclosing FunctionDecl; every call
+// site is inside exactly one (file-scope initializers can't contain calls).
+const clang::FunctionDecl *HavocCallsVisitor::enclosingFunction(const clang::CallExpr *E) const {
+  clang::DynTypedNode node = clang::DynTypedNode::create(*E);
+  while (true) {
+    clang::DynTypedNodeList parents = _C->getParents(node);
+    if (parents.empty())
+      return nullptr;
+    const clang::DynTypedNode &parent = parents[0];
+    if (const auto *func = parent.get<clang::FunctionDecl>())
+      return func;
+    node = parent;
+  }
 }
 
 const clang::Stmt *HavocCallsVisitor::hoistAnchor(const clang::CallExpr *E, bool &discarded) const {
