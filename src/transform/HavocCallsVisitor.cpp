@@ -42,8 +42,8 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
   if (const clang::FunctionDecl *callee = E->getDirectCallee()) {
     if (callee->getIdentifier() && callee->getName().starts_with("__VERIFIER_"))
       return std::nullopt;
-    if (!callee->isImplicit() && !mgr.isInMainFile(callee->getLocation()) &&
-        mgr.isInSystemHeader(callee->getLocation()))
+    if (!callee->isImplicit() &&
+        !mgr.isInMainFile(callee->getLocation()) && mgr.isInSystemHeader(callee->getLocation()))
       return std::nullopt;
   }
 
@@ -199,6 +199,13 @@ HavocCallsVisitor::HavocCallsVisitor(clang::ASTContext *C,
                                      std::shared_ptr<std::set<std::string>> neededFwdDecls,
                                      clang::Rewriter &rewriter)
     : _C(C), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter) {};
+
+bool HavocCallsVisitor::TraverseCallExpr(clang::CallExpr *E) {
+  std::optional<HavocAction> action = classifyCall(E, *_C);
+  if (action && action->mode != HavocAction::Mode::Reject)
+    return VisitCallExpr(E); // rewrites E outright; its arguments' text goes with it
+  return RecursiveASTVisitor<HavocCallsVisitor>::TraverseCallExpr(E);
+}
 
 bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   std::optional<HavocAction> action = classifyCall(E, *_C);

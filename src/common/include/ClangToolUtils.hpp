@@ -6,8 +6,11 @@
 
 #include "DebugLog.hpp"
 
+#include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/DiagnosticOptions.h>
 #include <clang/Basic/Version.h>
 #include <clang/Frontend/FrontendAction.h>
+#include <clang/Frontend/TextDiagnosticPrinter.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 #include <chrono>
@@ -17,6 +20,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <llvm/ADT/IntrusiveRefCntPtr.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/raw_ostream.h>
@@ -50,37 +54,6 @@ inline std::optional<std::string> readCommandOutput(const char *cmd) {
   return result.empty() ? std::nullopt : std::optional<std::string>(result);
 }
 
-/**
- * @brief Aborts if the `clang` resolved off PATH at runtime is too old.
- *
- * checkClangVersion() only confirms the Clang this binary was *built*
- * against; clangCommand() shells out to a bare "clang" resolved independently
- * by PATH, which can silently be a different, older install.
- */
-inline void checkRuntimeClangVersion() {
-  std::optional<std::string> version = readCommandOutput("clang -dumpversion 2>/dev/null");
-  if (!version) {
-    std::cerr << "Error: no `clang` found on PATH. This project needs one at runtime "
-                 "for preprocessing and compile-checking. See README.md (\"Dependencies\") "
-                 "for how to get one."
-              << std::endl;
-    std::exit(1);
-  }
-  int major;
-  try {
-    major = std::stoi(*version);
-  } catch (...) {
-    return; // Unparseable output; let it through and surface any real issue later.
-  }
-  if (major < 20) {
-    std::cerr << "Error: `clang` on PATH is version " << *version
-              << ", but 20 or newer is required. See README.md (\"clang on PATH must "
-                 "match the build\") for how to fix this."
-              << std::endl;
-    std::exit(1);
-  }
-}
-
 /** @brief Returns the macOS SDK sysroot (system C headers live inside the SDK there, not /usr/include), or nullopt on non-Apple platforms or if xcrun fails. */
 inline std::optional<std::string> getSysroot() {
 #ifndef __APPLE__
@@ -90,27 +63,66 @@ inline std::optional<std::string> getSysroot() {
 #endif
 }
 
-/** @brief Returns the clang resource directory: CLANG_RESOURCES if set, else `clang -print-resource-dir`. */
-inline std::optional<std::string> getResourceDir() {
-  const char *r = std::getenv("CLANG_RESOURCES");
-  if (r)
-    return std::string(r);
-  return readCommandOutput("clang -print-resource-dir 2>/dev/null");
+/** @brief Returns the major version of the clang on PATH, or nullopt if there isn't one or its version is unparseable. */
+inline std::optional<int> getPathClangMajorVersion() {
+  std::optional<std::string> version = readCommandOutput("clang -dumpversion 2>/dev/null");
+  if (!version)
+    return std::nullopt;
+  try {
+    return std::stoi(*version);
+  } catch (...) {
+    return std::nullopt;
+  }
 }
 
 /**
- * @brief Builds "clang <flags> -resource-dir=<dir> [-isysroot <sdk>]" for a std::system shell-out.
- * @param flags Compiler flags placed right after "clang" (e.g. "-E -P").
- * @return The command string, or nullopt if the resource directory can't be determined.
+ * @brief Returns the clang resource directory (builtin headers), preferring
+ * CLANG_RESOURCES or PATH's clang if it matches CLANG_VERSION_MAJOR, else
+ * falling back to whichever is available with a warning.
  */
-inline std::optional<std::string> clangCommand(const std::string &flags) {
-  std::optional<std::string> resourceDir = getResourceDir();
-  if (!resourceDir)
-    return std::nullopt;
-  std::string cmd = "clang " + flags + " -resource-dir=" + *resourceDir;
-  if (std::optional<std::string> sysroot = getSysroot())
-    cmd += " -isysroot " + *sysroot;
-  return cmd;
+inline std::optional<std::string> getResourceDir() {
+  const char *r = std::getenv("CLANG_RESOURCES");
+  std::optional<std::string> envResourceDir = r ? std::optional<std::string>(std::string(r)) : std::nullopt;
+
+  if (envResourceDir) {
+    std::string basename = std::filesystem::path(*envResourceDir).filename().string();
+    try {
+      if (std::stoi(basename) == CLANG_VERSION_MAJOR)
+        return envResourceDir;
+      debugLog(0, "CLANG_RESOURCES (" + *envResourceDir + ") looks like Clang " + basename +
+                  ", but this was built against Clang " + std::to_string(CLANG_VERSION_MAJOR) +
+                  ". Preferring a matching clang on PATH if one is found.");
+    } catch (...) {
+      // Non-numeric basename; can't validate it, so trust it as given.
+      return envResourceDir;
+    }
+  }
+
+  std::optional<int> pathVersion = getPathClangMajorVersion();
+  if (pathVersion) {
+    if (*pathVersion != CLANG_VERSION_MAJOR)
+      debugLog(0, "`clang` on PATH is version " + std::to_string(*pathVersion) +
+                  ", but this was built against Clang " + std::to_string(CLANG_VERSION_MAJOR) + ".");
+    if (*pathVersion == CLANG_VERSION_MAJOR || !envResourceDir) {
+      std::optional<std::string> pathResourceDir = readCommandOutput("clang -print-resource-dir 2>/dev/null");
+      if (pathResourceDir) {
+        if (*pathVersion != CLANG_VERSION_MAJOR)
+          debugLog(0, "Using its resource directory anyway (" + *pathResourceDir +
+                      "); its builtin headers may not match this build.");
+        return pathResourceDir;
+      }
+    }
+  }
+
+  if (envResourceDir) {
+    debugLog(0, "Using CLANG_RESOURCES anyway (" + *envResourceDir +
+                "); its builtin headers may not match this build.");
+    return envResourceDir;
+  }
+
+  debugLog(0, "No `clang` found on PATH to supply the resource directory (builtin "
+              "headers). Set CLANG_RESOURCES to point at one, or put a clang on PATH.");
+  return std::nullopt;
 }
 
 /**
@@ -218,6 +230,56 @@ inline bool runToolOnFile(const std::string &filePath,
     return false;
   }
   return true;
+}
+
+/**
+ * @brief Runs a FrontendActionFactory over a single C file in-process and
+ * reports whether it completed with zero diagnosed errors.
+ *
+ * @param filePath      Path to the C source file to process.
+ * @param extraArgs     Extra driver-style args appended after the standard
+ *                      "-xc -resource-dir=... [-isysroot ...]" flags (e.g.
+ *                      {"-E", "-P", "-o", iPath}).
+ * @param factory       Factory producing the FrontendAction to run.
+ * @param diagnosticsOut If non-null, filled with the formatted diagnostic text.
+ * @return true if the tool ran and diagnosed zero errors.
+ */
+inline bool runFrontendActionCheckingErrors(const std::string &filePath,
+                                            const std::vector<std::string> &extraArgs,
+                                            clang::tooling::FrontendActionFactory &factory,
+                                            std::string *diagnosticsOut = nullptr) {
+  std::optional<std::string> resourceDir = getResourceDir();
+  if (!resourceDir) {
+    debugLog(0, "Could not determine clang resource directory (set CLANG_RESOURCES to override)");
+    return false;
+  }
+
+  std::vector<std::string> flags = {"-xc", "-resource-dir=" + *resourceDir, "-fparse-all-comments"};
+  if (std::optional<std::string> sysroot = getSysroot()) {
+    flags.push_back("-isysroot");
+    flags.push_back(*sysroot);
+  }
+  flags.insert(flags.end(), extraArgs.begin(), extraArgs.end());
+
+  clang::tooling::FixedCompilationDatabase compilations(".", flags);
+  clang::tooling::ClangTool tool(compilations, {filePath});
+  tool.clearArgumentsAdjusters(); // clear -fsyntax-only
+
+  std::string diagnosticText;
+  llvm::raw_string_ostream diagStream(diagnosticText);
+  llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> diagOpts(new clang::DiagnosticOptions());
+  clang::TextDiagnosticPrinter diagPrinter(diagStream, diagOpts.get());
+  tool.setDiagnosticConsumer(&diagPrinter);
+
+  try {
+    tool.run(&factory);
+  } catch (const std::exception &e) {
+    debugLog(0, "Clang tool threw while processing " + filePath + ": " + e.what());
+    return false;
+  }
+  if (diagnosticsOut)
+    *diagnosticsOut = diagStream.str();
+  return diagPrinter.getNumErrors() == 0;
 }
 
 /**

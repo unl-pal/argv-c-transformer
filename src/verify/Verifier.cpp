@@ -11,6 +11,7 @@
 #include "HarnessHeaderData.hpp"
 #include "WorkerPool.hpp"
 
+#include <clang/Frontend/FrontendActions.h>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -18,7 +19,6 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <memory>
-#include <optional>
 #include <regex>
 #include <set>
 #include <string>
@@ -172,16 +172,37 @@ WorkerPoolResult Verifier::verifyAll(std::filesystem::path path) {
   return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work);
 }
 
-// NOTE: cmd is passed to std::system (shell-interpreted), and path is not
-// escaped. path originates from a cloned/downloaded repository, so a
-// pathological filename containing shell metacharacters could inject commands
-bool Verifier::checkCompilable(std::filesystem::path path) {
-  std::optional<std::string> cmd = clangCommand("-fsyntax-only -xc");
-  if (!cmd)
-    return false;
+namespace {
 
-  *cmd += " " + path.string() + " 2>/dev/null";
-  return std::system(cmd->c_str()) == 0;
+std::string summarizeCompileFailure(const std::string &diagnostics) {
+  std::istringstream lines(diagnostics);
+  std::string line, firstError;
+  int errorCount = 0;
+  while (std::getline(lines, line)) {
+    if (line.find("error:") == std::string::npos)
+      continue;
+    ++errorCount;
+    if (firstError.empty())
+      firstError = line;
+  }
+  if (firstError.empty())
+    return diagnostics.substr(0, 200);
+  if (errorCount > 1)
+    firstError += " (+" + std::to_string(errorCount - 1) + " more )";
+  return firstError;
+}
+
+} // namespace
+
+bool Verifier::checkCompilable(std::filesystem::path path) {
+  std::unique_ptr<clang::tooling::FrontendActionFactory> factory =
+      clang::tooling::newFrontendActionFactory<clang::SyntaxOnlyAction>();
+  std::string diagnostics;
+  bool ok = runFrontendActionCheckingErrors(path.string(), {}, *factory, &diagnostics);
+  if (!ok)
+    debugLog(3, "[verify] compile check failed: " + path.string() + ": " +
+                    summarizeCompileFailure(diagnostics));
+  return ok;
 }
 
 std::vector<BenchmarkProperty> Verifier::selectProperties(
@@ -325,16 +346,15 @@ void dedupeExactTypedefLines(const std::filesystem::path &iPath) {
 
 } // namespace
 
-// NOTE: same std::system/unescaped-path caveat as checkCompilable above.
 bool Verifier::preprocess(std::filesystem::path cPath) {
   std::filesystem::path iPath = cPath;
   iPath.replace_extension(".i");
 
-  std::optional<std::string> cmd = clangCommand("-E -P -std=gnu11");
-  if (!cmd)
-    return false;
-  *cmd += " " + cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
-  if (std::system(cmd->c_str()) != 0)
+  std::unique_ptr<clang::tooling::FrontendActionFactory> factory =
+      clang::tooling::newFrontendActionFactory<clang::PrintPreprocessedAction>();
+  bool ok = runFrontendActionCheckingErrors(
+      cPath.string(), {"-E", "-P", "-std=gnu11", "-o", iPath.string()}, *factory);
+  if (!ok)
     return false;
   stripNoiseTypedefs(iPath);
   dedupeExactTypedefLines(iPath);

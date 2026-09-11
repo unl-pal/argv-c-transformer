@@ -28,7 +28,6 @@ Otherwise the tool can be pointed to any local repositories as the user desires.
 - [Build](#build)
   - [macOS (Homebrew)](#macos-homebrew)
   - [Linux (Debian/Ubuntu)](#linux-debianubuntu)
-  - [`clang` on `PATH` must match the build](#clang-on-path-must-match-the-build)
 - [Testing](#testing)
 - [Downloader (optional)](#downloader-optional)
 - [Repository Layout](#repository-layout)
@@ -42,12 +41,9 @@ ways:
 ## Quick install (script)
 
 There's no prebuilt binary: `argv-c` dynamically links `libclang-cpp`/`libLLVM`
-at runtime and separately shells out to a bare `clang` for preprocessing and
-compile-checking (see
-["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build)),
-so a downloaded binary would still require you to separately install a
-matching LLVM 20 - it wouldn't actually save you the setup step. Instead,
-clone the repo and run the install script, which detects your platform,
+at runtime, so a downloaded binary would still require you to separately
+install a matching LLVM 20 - it wouldn't actually save you the setup step.
+Instead, clone the repo and run the install script, which detects your platform,
 installs the pinned LLVM/Clang 20 toolchain (via `apt` on Linux or `brew` on
 macOS), and builds and installs `argv-c` for you:
 
@@ -127,8 +123,19 @@ the `build/` directory.
 Because this project requires **LLVM/Clang 20**, CMake (>= 3.20) you may need
 to perform additional setup. If you're already on 20 or newer the above build commands
 may have worked. `clang --version` tells you the version currently resolved on `PATH`.
-See [clang-on-path-must-match-the-build](#clang-on-path-must-match-the-build) for more information.
 Platform-specific instructions are below.
+
+Preprocessing and compile-checking (in `verify`) run in-process via libTooling
+- the same `SyntaxOnlyAction`/`PrintPreprocessedAction` classes `clang
+-fsyntax-only`/`clang -E` select - rather than shelling out to a separate
+`clang` binary, so there's no separate runtime version to keep in sync with
+the build. `clang` (or `CLANG_RESOURCES`) still needs to be resolvable at
+runtime so the tools can locate the Clang resource directory (builtin
+headers). If a `clang` on `PATH` or an explicit `CLANG_RESOURCES` looks like
+a different major version than this binary was built against, a matching
+one (of either) is preferred, but a mismatch is only ever a warning - it
+still falls back to whatever resource directory it found rather than
+failing outright; see `getResourceDir()` in `ClangToolUtils.hpp`.
 
 ## macOS (Homebrew)
 
@@ -162,30 +169,6 @@ CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja
 
 `CXX`/`CC` only need to be set for this one invocation since CMake caches the
 compiler choice in `build/`. Now you should be able to run `ninja -C build` successfully.
-
-## `clang` on `PATH` must match the build
-
-Beyond the build itself, `argv-c` shells out to a
-bare `clang` command at runtime (see `ClangToolUtils.hpp` / `Verifier.cpp`) to
-preprocess and compile-check each candidate benchmark. This is separate
-from, and not guaranteed to match, the LLVM 20 libraries the tools are linked
-against. `verify`/`argv-c` check this at startup and refuse to run if `PATH`
-doesn't resolve to Clang 20+.
-
-- **Linux**: installing `clang-20` via apt does not repoint the unversioned
-  `clang`, which may already point at a different preinstalled version.
-  Put the versioned install first on `PATH`:
-
-  ```sh
-  export PATH="/usr/lib/llvm-20/bin:$PATH"
-  ```
-
-- **macOS**: Homebrew's `llvm@20` is keg-only, so it's never on `PATH`
-  automatically:
-
-  ```sh
-  export PATH="$(brew --prefix llvm@20)/bin:$PATH"
-  ```
 
 # Testing
 

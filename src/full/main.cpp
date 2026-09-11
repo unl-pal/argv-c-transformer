@@ -15,7 +15,6 @@
 
 int main(int argc, char **argv) {
   checkClangVersion();
-  checkRuntimeClangVersion();
   std::optional<CliInvocation> invocation = parseCliArgs(argc, argv);
   if (!invocation) {
     printUsage("argv-c");
