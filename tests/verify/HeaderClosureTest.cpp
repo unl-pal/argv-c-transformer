@@ -152,6 +152,7 @@ TEST_F(HeaderClosureTest, MacroFromSurvivingSystemIncludeIsNotReEmitted) {
 
 // --- declaration closure ---------------------------------------------------
 
+
 TEST_F(HeaderClosureTest, HeaderStructIsInlinedAndSizedExactly) {
   // The payoff. Before closure, a header-defined struct was havocked as a flat
   // __HAVOC_BLOCK_MAX byte block, because planPointer tests isInMainFile and
@@ -266,3 +267,4 @@ TEST_F(HeaderClosureTest, RejectedFunctionBodyIsNotARoot) {
   // Reached only from the stripped body: not a root, so not inlined.
   EXPECT_EQ(out.find("struct BodyOnly"), std::string::npos) << out;
 }
+
