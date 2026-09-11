@@ -192,7 +192,7 @@ TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
       << "sized Buf storage should not fall back to the opaque byte block:\n" << out;
 }
 
-TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedButPrototypeIs) {
+TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedAndPrototypeIsDroppedAfterHavocking) {
   // Negative, and the one deliberate exception to "full definitions
   // everywhere". The transform is intraprocedural: HavocCallsVisitor havocs
   // every call whose callee is declared in-file, so an inlined header body is
@@ -200,6 +200,11 @@ TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedButPrototypeIs) {
   // inflate the benchmark and add a spurious harness target. A prototype gets
   // the desired behaviour with no dead code. This inverts when interprocedural
   // analysis lands.
+  //
+  // The prototype only needs to exist for HavocCallsVisitor's traversal, which
+  // happens on the very first transform consumer; by the time MainGenConsumer
+  // runs the call is already havocked away, so the leftover declaration has no
+  // remaining reference and MainGenConsumer removes it too.
   writeRepoFile("dbl.h", "static inline int hdr_double(int x) { return x * 2; }\n");
   writeRepoFile("call.c", "#include \"dbl.h\"\n"
                           "int twice(int n) { return hdr_double(n); }\n");
@@ -208,12 +213,12 @@ TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedButPrototypeIs) {
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_EQ(out.find("return x * 2;"), std::string::npos) << "header body was inlined:\n" << out;
-  EXPECT_NE(out.find("int hdr_double(int x);"), std::string::npos) << out;
-  // The prototype is what makes the call havockable, which is the whole point.
+  // Filter's closure inlines the prototype so transform can see it...
+  EXPECT_NE(filtered().find("int hdr_double(int x);"), std::string::npos) << filtered();
+  // ...but nothing calls it any more once transform havocks the call, so it
+  // must not survive into the finished benchmark.
+  EXPECT_EQ(out.find("hdr_double"), std::string::npos) << out;
   EXPECT_NE(out.find("__VERIFIER_nondet_int()"), std::string::npos) << out;
-  // hdr_double is declared, never defined, and never called: harnessing it
-  // would be a link error, so it must not appear in main.
-  EXPECT_EQ(out.find("hdr_double(__VERIFIER"), std::string::npos) << out;
 }
 
 TEST_F(HeaderClosureTest, UnreferencedHeaderDeclarationIsNotInlined) {

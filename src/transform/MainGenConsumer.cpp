@@ -12,6 +12,7 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
 #include <clang/Basic/SourceManager.h>
+#include <clang/Lex/Lexer.h>
 #include <llvm/Support/Casting.h>
 #include <optional>
 #include <string>
@@ -32,12 +33,21 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     if (!func || !mgr.isInMainFile(func->getLocation())) continue;
     if (func->isMain())
       _Rewriter.ReplaceText(func->getNameInfo().getSourceRange(), "original_main");
-    if (func->isThisDeclarationADefinition()) defined.push_back(func);
+    if (func->isThisDeclarationADefinition()) {
+      defined.push_back(func);
+      continue;
+    }
+    // remove functions stripped by filter stage
+    clang::SourceLocation semiLoc = clang::Lexer::findLocationAfterToken(
+        func->getEndLoc(), clang::tok::semi, mgr, Context.getLangOpts(), false);
+    if (semiLoc.isValid()) _Rewriter.RemoveText(clang::SourceRange(func->getBeginLoc(), semiLoc));
   }
 
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
     if (_DiscardedFunctions->count(func->getNameAsString())) {
+      //remove functions stripped by havoc stage
+      _Rewriter.RemoveText(func->getSourceRange());
       debugLog(2, "[transform] " + func->getNameAsString() + " discarded; not harnessed");
       continue;
     }
