@@ -72,7 +72,20 @@ def download_c_files(repo, dest_dir, headers):
     """
     owner, name = repo.split("/")
     tarball_url = f"https://api.github.com/repos/{repo}/tarball"
-    response = requests.get(tarball_url, headers=headers)
+
+    response = None
+    max_attempts = 4
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = requests.get(tarball_url, headers=headers, timeout=30)
+            break
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            if attempt == max_attempts:
+                print(f"Skipping {repo} - Connection failed after {max_attempts} attempts: {e}")
+                return 0
+            wait = 2 ** attempt
+            print(f"  Retry {attempt}/{max_attempts - 1} for {repo} after error: {e} (waiting {wait}s)")
+            time.sleep(wait)
 
     if response.status_code == 404:
         print(f"Skipping {repo} - Not Accessible (404)")
