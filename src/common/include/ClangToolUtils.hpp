@@ -265,8 +265,13 @@ inline bool runFrontendActionCheckingErrors(const std::string &filePath,
 
   std::string diagnosticText;
   llvm::raw_string_ostream diagStream(diagnosticText);
+#if CLANG_VERSION_MAJOR >= 21
+  clang::DiagnosticOptions diagOpts;
+  clang::TextDiagnosticPrinter diagPrinter(diagStream, diagOpts);
+#else
   llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> diagOpts(new clang::DiagnosticOptions());
   clang::TextDiagnosticPrinter diagPrinter(diagStream, diagOpts.get());
+#endif
   tool.setDiagnosticConsumer(&diagPrinter);
 
   try {
