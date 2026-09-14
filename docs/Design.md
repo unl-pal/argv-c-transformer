@@ -293,16 +293,16 @@ emptied by repair collapses back to that same verbatim text.
 
 ### What Is Not Supported
 
-- **Struct / union / enum parameters passed by value**: no `__VERIFIER_nondet_*`
-  equivalent exists for aggregate types, so functions with these parameter types are
-  body-stripped and not harnessed. A pointer *to* a struct/union is a separate case — see
-  "Pointer Shapes" above — and is supported when the pointee has no pointer fields
+- **Struct / union / enum parameters passed by value, and aggregate return types**: no
+  `__VERIFIER_nondet_*` equivalent exists for aggregate types (see "Supported Types"
+  above). A parameter of this kind gets the function body-stripped; a call *returning*
+  one is rejected and its enclosing function discarded (see "Rejected Calls" above). A
+  pointer *to* a struct/union is a separate case — see "Pointer Shapes" — and is
+  supported when the pointee has no pointer fields.
 - **Variadic functions** (e.g. `printf`-style): skipped with a warning; no way to
   synthesize a meaningful argument list
-- **Aggregate return types**: no expression-position nondet equivalent exists, so a call
-  returning a struct/union is rejected and its enclosing function discarded (see
-  "Rejected Calls" above)
-- **Function pointer returns**: non-viable, so the call is rejected the same way
+- **Function pointers, as a parameter or a return**: never viable (see "Pointer Shapes"),
+  so a parameter of this kind is unsupported and a returning call is rejected
 - **`envp` (third `main` parameter)**: `int main(int, char**, char**)` is not explicitly
   handled; only the first two parameters (`argc`, `argv`) are synthesized
 - **Opaque definitions could introduce memsafety errors**: if for whatever reason some
