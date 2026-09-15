@@ -47,6 +47,15 @@ public:
   bool VisitCallExpr(clang::CallExpr *E);
 
   /**
+   * @brief Decides whether to descend into a call's arguments before handling it to
+   * avoid nested calls being havocked
+   *
+   * @param E The call expression being traversed.
+   * @return true to continue traversal.
+   */
+  bool TraverseCallExpr(clang::CallExpr *E);
+
+  /**
    * @brief Marks an empty or all-no-op compound statement as a no-op.
    * @param S The compound statement being visited.
    * @return true to continue traversal.

@@ -20,36 +20,29 @@ Otherwise the tool can be pointed to any local repositories as the user desires.
 
 ## Contents
 
-- [Install](#install)
-  - [Quick install (script)](#quick-install-script)
-  - [Build from source](#build-from-source)
+- [Setup](#setup)
+  - [Quick build and install (script)](#quick-build-and-install-script)
+  - [Prequisites](#build-prequisites)
+  - [Build](#build)
 - [Running](#running)
   - [Configuration](#configuration)
-- [Build](#build)
-  - [macOS (Homebrew)](#macos-homebrew)
-  - [Linux (Debian/Ubuntu)](#linux-debianubuntu)
-  - [`clang` on `PATH` must match the build](#clang-on-path-must-match-the-build)
 - [Testing](#testing)
 - [Downloader (optional)](#downloader-optional)
 - [Repository Layout](#repository-layout)
 
-# Install
+## Setup
 
 `argv-c` is the one binary most users need. It runs the whole filter ->
-transform -> verify pipeline (see [Running](#running)). Get it either of two
-ways:
+transform -> verify pipeline (see [Running](#running)). For simplicity an
+install script is provided and more granular control, build instructions
+are below.
 
-## Quick install (script)
+### Quick build and install (script)
 
-There's no prebuilt binary: `argv-c` dynamically links `libclang-cpp`/`libLLVM`
-at runtime and separately shells out to a bare `clang` for preprocessing and
-compile-checking (see
-["`clang` on `PATH` must match the build"](#clang-on-path-must-match-the-build)),
-so a downloaded binary would still require you to separately install a
-matching LLVM 20 - it wouldn't actually save you the setup step. Instead,
-clone the repo and run the install script, which detects your platform,
-installs the pinned LLVM/Clang 20 toolchain (via `apt` on Linux or `brew` on
-macOS), and builds and installs `argv-c` for you:
+There's no prebuilt binary because `argv-c` dynamically links `libclang-cpp`/`libLLVM`
+at runtime. Instead, clone the repo and run the install script, which checks
+whether a compatible clang (LLVM 20+) is already on `PATH` and, if so, builds
+and installs `argv-c` for you.
 
 ```sh
 git clone https://github.com/unl-pal/argv-c-transformer
@@ -58,15 +51,60 @@ cd argv-c-transformer
 ./scripts/install.sh --prefix ~/.local   # or install elsewhere
 ```
 
-Only Debian/Ubuntu (`apt`) and macOS (`brew`) are supported by the script.
-On other platforms, or if you'd rather manage the toolchain yourself, follow
-[Build from source](#build-from-source) below.
+### Prequisites
 
+The project requires clang/LLVM 20 or newer (`CMakeLists.txt` enforces this at
+configure time) - below are some examples for different platforms.
 
-## Build from source
+**macOS**
 
-Clone the repo, then see [Build](#build) below for dependencies and build
-steps, then:
+```sh
+brew install cmake ninja llvm lld
+```
+
+**Linux (Debian/Ubuntu)**
+
+```sh
+sudo apt install cmake ninja-build \
+  clang-20 libclang-20-dev libclang-cpp20-dev llvm-20-dev lld-20 \
+  zlib1g-dev libzstd-dev libedit-dev
+```
+
+**Arch Linux (pacman)**
+
+```sh
+sudo pacman -S cmake ninja clang lld
+```
+
+**Fedora (dnf)**
+
+```sh
+sudo dnf install cmake ninja-build clang clang-devel llvm-devel lld \
+  zlib-devel libzstd-devel libedit-devel
+```
+
+Other package managers should have LLVM/Clang 20+ available too
+
+### Build
+
+This project uses CMake and Ninja. To build it run:
+
+```sh
+cmake -B build -S . -G Ninja
+ninja -C build
+```
+
+Each stage's binary and the full `argv-c` version can then be found and run from
+the `build/` directory. You may need to point cmake at the necessary clang version:
+
+```sh
+CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja
+```
+
+`CXX`/`CC` only need to be set for this one invocation since CMake caches the
+compiler choice in `build/`. Now you should be able to run `ninja -C build` successfully.
+
+Additionally, it is recommended to put argv-c on your path:
 
 ```sh
 cmake --install build
@@ -79,7 +117,9 @@ Pass `--prefix <dir>` to install elsewhere, e.g. `cmake --install build --prefix
 
 `argv-c` takes up to two positional arguments: an input path (directory
 of C files, or a single `.c` file) and/or a config file, in either order.
-At least one is required. Examples below assume `argv-c` is installed.
+At least one is required. Starting off users will likely want to run
+the pipeline on some repo(s) without filtering to see what kind of
+benchmarks are generated.
 
 `argv-c` runs the pipeline and outputs final benchmarks in `<input>-benchmarks`.
 Intermediate `-filtered`/ `-transformed` directories are cleaned unless the
@@ -103,107 +143,41 @@ Users can run single stages if building from source.
 
 ## Configuration
 
-Config files use INI syntax. Any `*.config` file is accepted with the following
-keys. See `settings.config` for more info.
+Configuration allows the user to set thresholds for filtering and other choices
+that affect the generated benchmarks. Config files use INI syntax. Any
+positional argument that isn't a directory or a `.c` file is treated as the
+config file, regardless of its name or extension. See `settings.config` for
+more info.
 
 - `[Complexity Requirements]` - per-function `min,max` thresholds: `ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`, `Operations`
 - `[Feature Requirements]` - per-function gates: `require` | `forbid` | `ignore` (default): `Concurrency`, `FloatingPoint`, `PointerOrArray`, `PointerDeref`, `MemAlloc`, `MemFree`
 - `[File Settings]` - `FileLoC`, `fileTimeoutSecs`, `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores; higher values are capped at the core count), `keepCompilesOnly`, `debugLevel` (0–3)
-- `[Havoc Settings]` - bounds emitted as `__HAVOC_*` macros into each benchmark: `havocArgcMin`, `havocArgcMax`, `havocStrMax`, `havocBlockMax`
+- `[Havoc Settings]` - bounds emitted as `__HAVOC_*` macros into each benchmark: `havocArgcMin`, `havocArgcMax`, `havocStrMax`, `havocBlockMax`, `havocArrayElems`
 - `[Stage Directories]` - `databaseDir`, `filterDir`, `transformDir`, `benchmarkDir`
-
-# Build
-
-This project uses CMake and Ninja. To build it run:
-
-```sh
-cmake -B build -S . -G Ninja
-ninja -C build
-```
-
-Each stage's binary and the full `argv-c` version can then be found and run from
-the `build/` directory.
-
-Because this project requires **LLVM/Clang 20**, CMake (>= 3.20) you may need
-to perform additional setup. If you're already on 20 or newer the above build commands
-may have worked. `clang --version` tells you the version currently resolved on `PATH`.
-See [clang-on-path-must-match-the-build](#clang-on-path-must-match-the-build) for more information.
-Platform-specific instructions are below.
-
-## macOS (Homebrew)
-
-macOS ships a stripped-down Apple Clang that does not include the linkable
-`clang-cpp`/`clang` libraries or `llvm-config` required to build this project.
-Install the full LLVM toolchain via Homebrew:
-
-```sh
-brew install cmake ninja llvm@20 lld@20
-```
-
-`llvm@20` is keg-only (not symlinked into `/opt/homebrew`) so CMake cannot find
-it automatically.  `CMakeLists.txt` handles this on Apple platforms. No extra
-flags are needed when invoking CMake. Now the above build commands should work.
-
-## Linux (Debian/Ubuntu)
-
-LLVM 20 is available directly from Ubuntu 24.04's default apt repos:
-
-```sh
-sudo apt install cmake ninja-build \
-  clang-20 libclang-20-dev libclang-cpp20-dev llvm-20-dev lld-20 \
-  zlib1g-dev libzstd-dev libedit-dev
-```
-
-When invoking CMake, you''d want to point it at the versioned compiler:
-
-```sh
-CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja
-```
-
-`CXX`/`CC` only need to be set for this one invocation since CMake caches the
-compiler choice in `build/`. Now you should be able to run `ninja -C build` successfully.
-
-## `clang` on `PATH` must match the build
-
-Beyond the build itself, `argv-c` shells out to a
-bare `clang` command at runtime (see `ClangToolUtils.hpp` / `Verifier.cpp`) to
-preprocess and compile-check each candidate benchmark. This is separate
-from, and not guaranteed to match, the LLVM 20 libraries the tools are linked
-against. `verify`/`argv-c` check this at startup and refuse to run if `PATH`
-doesn't resolve to Clang 20+.
-
-- **Linux**: installing `clang-20` via apt does not repoint the unversioned
-  `clang`, which may already point at a different preinstalled version.
-  Put the versioned install first on `PATH`:
-
-  ```sh
-  export PATH="/usr/lib/llvm-20/bin:$PATH"
-  ```
-
-- **macOS**: Homebrew's `llvm@20` is keg-only, so it's never on `PATH`
-  automatically:
-
-  ```sh
-  export PATH="$(brew --prefix llvm@20)/bin:$PATH"
-  ```
 
 # Testing
 
-After building, run the test suite (GoogleTest is fetched automatically by CMake):
+After building you can run the test suite (GoogleTest is fetched automatically by CMake):
 
 ```sh
 ctest --test-dir build
 ```
 
-Two suites run:
+Four suites run:
 
 - **`filter_tests`** - unit tests for the filter stage's AST counting
-  (`tests/filter/`).
+  (`tests/filter/`), plus the shared-code unit tests in `tests/common/`
+  (`ConfigParser`, `HavocPolicy`, `IncludeIndex`, `WorkerPool`,
+  `ClangToolUtils`).
 - **`transform_tests`** - golden-file tests for the transform stage
   (`tests/transform/`). Each case is a pair of files in
   `tests/transform/cases/`: `<name>.input.c` is fed through the full transform
   pipeline (include stripping → call havocking → main generation → runtime
   header include) and the output must match `<name>.expected.c` exactly.
+- **`transform_stage_tests`** - end-to-end tests driving the transform stage
+  entry point directly (`tests/transform/`).
+- **`verify_stage_tests`** - end-to-end tests for the verify stage, including
+  header closure behavior (`tests/verify/`).
 
 To add a transform test, drop a new `<name>.input.c` into the cases directory
 (support headers can sit alongside; quoted includes resolve there) and generate
@@ -223,7 +197,7 @@ means `clang` is not on `PATH`.
 # Downloader (optional)
 
 The downloader fetches C source repositories from GitHub for use as pipeline
-input:
+input. First setup the environment and install the `GitPython` dependency:
 
 ```sh
 python3 -m venv .venv
