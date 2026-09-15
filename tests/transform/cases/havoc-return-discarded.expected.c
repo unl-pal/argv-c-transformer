@@ -5,7 +5,7 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
-int *acquire(void);
+
 
 // Pointer-returning call whose value is discarded: no handle survives on the
 // block, so it needs no storage and is dropped like a void call. The rest of

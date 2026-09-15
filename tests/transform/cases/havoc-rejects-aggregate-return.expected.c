@@ -5,13 +5,24 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
+struct Point {
+  int x;
+  int y;
+};
+
+struct Point make_point(void) {
+  struct Point p = {1, 2};
+  return p;
+}
 
 
-int pick(int n) {
-  return n + __VERIFIER_nondet_int();
+
+int untouched(void) {
+  return 42;
 }
 
 int main(void) {
-  pick(__VERIFIER_nondet_int());
+  make_point();
+  untouched();
   return 0;
 }

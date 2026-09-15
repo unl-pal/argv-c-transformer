@@ -5,13 +5,23 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
+typedef int (*op_t)(int);
+
+int add_one(int x) { return x + 1; }
+
+op_t get_op(void) {
+  return add_one;
+}
 
 
-int pick(int n) {
-  return n + __VERIFIER_nondet_int();
+
+int untouched(void) {
+  return 42;
 }
 
 int main(void) {
-  pick(__VERIFIER_nondet_int());
+  add_one(__VERIFIER_nondet_int());
+  get_op();
+  untouched();
   return 0;
 }

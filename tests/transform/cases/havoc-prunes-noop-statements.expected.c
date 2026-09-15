@@ -5,8 +5,8 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
-void log_step(void);
-void log_other(void);
+
+
 
 /* if/else, while, and for whose bodies are only dropped void calls, with
  * side-effect-free conditions: pruned entirely. The for loop's `i++`
@@ -29,7 +29,7 @@ int outer_counter(int n) {
 }
 
 /* Body collapses entirely to no-ops: stripped to `;` and not harnessed. */
-void all_logging(int n) ;
+
 
 int main(void) {
   busy(__VERIFIER_nondet_int());

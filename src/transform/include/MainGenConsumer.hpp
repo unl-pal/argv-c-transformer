@@ -24,9 +24,9 @@
  * to {@code original_main}, then a fresh {@code int main(void)} is appended that
  * calls every function defined in the file with {@code __VERIFIER_nondet_*}
  * arguments. Functions with a parameter type that has no nondet equivalent
- * (pointers, structs, ...), variadic functions, and functions whose body
- * {@code HavocCallsConsumer} found to have collapsed entirely to no-ops are
- * skipped. For {@code original_main(int, char**)}, a synthesized
+ * (pointers, structs, ...), variadic functions, and functions
+ * {@code HavocCallsConsumer} discarded (a no-op body, or an unhavockable
+ * call) are skipped. For {@code original_main(int, char**)}, a synthesized
  * {@code argc}/{@code argv} harness is generated instead of skipping.
  */
 class MainGenConsumer : public clang::ASTConsumer {
@@ -34,8 +34,9 @@ public:
   /**
    * @brief Constructs the consumer with the shared pipeline state.
    *
-   * @param noOpFunctions  Names of functions {@code HavocCallsConsumer} found
-   *        to have an entirely no-op body; these are not harnessed.
+   * @param discardedFunctions Names of functions {@code HavocCallsConsumer}
+   *        stripped to a bare declaration (no-op body, or an unhavockable
+   *        call); these are not harnessed.
    * @param neededFwdDecls Output set; file-scope forward declarations a
    *        harnessed pointer parameter's prototype-scope struct tag needs,
    *        shared with {@code HavocCallsVisitor}. Emitted into the same
@@ -44,7 +45,7 @@ public:
    * @param havoc          Bounds emitted as the __HAVOC_* macro definitions
    *                       ahead of the argv_c_harness.h #include.
    */
-  MainGenConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
+  MainGenConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                   std::shared_ptr<std::set<std::string>> neededFwdDecls, clang::Rewriter &rewriter,
                   const HavocBounds &havoc = {});
 
@@ -104,7 +105,7 @@ private:
    */
   std::string genMainHarness(const clang::FunctionDecl *mainFn);
 
-  std::shared_ptr<std::set<std::string>> _NoOpFunctions;
+  std::shared_ptr<std::set<std::string>> _DiscardedFunctions;
   std::shared_ptr<std::set<std::string>> _NeededFwdDecls;
   clang::Rewriter &_Rewriter;
   /// Runs across every synthesized call, since all the locals they declare
