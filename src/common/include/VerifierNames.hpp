@@ -53,13 +53,10 @@ inline bool isVerifierGenerated(const std::string &name) {
 inline std::optional<std::string> verifierSuffixForType(clang::QualType QT) {
   // A null type comes back from error-recovery AST nodes (e.g. calls or
   // params built from undefined macros when headers are missing).
-  if (QT.isNull())
-    return std::nullopt;
+  if (QT.isNull()) return std::nullopt;
   const clang::BuiltinType *BT = QT->getAs<clang::BuiltinType>();
-  if (!BT)
-    return std::nullopt;
+  if (!BT) return std::nullopt;
   auto it = kVerifierNames.find(BT->getKind());
-  if (it == kVerifierNames.end())
-    return std::nullopt;
+  if (it == kVerifierNames.end()) return std::nullopt;
   return it->second;
 }

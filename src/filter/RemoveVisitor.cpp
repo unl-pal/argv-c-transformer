@@ -12,15 +12,13 @@ RemoveVisitor::RemoveVisitor(clang::Rewriter &rewriter,
 
 bool RemoveVisitor::VisitFunctionDecl(clang::FunctionDecl *D) {
   // Macro-expanded locations are not writable by the Rewriter
-  if (!_Mgr.isInMainFile(D->getLocation()) || D->getLocation().isMacroID())
-    return true;
+  if (!_Mgr.isInMainFile(D->getLocation()) || D->getLocation().isMacroID()) return true;
 
   if (D->doesThisDeclarationHaveABody()) {
     for (const std::string &name : *_ToRemove) {
       if (name == D->getNameAsString()) {
         clang::SourceRange bodyRange = D->getBody()->getSourceRange();
-        if (bodyRange.isValid())
-          _Rewriter.ReplaceText(bodyRange, ";");
+        if (bodyRange.isValid()) _Rewriter.ReplaceText(bodyRange, ";");
         break;
       }
     }

@@ -28,9 +28,8 @@ VerifyAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringR
 
   std::vector<std::unique_ptr<clang::ASTConsumer>> consumers;
   consumers.emplace_back(std::make_unique<CountingConsumer>(_Counts));
-  consumers.emplace_back(std::make_unique<VerifyFunctionsConsumer>(_Counts, _ToRemove,
-                                                                   _ComplexityConfig,
-                                                                   _FeatureConfig));
+  consumers.emplace_back(std::make_unique<VerifyFunctionsConsumer>(
+      _Counts, _ToRemove, _ComplexityConfig, _FeatureConfig));
   consumers.emplace_back(std::make_unique<RemoveConsumer>(_Rewriter, _ToRemove));
   consumers.emplace_back(std::make_unique<HarnessRepairConsumer>(_Rewriter, _ToRemove));
 

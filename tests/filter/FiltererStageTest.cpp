@@ -99,10 +99,9 @@ TEST_F(FiltererStageTest, RejectsFileBelowMinLoC) {
 
 TEST_F(FiltererStageTest, RejectsFileAboveMaxLoC) {
   writeConfig("FileLoC = ,2\n");
-  writeFile(databaseDir / "big.c",
-            "int a(void) { return 1; }\n"
-            "int b(void) { return 2; }\n"
-            "int c(void) { return 3; }\n");
+  writeFile(databaseDir / "big.c", "int a(void) { return 1; }\n"
+                                   "int b(void) { return 2; }\n"
+                                   "int c(void) { return 3; }\n");
 
   Filterer f(configPath.string());
   f.run();
@@ -112,9 +111,8 @@ TEST_F(FiltererStageTest, RejectsFileAboveMaxLoC) {
 
 TEST_F(FiltererStageTest, AcceptsStdHeader) {
   writeConfig();
-  writeFile(databaseDir / "uses_std.c",
-            "#include <string.h>\n"
-            "int f(void) { return 0; }\n");
+  writeFile(databaseDir / "uses_std.c", "#include <string.h>\n"
+                                        "int f(void) { return 0; }\n");
 
   Filterer f(configPath.string());
   f.run();
@@ -127,9 +125,8 @@ TEST_F(FiltererStageTest, AcceptsNonStdHeader) {
   // handling is the transform step's problem.
   writeConfig();
   writeFile(databaseDir / "project.h", "int helper(void);\n");
-  writeFile(databaseDir / "uses_local.c",
-            "#include \"project.h\"\n"
-            "int f(void) { return helper(); }\n");
+  writeFile(databaseDir / "uses_local.c", "#include \"project.h\"\n"
+                                          "int f(void) { return helper(); }\n");
 
   Filterer f(configPath.string());
   f.run();
@@ -151,12 +148,12 @@ TEST_F(FiltererStageTest, HeaderSplicedSignatureDoesNotCrash) {
   writeConfig();
   writeFile(databaseDir / "signature.h", "void foo(void)\n");
   writeFile(databaseDir / "spliced.c", "#include \"signature.h\"\n"
-                                        "{\n"
-                                        "  int *p = 0;\n"
-                                        "  (void)p;\n"
-                                        "}\n"
-                                        "\n"
-                                        "int main(void) { foo(); return 0; }\n");
+                                       "{\n"
+                                       "  int *p = 0;\n"
+                                       "  (void)p;\n"
+                                       "}\n"
+                                       "\n"
+                                       "int main(void) { foo(); return 0; }\n");
 
   Filterer f(configPath.string());
   f.run();
@@ -168,13 +165,12 @@ TEST_F(FiltererStageTest, StripsFunctionFailingComplexityThreshold) {
   // ForLoops = 1,9999 requires at least one for loop per function: `plain`
   // fails and is stripped to a bare declaration; `loopy` keeps its body.
   writeConfig("ForLoops = 1,9999\n");
-  writeFile(databaseDir / "mixed.c",
-            "int loopy(int n) {\n"
-            "  int s = 0;\n"
-            "  for (int i = 0; i < n; i++) s += i;\n"
-            "  return s;\n"
-            "}\n"
-            "int plain(int x) { return x + 1; }\n");
+  writeFile(databaseDir / "mixed.c", "int loopy(int n) {\n"
+                                     "  int s = 0;\n"
+                                     "  for (int i = 0; i < n; i++) s += i;\n"
+                                     "  return s;\n"
+                                     "}\n"
+                                     "int plain(int x) { return x + 1; }\n");
 
   Filterer f(configPath.string());
   f.run();

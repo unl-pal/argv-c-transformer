@@ -38,8 +38,7 @@ static CountResult runCounter(const std::string &code) {
   // Without it, buildASTFromCodeWithArgs defaults to C++ mode.
   r.ast = clang::tooling::buildASTFromCodeWithArgs(code, {"-xc"}, "test.c");
   EXPECT_NE(r.ast, nullptr) << "AST failed to build for:\n" << code;
-  if (!r.ast)
-    return r;
+  if (!r.ast) return r;
 
   CountingVisitor visitor(&r.ast->getASTContext(), r.funcs);
   visitor.TraverseTranslationUnitDecl(r.ast->getASTContext().getTranslationUnitDecl());
@@ -109,8 +108,8 @@ TEST(CountingVisitor, SignedBinaryOpCounted) {
 }
 
 TEST(CountingVisitor, UnsignedBinaryOpNotCounted) {
-  auto r = runCounter(
-      "void foo(unsigned int a, unsigned int b) { unsigned int c = a + b; (void)c; }");
+  auto r =
+      runCounter("void foo(unsigned int a, unsigned int b) { unsigned int c = a + b; (void)c; }");
   ASSERT_TRUE(r.funcs->count("foo"));
   EXPECT_EQ(r.funcs->at("foo").Complexity.Operations, 0);
 }

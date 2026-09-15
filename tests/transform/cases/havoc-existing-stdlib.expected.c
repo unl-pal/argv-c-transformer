@@ -5,14 +5,14 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
-#include <assert.h>
-int add(int a, int b) {
-  int r = a + b;
-  if (!(r >= a)) reach_error();
-  return r;
+#include <stdlib.h>
+
+int uses_stdlib(const char *s) {
+  return (int)atoi(s);
 }
 
 int main(void) {
-  add(__VERIFIER_nondet_int(), __VERIFIER_nondet_int());
+  char __h0[__HAVOC_STR_MAX];
+  uses_stdlib(__havoc_cstring_fill(__h0, __HAVOC_STR_MAX));
   return 0;
 }

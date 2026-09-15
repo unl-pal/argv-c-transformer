@@ -48,10 +48,8 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
         _allFunctions->try_emplace(name); // see getDeclParentFuncName
         return name;
       }
-      if (const clang::Stmt *s = parent.get<clang::Stmt>())
-        return getStmtParentFuncName(*s);
-      if (const clang::Decl *d = parent.get<clang::Decl>())
-        return getDeclParentFuncName(*d);
+      if (const clang::Stmt *s = parent.get<clang::Stmt>()) return getStmtParentFuncName(*s);
+      if (const clang::Decl *d = parent.get<clang::Decl>()) return getDeclParentFuncName(*d);
     }
   }
   return "FileScope";
@@ -59,13 +57,11 @@ std::string CountingVisitor::getStmtParentFuncName(const clang::Stmt &S) {
 
 bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
   // Only count direct CallExpr, not subclasses
-  if (!_mgr->isInMainFile(_mgr->getExpansionLoc(CE->getBeginLoc())))
-    return true;
+  if (!_mgr->isInMainFile(_mgr->getExpansionLoc(CE->getBeginLoc()))) return true;
   // don't count Verifier nondet / havoc-helper / reach_error / asserts
   if (const clang::FunctionDecl *callee = CE->getDirectCallee()) {
     if (callee->getIdentifier() && isVerifierGenerated(callee->getNameAsString())) {
-      if (callee->getName() == "reach_error")
-        _allFunctions->try_emplace("reach_error");
+      if (callee->getName() == "reach_error") _allFunctions->try_emplace("reach_error");
       return true;
     }
   }
@@ -74,8 +70,7 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
   // assumes all thread/concurrency calls will have types from concurrency related headers
   for (const clang::Expr *arg : CE->arguments()) {
     clang::QualType argType = arg->getType();
-    if (argType->isPointerType())
-      argType = argType->getPointeeType();
+    if (argType->isPointerType()) argType = argType->getPointeeType();
     auto it = StdHeaders.find(argType.getUnqualifiedType().getAsString());
     if (it != StdHeaders.end() &&
         (it->second == "pthread.h" || it->second == "threads.h" || it->second == "semaphore.h")) {
@@ -100,8 +95,7 @@ bool CountingVisitor::VisitFunctionDecl(clang::FunctionDecl *FD) {
       _allFunctions->try_emplace(FD->getNameAsString());
     attributes &entry = _allFunctions->at(FD->getNameAsString());
     entry.Complexity.Param = FD->getNumParams();
-    if (FD->getReturnType()->isFloatingType())
-      entry.Features.FloatingPoint = true;
+    if (FD->getReturnType()->isFloatingType()) entry.Features.FloatingPoint = true;
   }
   return true;
 }
@@ -172,8 +166,7 @@ bool CountingVisitor::VisitDeclRefExpr(clang::DeclRefExpr *DRE) {
     clang::QualType type = DRE->getType();
     if (type->isPointerType() || type->isArrayType())
       _allFunctions->at(getStmtParentFuncName(*DRE)).Features.PointerOrArray = true;
-    if (type->isPointerType())
-      type = type->getPointeeType();
+    if (type->isPointerType()) type = type->getPointeeType();
     if (type->isFloatingType())
       _allFunctions->at(getStmtParentFuncName(*DRE)).Features.FloatingPoint = true;
     auto it = StdHeaders.find(type.getUnqualifiedType().getAsString());

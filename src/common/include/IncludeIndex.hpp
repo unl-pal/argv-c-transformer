@@ -26,8 +26,7 @@ class HeaderIndex {
 public:
   /** @brief Scans `root` for .h files (missing/empty root -> empty index). */
   explicit HeaderIndex(const std::filesystem::path &root) {
-    if (root.empty() || !std::filesystem::exists(root))
-      return;
+    if (root.empty() || !std::filesystem::exists(root)) return;
     std::error_code ec;
     auto it = std::filesystem::recursive_directory_iterator(
         root, std::filesystem::directory_options::skip_permission_denied, ec);
@@ -35,11 +34,9 @@ public:
     for (; !ec && it != end; it.increment(ec)) {
       const std::filesystem::path &p = it->path();
       std::error_code fileEc;
-      if (!it->is_regular_file(fileEc) || fileEc)
-        continue;
+      if (!it->is_regular_file(fileEc) || fileEc) continue;
       std::string ext = p.extension().string();
-      if (ext == ".h")
-        _byBasename[p.filename().string()].push_back(p.parent_path());
+      if (ext == ".h") _byBasename[p.filename().string()].push_back(p.parent_path());
     }
   }
 
@@ -61,8 +58,7 @@ inline std::vector<std::string> extractQuotedIncludes(const std::filesystem::pat
   std::string line;
   while (std::getline(in, line)) {
     std::smatch m;
-    if (std::regex_search(line, m, quoted))
-      includes.push_back(m[1].str());
+    if (std::regex_search(line, m, quoted)) includes.push_back(m[1].str());
   }
   return includes;
 }
@@ -77,7 +73,7 @@ inline std::vector<std::string> extractQuotedIncludes(const std::filesystem::pat
  * basename match was coincidental (an unrelated file of the same name).
  */
 inline std::optional<std::filesystem::path> rebaseToIncludeRoot(std::filesystem::path candidateDir,
-                                                                 const std::string &includeQuote) {
+                                                                const std::string &includeQuote) {
   std::filesystem::path quoteDir = std::filesystem::path(includeQuote).parent_path();
   std::vector<std::string> parts;
   for (const std::filesystem::path &part : quoteDir)
@@ -85,8 +81,7 @@ inline std::optional<std::filesystem::path> rebaseToIncludeRoot(std::filesystem:
   // quoteDir's components read left-to-right ("a/b"), but they need to be
   // peeled off candidateDir's end innermost-first, i.e. "b" then "a".
   for (auto part = parts.rbegin(); part != parts.rend(); ++part) {
-    if (candidateDir.filename() != *part)
-      return std::nullopt;
+    if (candidateDir.filename() != *part) return std::nullopt;
     candidateDir = candidateDir.parent_path();
   }
   return candidateDir;
@@ -105,20 +100,18 @@ inline std::optional<std::filesystem::path> rebaseToIncludeRoot(std::filesystem:
  * @param sourceDir    Directory containing the file that has this #include.
  * @return The directory to pass as -I, or nullopt if no candidate at all.
  */
-inline std::optional<std::filesystem::path> resolveIncludeDir(const std::string &includeQuote,
-                                                               const HeaderIndex &index,
-                                                               const std::filesystem::path &sourceDir) {
+inline std::optional<std::filesystem::path>
+resolveIncludeDir(const std::string &includeQuote, const HeaderIndex &index,
+                  const std::filesystem::path &sourceDir) {
   std::string basename = std::filesystem::path(includeQuote).filename().string();
   const std::vector<std::filesystem::path> *candidates = index.find(basename);
-  if (!candidates || candidates->empty())
-    return std::nullopt;
+  if (!candidates || candidates->empty()) return std::nullopt;
 
   std::optional<std::filesystem::path> best;
   std::size_t bestDistance = 0;
   for (const std::filesystem::path &candidate : *candidates) {
     std::optional<std::filesystem::path> root = rebaseToIncludeRoot(candidate, includeQuote);
-    if (!root)
-      continue;
+    if (!root) continue;
     std::error_code ec;
     std::filesystem::path rel = std::filesystem::relative(*root, sourceDir, ec);
     std::size_t distance = ec ? std::string::npos : std::distance(rel.begin(), rel.end());
@@ -130,18 +123,17 @@ inline std::optional<std::filesystem::path> resolveIncludeDir(const std::string 
   return best;
 }
 
-/** @brief Resolves every quoted #include in `filePath` to a -I dir via `resolveIncludeDir`, deduplicated, first-seen order. */
+/** @brief Resolves every quoted #include in `filePath` to a -I dir via `resolveIncludeDir`,
+ * deduplicated, first-seen order. */
 inline std::vector<std::string> collectLocalIncludeDirs(const std::filesystem::path &filePath,
-                                                         const HeaderIndex &index) {
+                                                        const HeaderIndex &index) {
   std::vector<std::string> dirs;
   for (const std::string &quote : extractQuotedIncludes(filePath)) {
     std::optional<std::filesystem::path> dir =
         resolveIncludeDir(quote, index, filePath.parent_path());
-    if (!dir)
-      continue;
+    if (!dir) continue;
     std::string s = dir->string();
-    if (std::find(dirs.begin(), dirs.end(), s) == dirs.end())
-      dirs.push_back(s);
+    if (std::find(dirs.begin(), dirs.end(), s) == dirs.end()) dirs.push_back(s);
   }
   return dirs;
 }

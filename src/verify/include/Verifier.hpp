@@ -13,10 +13,12 @@
 #include <unordered_map>
 #include <vector>
 
-/** @brief A single property entry in an SV-Comp .yml task file - one block under the {@code properties:} key. */
+/** @brief A single property entry in an SV-Comp .yml task file - one block under the {@code
+ * properties:} key. */
 struct BenchmarkProperty {
-  std::string propertyFile; ///< Relative path to the .prp file (e.g. "../properties/termination.prp").
-  bool expectedVerdict;     ///< {@code true} = program satisfies the property.
+  std::string
+      propertyFile;     ///< Relative path to the .prp file (e.g. "../properties/termination.prp").
+  bool expectedVerdict; ///< {@code true} = program satisfies the property.
 };
 
 /**
@@ -133,8 +135,8 @@ public:
    * @param counts Per-function counts from the verify pass over the final source.
    * @return Vector of properties to include in the task .yml.
    */
-  std::vector<BenchmarkProperty> selectProperties(
-      const std::unordered_map<std::string, CountingVisitor::attributes> &counts);
+  std::vector<BenchmarkProperty>
+  selectProperties(const std::unordered_map<std::string, CountingVisitor::attributes> &counts);
 
   /**
    * @brief Writes an SV-Comp .yml task definition alongside the benchmark .c file.
@@ -145,8 +147,9 @@ public:
    * @param cPath  Path to the finalized .c benchmark file.
    * @param counts Per-function counts, forwarded to selectProperties.
    */
-  void writeBenchmarkTask(std::filesystem::path cPath,
-                          const std::unordered_map<std::string, CountingVisitor::attributes> &counts);
+  void
+  writeBenchmarkTask(std::filesystem::path cPath,
+                     const std::unordered_map<std::string, CountingVisitor::attributes> &counts);
 
   /**
    * @brief Preprocesses a finalized .c file into a .i file.

@@ -5,6 +5,7 @@
 #include "CountingVisitor.hpp"
 #include "DebugLog.hpp"
 #include "FilterFunctionsConsumer.hpp"
+#include "HavocPolicy.hpp"
 #include "VerifierNames.hpp"
 
 #include <clang/AST/Decl.h>
@@ -26,8 +27,7 @@ void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &context) 
 }
 
 void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
-  if (_ToFilter->empty())
-    return;
+  if (_ToFilter->empty()) return;
 
   // Build name → FunctionDecl* so the param-type check below can look up
   // the actual declaration for each function in _ToFilter.
@@ -42,16 +42,14 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
   for (const std::pair<const std::string, CountingVisitor::attributes> &func : *_ToFilter) {
     std::string key = func.first;
     const CountingVisitor::attributes &attr = func.second;
-    if (key == "FileScope")
-      continue;
+    if (key == "FileScope") continue;
 
     bool reject = false;
     for (const auto &[name, range] : *_ComplexityConfig) {
       int value = complexityField(attr.Complexity, name);
       if (value < range.first || value > range.second) {
-        debugLog(2, "[filter] " + key + ": " + name + " = " + std::to_string(value) +
-                        " outside [" + std::to_string(range.first) + "," +
-                        std::to_string(range.second) + "]");
+        debugLog(2, "[filter] " + key + ": " + name + " = " + std::to_string(value) + " outside [" +
+                        std::to_string(range.first) + "," + std::to_string(range.second) + "]");
         reject = true;
         break;
       }
@@ -72,18 +70,19 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
       continue;
     }
 
-    // All threshold checks passed; now check whether every parameter has a
-    // nondet equivalent. If any param type is unsupported (pointer, struct,
-    // etc.), strip the body so HavocCallsVisitor can still use the return
-    // type from the remaining declaration. main is exempt here: its argc/argv
-    // params are handled specially by MainGenConsumer.
+    // All threshold checks passed; now check whether every parameter can be
+    // synthesized: either it has a nondet equivalent, or planPointer can size a
+    // havocked block for it. If any param type is unsupported (aggregate by
+    // value, function pointer, ...), strip the body so HavocCallsVisitor can
+    // still use the return type from the remaining declaration. main is exempt
+    // here: its argc/argv params are handled specially by MainGenConsumer.
     if (key != "main" && declByName.contains(key)) {
       for (auto parm : declByName.at(key)->parameters()) {
-        if (!verifierSuffixForType(parm->getOriginalType())) {
-          debugLog(2, "[filter] " + key + ": unsupported parameter type, body stripped");
-          _ToRemove->push_back(key);
-          break;
-        }
+        clang::QualType declared = parm->getOriginalType();
+        if (verifierSuffixForType(declared) || planPointer(declared, mgr).viable) continue;
+        debugLog(2, "[filter] " + key + ": unsupported parameter type, body stripped");
+        _ToRemove->push_back(key);
+        break;
       }
     }
   }

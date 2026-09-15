@@ -39,7 +39,8 @@ public:
     int IfStmt = 0;
     int Param = 0;
     int WhileLoops = 0;
-    int Operations = 0; // ops w/side-effects on signed types (for UB/no-overflow property detection)
+    int Operations =
+        0; // ops w/side-effects on signed types (for UB/no-overflow property detection)
   };
 
   /** @brief Per-function feature presence flags - the "what kind" axis. */
@@ -92,7 +93,7 @@ public:
   /** @brief Counts function calls ({@code CallFunc}) and checks call
    * arguments/callee for characteristics (concurrency / memsafety), marking
    * the enclosing function accordingly.
-  */
+   */
   bool VisitCallExpr(clang::CallExpr *CE);
 
   /** @brief Registers each function in {@code _allFunctions}, increments the
@@ -140,18 +141,12 @@ private:
  * Throws if `name` isn't one of the known metrics.
  */
 inline int complexityField(const CountingVisitor::ComplexityCounts &c, const std::string &name) {
-  if (name == "CallFunc")
-    return c.CallFunc;
-  if (name == "ForLoops")
-    return c.ForLoops;
-  if (name == "IfStmt")
-    return c.IfStmt;
-  if (name == "Param")
-    return c.Param;
-  if (name == "WhileLoops")
-    return c.WhileLoops;
-  if (name == "Operations")
-    return c.Operations;
+  if (name == "CallFunc") return c.CallFunc;
+  if (name == "ForLoops") return c.ForLoops;
+  if (name == "IfStmt") return c.IfStmt;
+  if (name == "Param") return c.Param;
+  if (name == "WhileLoops") return c.WhileLoops;
+  if (name == "Operations") return c.Operations;
   throw std::invalid_argument("unknown complexity metric: " + name);
 }
 
@@ -160,17 +155,11 @@ inline int complexityField(const CountingVisitor::ComplexityCounts &c, const std
  * one of the known features.
  */
 inline bool featureField(const CountingVisitor::FeatureFlags &f, const std::string &name) {
-  if (name == "Concurrency")
-    return f.Concurrency;
-  if (name == "FloatingPoint")
-    return f.FloatingPoint;
-  if (name == "PointerOrArray")
-    return f.PointerOrArray;
-  if (name == "PointerDeref")
-    return f.PointerDeref;
-  if (name == "MemAlloc")
-    return f.MemAlloc;
-  if (name == "MemFree")
-    return f.MemFree;
+  if (name == "Concurrency") return f.Concurrency;
+  if (name == "FloatingPoint") return f.FloatingPoint;
+  if (name == "PointerOrArray") return f.PointerOrArray;
+  if (name == "PointerDeref") return f.PointerDeref;
+  if (name == "MemAlloc") return f.MemAlloc;
+  if (name == "MemFree") return f.MemFree;
   throw std::invalid_argument("unknown feature: " + name);
 }

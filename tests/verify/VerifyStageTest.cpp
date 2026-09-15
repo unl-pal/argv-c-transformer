@@ -84,8 +84,7 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   // add() has an additive binary op (no-overflow-eligible) but no loop, so
   // this also pins the general .yml shape without overlapping the dedicated
   // property-selection tests below.
-  writeFile(filterDir / "simple.c",
-            "int add(int a, int b) { return a + b; }\n");
+  writeFile(filterDir / "simple.c", "int add(int a, int b) { return a + b; }\n");
 
   int count = transformAndVerify();
 
@@ -114,6 +113,115 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   EXPECT_NE(yml.find("data_model: LP64"), std::string::npos);
 }
 
+TEST_F(VerifyStageTest, HeaderDefinedStructIsOpaqueAndStillCompiles) {
+  // The main-file constraint, end to end. IncludeFinder strips the quoted
+  // #include as a *textual* edit after preprocessing has already run, so the
+  // AST still holds a complete definition of struct Rect while the output
+  // file will not declare it at all. Sizing the block with sizeof(struct Rect)
+  // would parse fine here and then fail to compile as a benchmark, which is
+  // why planPointer tests isInMainFile rather than isCompleteType.
+  writeFile(filterDir / "shapes.h", "struct Rect { int w; int h; };\n");
+  writeFile(filterDir / "area.c", "#include \"shapes.h\"\n"
+                                  "int tag(struct Rect *r) { return r != 0; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "area.c"));
+  std::string out = readFile(benchmarkDir / "area.c");
+
+  // The include is gone, so the definition is gone with it.
+  EXPECT_EQ(out.find("#include \"shapes.h\""), std::string::npos);
+  EXPECT_EQ(out.find("struct Rect {"), std::string::npos);
+  // Therefore the block must be the flat byte count, never sizeof.
+  EXPECT_EQ(out.find("sizeof(struct Rect)"), std::string::npos);
+  EXPECT_NE(out.find("__HAVOC_BLOCK_MAX"), std::string::npos);
+  // A produced benchmark means checkCompilable passed under keepCompilesOnly.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "area.i"));
+}
+
+TEST_F(VerifyStageTest, HeaderTypedefStructIsForwardDeclaredAndStillCompiles) {
+  // Same constraint as above, but the pointee is spelled through a typedef.
+  // Hoisting the struct tag is not enough here: the anonymous struct has no
+  // tag, and the name the harness casts to is the typedef, which vanished with
+  // the include. pointeeFwdDecl must re-declare the typedef itself against a
+  // synthesized tag.
+  writeFile(filterDir / "types.h", "typedef struct { int lo; int hi; } Range;\n");
+  writeFile(filterDir / "span.c", "#include \"types.h\"\n"
+                                  "int nonEmpty(Range *r) { return r != 0; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "span.c"));
+  std::string out = readFile(benchmarkDir / "span.c");
+
+  EXPECT_EQ(out.find("#include \"types.h\""), std::string::npos);
+  // The typedef name is re-declared, so the cast below has something to name.
+  EXPECT_NE(out.find("typedef struct __havoc_Range Range;"), std::string::npos)
+      << "missing typedef forward declaration; output was:\n"
+      << out;
+  // Opaque: an aligned byte buffer, nondet-filled on the stack, cast to Range*
+  // at the call. No sizeof(Range) — the type has no definition in the output.
+  EXPECT_NE(out.find("(Range *)__h"), std::string::npos);
+  EXPECT_NE(out.find("unsigned char __h"), std::string::npos);
+  EXPECT_EQ(out.find("sizeof(Range)"), std::string::npos);
+  // A produced benchmark means checkCompilable passed under keepCompilesOnly:
+  // without the typedef the cast is an unknown type name and this file is gone.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "span.i"));
+}
+
+TEST_F(VerifyStageTest, HeaderEnumPointerIsForwardDeclaredAndStillCompiles) {
+  // A complete enum defined only in a stripped header: the main-file test must
+  // treat it like any other tag, dropping it to Opaque rather than sizing a
+  // bare int-like Block that names an enum the output no longer declares. The
+  // enum tag is then hoisted so the cast compiles.
+  writeFile(filterDir / "palette.h", "enum Color { RED, GREEN, BLUE };\n");
+  writeFile(filterDir / "pick.c", "#include \"palette.h\"\n"
+                                  "int is_set(enum Color *c) { return c != 0; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "pick.c"));
+  std::string out = readFile(benchmarkDir / "pick.c");
+
+  EXPECT_EQ(out.find("#include \"palette.h\""), std::string::npos);
+  // The enum tag is hoisted, so the opaque cast to enum Color* has something to
+  // name; the storage is the aligned byte buffer, never sized as an enum array.
+  EXPECT_NE(out.find("enum Color;"), std::string::npos) << "missing enum forward declaration:\n"
+                                                        << out;
+  EXPECT_NE(out.find("(enum Color *)__h"), std::string::npos);
+  EXPECT_NE(out.find("unsigned char __h"), std::string::npos);
+  // A produced benchmark means checkCompilable passed under keepCompilesOnly.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "pick.i"));
+}
+
+TEST_F(VerifyStageTest, MainFileTypedefIsNotRedeclared) {
+  // The mirror case: a typedef defined in the .c itself survives into the
+  // output on its own. Re-declaring it against a synthesized tag would name a
+  // second, incompatible type, so pointeeFwdDecl must stay quiet — and because
+  // the definition is in the main file, the block is sized with sizeof.
+  writeFile(filterDir / "local.c", "typedef struct { int lo; int hi; } Range;\n"
+                                   "int nonEmpty(Range *r) { return r->hi > r->lo; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  std::string out = readFile(benchmarkDir / "local.c");
+
+  EXPECT_EQ(out.find("__havoc_Range"), std::string::npos)
+      << "synthesized tag leaked for a main-file typedef; output was:\n"
+      << out;
+  // Sized with the real type: the harness declares typed Range storage, not the
+  // opaque `unsigned char[...]` byte buffer a header-only type would get. (The
+  // __HAVOC_BLOCK_MAX *macro* is always defined alongside the other bounds,
+  // so its presence is not the signal — the buffer declaration is.)
+  EXPECT_NE(out.find("Range __h"), std::string::npos);
+  EXPECT_EQ(out.find("unsigned char __h"), std::string::npos);
+  EXPECT_TRUE(fs::exists(benchmarkDir / "local.i"));
+}
+
 TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
   // <stdio.h> transitively pulls in glibc's bits/floatn-common.h, whose
   // fallback typedefs for the C23 extended float types CBMC treats as
@@ -121,7 +229,7 @@ TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
   // _Float32 etc., so Verifier::preprocess must strip those typedef lines
   // from the .i without touching anything else.
   writeFile(filterDir / "prints.c", "#include <stdio.h>\n"
-                                     "int identity(int x) { return x; }\n");
+                                    "int identity(int x) { return x; }\n");
 
   int count = transformAndVerify();
 
@@ -140,13 +248,12 @@ TEST_F(VerifyStageTest, LoopOnlySourceGetsTerminationNotOverflow) {
   // A pure loop with no arithmetic operators: increments (i++) come from
   // UnaryOperator, but the loop guard/body here does no +,-,*,<<,>> at all,
   // so Operations should stay at 0 and no-overflow.prp should not appear.
-  writeFile(filterDir / "loopy.c",
-            "void spin(int n) {\n"
-            "  int i = 0;\n"
-            "  while (i != n) {\n"
-            "    i = n;\n"
-            "  }\n"
-            "}\n");
+  writeFile(filterDir / "loopy.c", "void spin(int n) {\n"
+                                   "  int i = 0;\n"
+                                   "  while (i != n) {\n"
+                                   "    i = n;\n"
+                                   "  }\n"
+                                   "}\n");
 
   int count = transformAndVerify();
 
@@ -191,14 +298,13 @@ TEST_F(VerifyStageTest, LoopAndArithmeticAcrossFunctionsGetsBoth) {
   // which function iteration order visits first. spin's loop must have an
   // observable side effect (mutating the parameter n, not just a loop-local
   // var), or HavocCallsVisitor's no-op pruning drops the whole loop/function.
-  writeFile(filterDir / "both.c",
-            "int spin(int n) {\n"
-            "  for (int i = 0; i < n; i++) {\n"
-            "    n += i;\n"
-            "  }\n"
-            "  return n;\n"
-            "}\n"
-            "int scale(int a, int b) { return a * b; }\n");
+  writeFile(filterDir / "both.c", "int spin(int n) {\n"
+                                  "  for (int i = 0; i < n; i++) {\n"
+                                  "    n += i;\n"
+                                  "  }\n"
+                                  "  return n;\n"
+                                  "}\n"
+                                  "int scale(int a, int b) { return a * b; }\n");
 
   int count = transformAndVerify();
 
@@ -215,12 +321,11 @@ TEST_F(VerifyStageTest, PointerDerefSourceGetsMemsafetyProperty) {
   // are only harnessed when every one has a primitive nondet suffix
   // (MainGenConsumer::verifierSuffixForType), so a pointer param currently
   // leaves the function unharnessed and the file discarded (no calls at all).
-  writeFile(filterDir / "deref.c",
-            "void access(void) {\n"
-            "  int arr[4];\n"
-            "  int i = 0;\n"
-            "  arr[i] = 1;\n"
-            "}\n");
+  writeFile(filterDir / "deref.c", "void access(void) {\n"
+                                   "  int arr[4];\n"
+                                   "  int i = 0;\n"
+                                   "  arr[i] = 1;\n"
+                                   "}\n");
 
   int count = transformAndVerify();
 
@@ -233,12 +338,11 @@ TEST_F(VerifyStageTest, PointerDerefSourceGetsMemsafetyProperty) {
 TEST_F(VerifyStageTest, MallocFreeSourceGetsMemsafetyProperty) {
   // malloc/free are MemAlloc/MemFree signals; either alone should select
   // valid-memsafety.prp (it bundles deref/free/memtrack CHECKs in one file).
-  writeFile(filterDir / "alloc.c",
-            "#include <stdlib.h>\n"
-            "void make_and_drop(int n) {\n"
-            "  int *buf = malloc(n * sizeof(int));\n"
-            "  free(buf);\n"
-            "}\n");
+  writeFile(filterDir / "alloc.c", "#include <stdlib.h>\n"
+                                   "void make_and_drop(int n) {\n"
+                                   "  int *buf = malloc(n * sizeof(int));\n"
+                                   "  free(buf);\n"
+                                   "}\n");
 
   int count = transformAndVerify();
 
@@ -255,14 +359,13 @@ TEST_F(VerifyStageTest, DegradedFunctionIsStrippedAndUnharnessed) {
   // loop. The verify stage must strip worker, drop its call from the
   // generated main, and still produce a benchmark around helper.
   writeConfig("[Complexity Requirements]\nForLoops = 1,9999\n");
-  writeFile(filterDir / "degraded.c",
-            "void helper(int x) {\n"
-            "  for (int i = 0; i < x; i++) x += i;\n"
-            "}\n"
-            "int worker(int n) {\n"
-            "  for (int i = 0; i < n; i++) helper(i);\n"
-            "  return n;\n"
-            "}\n");
+  writeFile(filterDir / "degraded.c", "void helper(int x) {\n"
+                                      "  for (int i = 0; i < x; i++) x += i;\n"
+                                      "}\n"
+                                      "int worker(int n) {\n"
+                                      "  for (int i = 0; i < n; i++) helper(i);\n"
+                                      "  return n;\n"
+                                      "}\n");
 
   int count = transformAndVerify();
 
@@ -281,14 +384,13 @@ TEST_F(VerifyStageTest, HarnessEmptyAfterRepairIsDiscarded) {
   // one loop (needs two), worker has none once its loop is pruned. Every
   // harness call is repaired away, so no benchmark must be produced.
   writeConfig("[Complexity Requirements]\nForLoops = 2,9999\n");
-  writeFile(filterDir / "degraded.c",
-            "void helper(int x) {\n"
-            "  for (int i = 0; i < x; i++) x += i;\n"
-            "}\n"
-            "int worker(int n) {\n"
-            "  for (int i = 0; i < n; i++) helper(i);\n"
-            "  return n;\n"
-            "}\n");
+  writeFile(filterDir / "degraded.c", "void helper(int x) {\n"
+                                      "  for (int i = 0; i < x; i++) x += i;\n"
+                                      "}\n"
+                                      "int worker(int n) {\n"
+                                      "  for (int i = 0; i < n; i++) helper(i);\n"
+                                      "  return n;\n"
+                                      "}\n");
 
   int count = transformAndVerify();
 
@@ -302,15 +404,13 @@ TEST_F(VerifyStageTest, KeepCompilesOnlyDiscardsUndefinedTypes) {
   // the transformed file parses but won't compile, so keepCompilesOnly
   // (default true) should discard it in the verify stage. The param is an int
   // so the function stays harnessable and the file actually reaches verify.
-  writeFile(filterDir / "local_types.h",
-            "typedef struct { int id; } widget_t;\n");
-  writeFile(filterDir / "badtype.c",
-            "#include \"local_types.h\"\n"
-            "int process(int n) {\n"
-            "  widget_t w;\n"
-            "  w.id = n;\n"
-            "  return w.id + 1;\n"
-            "}\n");
+  writeFile(filterDir / "local_types.h", "typedef struct { int id; } widget_t;\n");
+  writeFile(filterDir / "badtype.c", "#include \"local_types.h\"\n"
+                                     "int process(int n) {\n"
+                                     "  widget_t w;\n"
+                                     "  w.id = n;\n"
+                                     "  return w.id + 1;\n"
+                                     "}\n");
 
   int count = transformAndVerify();
 
@@ -324,13 +424,12 @@ TEST_F(VerifyStageTest, AssertRewriteAddsUnreachCallProperty) {
   // reach_error must be exempt from the post-transform threshold re-check
   // (isVerifierGenerated) or its trivial body would get stripped, and its
   // presence in the reparsed counts should add unreach-call.prp.
-  writeFile(filterDir / "checked.c",
-            "#include <assert.h>\n"
-            "int add(int a, int b) {\n"
-            "  int r = a + b;\n"
-            "  assert(r >= a);\n"
-            "  return r;\n"
-            "}\n");
+  writeFile(filterDir / "checked.c", "#include <assert.h>\n"
+                                     "int add(int a, int b) {\n"
+                                     "  int r = a + b;\n"
+                                     "  assert(r >= a);\n"
+                                     "  return r;\n"
+                                     "}\n");
 
   int count = transformAndVerify();
 
@@ -353,10 +452,9 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
   // original_main takes (int, char**): the verify re-check must not trip
   // over its unsupported params (no param check post-transform) and the
   // synthesized argv harness in main must be left alone.
-  writeFile(filterDir / "withmain.c",
-            "int main(int argc, char *argv[]) {\n"
-            "  return argc;\n"
-            "}\n");
+  writeFile(filterDir / "withmain.c", "int main(int argc, char *argv[]) {\n"
+                                      "  return argc;\n"
+                                      "}\n");
 
   int count = transformAndVerify();
 
@@ -372,18 +470,16 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
 // worker pool must not treat that decline as residue to clean up.
 TEST_F(VerifyStageTest, KeepCompilesOnlyFalseKeepsNonCompilingSource) {
   writeConfig("keepCompilesOnly = false\n");
-  writeFile(filterDir / "local_types.h",
-            "typedef struct { int id; } widget_t;\n");
+  writeFile(filterDir / "local_types.h", "typedef struct { int id; } widget_t;\n");
   // An int param keeps the function harnessable, so transform emits a real
   // main and the file survives to verify; widget_t is only declared in the
   // local header transform strips, so the result parses but will not compile.
-  writeFile(filterDir / "badtype.c",
-            "#include \"local_types.h\"\n"
-            "int process(int n) {\n"
-            "  widget_t w;\n"
-            "  w.id = n;\n"
-            "  return w.id + 1;\n"
-            "}\n");
+  writeFile(filterDir / "badtype.c", "#include \"local_types.h\"\n"
+                                     "int process(int n) {\n"
+                                     "  widget_t w;\n"
+                                     "  w.id = n;\n"
+                                     "  return w.id + 1;\n"
+                                     "}\n");
 
   int count = transformAndVerify();
 

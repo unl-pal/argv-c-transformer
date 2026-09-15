@@ -59,14 +59,12 @@ std::function<void(const fs::path &)> childExiting(int code) {
 TEST(ResolveWorkerCount, PositiveConfigValueIsUsedVerbatim) {
   EXPECT_EQ(resolveWorkerCount(1), 1);
   unsigned hw = std::thread::hardware_concurrency();
-  if (hw > 1)
-    EXPECT_EQ(resolveWorkerCount(static_cast<int>(hw) - 1), static_cast<int>(hw) - 1);
+  if (hw > 1) EXPECT_EQ(resolveWorkerCount(static_cast<int>(hw) - 1), static_cast<int>(hw) - 1);
 }
 
 TEST(ResolveWorkerCount, OversubscriptionIsClampedToTheCoreCountWithAWarning) {
   unsigned hw = std::thread::hardware_concurrency();
-  if (hw == 0)
-    GTEST_SKIP() << "no detectable core count";
+  if (hw == 0) GTEST_SKIP() << "no detectable core count";
 
   testing::internal::CaptureStderr();
   int workers = resolveWorkerCount(static_cast<int>(hw) + 4);
@@ -79,8 +77,7 @@ TEST(ResolveWorkerCount, OversubscriptionIsClampedToTheCoreCountWithAWarning) {
 // At or below the core count the configured value is used as-is, silently.
 TEST(ResolveWorkerCount, CountWithinTheCoreCountIsNotWarnedAbout) {
   unsigned hw = std::thread::hardware_concurrency();
-  if (hw == 0)
-    GTEST_SKIP() << "no detectable core count";
+  if (hw == 0) GTEST_SKIP() << "no detectable core count";
 
   testing::internal::CaptureStderr();
   int workers = resolveWorkerCount(static_cast<int>(hw));
@@ -94,8 +91,7 @@ TEST(ResolveWorkerCount, ZeroAutoSizesBelowCoreCountButAtLeastOne) {
   int workers = resolveWorkerCount(0);
   EXPECT_GE(workers, 1);
   unsigned hw = std::thread::hardware_concurrency();
-  if (hw > 0)
-    EXPECT_LE(workers, static_cast<int>(hw));
+  if (hw > 0) EXPECT_LE(workers, static_cast<int>(hw));
 }
 
 TEST(WorkerPool, ProducedFilesAreCountedAndLeftAlone) {
@@ -166,8 +162,7 @@ TEST(WorkerPool, ChildOverrunningTheBudgetIsKilledAndCleanedUp) {
 TEST(WorkerPool, TimeoutIsPerFileNotPerPool) {
   Recorder rec;
   IsolatedWork work = rec.work([](const fs::path &p) {
-    if (p.filename() == "slow.c")
-      sleep(30);
+    if (p.filename() == "slow.c") sleep(30);
     _exit(kProducedExit);
   });
 
@@ -223,4 +218,3 @@ TEST(WorkerPool, ChildLogDirectoryIsRemovedAfterTheRun) {
   fs::path logDir = fs::temp_directory_path() / ("argv-c-pool-" + std::to_string(getpid()));
   EXPECT_FALSE(fs::exists(logDir));
 }
-

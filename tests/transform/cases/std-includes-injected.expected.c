@@ -5,6 +5,7 @@
 #define __HAVOC_ARGC_MAX 4
 #define __HAVOC_STR_MAX 16
 #define __HAVOC_BLOCK_MAX 128
+#define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
 
@@ -24,6 +25,8 @@ uint32_t mask(uint32_t x) {
 }
 
 int main(void) {
+  char __h0[__HAVOC_STR_MAX];
+  measure(__havoc_cstring_fill(__h0, __HAVOC_STR_MAX));
   check(__VERIFIER_nondet_int());
   mask(__VERIFIER_nondet_uint());
   return 0;

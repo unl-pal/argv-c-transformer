@@ -84,8 +84,7 @@ TEST_P(TransformGolden, MatchesExpected) {
   // the misconfiguration rather than failing on a missing stddef.h.
   std::optional<std::string> resourceDir = getResourceDir();
   if (code.find("#include <") != std::string::npos) {
-    if (!resourceDir)
-      GTEST_SKIP() << "CLANG_RESOURCES not set; case needs system headers";
+    if (!resourceDir) GTEST_SKIP() << "CLANG_RESOURCES not set; case needs system headers";
     if (!fs::exists(fs::path(*resourceDir) / "include" / "stddef.h"))
       GTEST_SKIP() << "CLANG_RESOURCES=" << *resourceDir
                    << " has no include/stddef.h (stale after a clang upgrade?); "
@@ -93,8 +92,7 @@ TEST_P(TransformGolden, MatchesExpected) {
   }
 
   std::vector<std::string> args = {"-xc"};
-  if (resourceDir)
-    args.push_back("-resource-dir=" + *resourceDir);
+  if (resourceDir) args.push_back("-resource-dir=" + *resourceDir);
   std::optional<std::string> sysroot = getSysroot();
   if (sysroot) {
     args.push_back("-isysroot");
@@ -106,8 +104,8 @@ TEST_P(TransformGolden, MatchesExpected) {
   std::string out;
   llvm::raw_string_ostream os(out);
   bool ok = clang::tooling::runToolOnCodeWithArgs(
-      std::make_unique<TransformAction>(os), code, args, testCase.input.string(),
-      "transform-test", std::make_shared<clang::PCHContainerOperations>());
+      std::make_unique<TransformAction>(os), code, args, testCase.input.string(), "transform-test",
+      std::make_shared<clang::PCHContainerOperations>());
   ASSERT_TRUE(ok) << "transform tool failed for " << testCase.input;
 
   if (std::getenv("UPDATE_GOLDENS")) {
@@ -122,9 +120,7 @@ TEST_P(TransformGolden, MatchesExpected) {
 
 static std::string caseName(const ::testing::TestParamInfo<GoldenCase> &info) {
   std::string name = info.param.name;
-  std::replace_if(
-      name.begin(), name.end(),
-      [](unsigned char c) { return !std::isalnum(c); }, '_');
+  std::replace_if(name.begin(), name.end(), [](unsigned char c) { return !std::isalnum(c); }, '_');
   return name;
 }
 

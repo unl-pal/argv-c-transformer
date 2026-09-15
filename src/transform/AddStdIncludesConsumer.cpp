@@ -24,8 +24,7 @@ public:
   TypeCollector(clang::SourceManager &SM) : _SM(SM) {}
 
   bool VisitTypeLoc(clang::TypeLoc TL) {
-    if (!_SM.isInMainFile(TL.getBeginLoc()))
-      return true;
+    if (!_SM.isInMainFile(TL.getBeginLoc())) return true;
     recordType(TL.getType());
     return true;
   }
@@ -42,25 +41,21 @@ private:
    * indistinguishable once macro-expanded, so this is a best-effort match).
    */
   void recordType(clang::QualType QT) {
-    if (QT.isNull())
-      return;
+    if (QT.isNull()) return;
 
     const clang::Type *T = QT.getTypePtrOrNull();
-    if (!T)
-      return;
+    if (!T) return;
 
     if (const auto *TDT = T->getAs<clang::TypedefType>()) {
       std::string name = TDT->getDecl()->getNameAsString();
       auto it = StdHeaders.find(name);
       if (it != StdHeaders.end())
-        if (_SM.isInSystemHeader(TDT->getDecl()->getLocation()))
-          _NeededHeaders.insert(it->second);
+        if (_SM.isInSystemHeader(TDT->getDecl()->getLocation())) _NeededHeaders.insert(it->second);
     } else if (const auto *RT = T->getAs<clang::RecordType>()) {
       std::string name = RT->getDecl()->getNameAsString();
       auto it = StdHeaders.find(name);
       if (it != StdHeaders.end())
-        if (_SM.isInSystemHeader(RT->getDecl()->getLocation()))
-          _NeededHeaders.insert(it->second);
+        if (_SM.isInSystemHeader(RT->getDecl()->getLocation())) _NeededHeaders.insert(it->second);
     } else if (const auto *BT = T->getAs<clang::BuiltinType>()) {
       if (BT->getKind() == clang::BuiltinType::Bool) {
         _NeededHeaders.insert("stdbool.h"); // special case
@@ -86,11 +81,9 @@ public:
   FunctionCollector(clang::SourceManager &SM) : _SM(SM) {}
 
   bool VisitCallExpr(clang::CallExpr *CE) {
-    if (!_SM.isInMainFile(CE->getBeginLoc()))
-      return true;
+    if (!_SM.isInMainFile(CE->getBeginLoc())) return true;
     if (const clang::FunctionDecl *FD = CE->getDirectCallee()) {
-      if (FD->isImplicit() || _SM.isInSystemHeader(FD->getBeginLoc()))
-        recordFunction(FD);
+      if (FD->isImplicit() || _SM.isInSystemHeader(FD->getBeginLoc())) recordFunction(FD);
       return true;
     }
     return true;
@@ -102,21 +95,19 @@ private:
   void recordFunction(const clang::FunctionDecl *FD) {
     std::string name = FD->getNameAsString();
     auto it = StdHeaders.find(name);
-    if (it != StdHeaders.end())
-      _NeededHeaders.insert(it->second);
+    if (it != StdHeaders.end()) _NeededHeaders.insert(it->second);
   }
 
   clang::SourceManager &_SM;
   std::set<std::string> _NeededHeaders;
 };
-}// namespace
+} // namespace
 
 AddStdIncludesConsumer::AddStdIncludesConsumer(
     std::shared_ptr<std::set<std::string>> existingIncludes,
     std::shared_ptr<std::set<std::string>> unresolvedTypeNames, clang::Rewriter &rewriter)
     : _ExistingIncludes(existingIncludes), _UnresolvedTypeNames(unresolvedTypeNames),
-      _Rewriter(rewriter) {
-}
+      _Rewriter(rewriter) {}
 
 void AddStdIncludesConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &SM = Context.getSourceManager();
@@ -129,27 +120,23 @@ void AddStdIncludesConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   std::string includes;
   for (const std::string &header : typeCollector.neededHeaders()) {
-    if (_ExistingIncludes->count(header))
-      continue;
+    if (_ExistingIncludes->count(header)) continue;
     includes += "#include <" + header + ">\n";
     _ExistingIncludes->insert(header);
   }
   for (const std::string &header : funCollector.neededHeaders()) {
-    if (_ExistingIncludes->count(header))
-      continue;
+    if (_ExistingIncludes->count(header)) continue;
     includes += "#include <" + header + ">\n";
     _ExistingIncludes->insert(header);
   }
   for (const std::string &name : *_UnresolvedTypeNames) {
     auto it = StdHeaders.find(name);
-    if (it == StdHeaders.end() || _ExistingIncludes->count(it->second))
-      continue;
+    if (it == StdHeaders.end() || _ExistingIncludes->count(it->second)) continue;
     includes += "#include <" + it->second + ">\n";
     _ExistingIncludes->insert(it->second);
   }
 
-  if (includes.empty())
-    return;
+  if (includes.empty()) return;
 
   clang::SourceLocation loc = SM.translateLineCol(SM.getMainFileID(), 1, 1);
   _Rewriter.InsertTextBefore(loc, includes);

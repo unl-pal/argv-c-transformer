@@ -32,23 +32,18 @@ void HarnessRepairConsumer::HandleTranslationUnit(clang::ASTContext &context) {
       break;
     }
   }
-  if (!mainDecl)
-    return;
+  if (!mainDecl) return;
 
   // Every harness call is a top-level statement of main's body
   const auto *body = llvm::dyn_cast<clang::CompoundStmt>(mainDecl->getBody());
-  if (!body)
-    return;
+  if (!body) return;
   for (const clang::Stmt *child : body->body()) {
     const auto *call = llvm::dyn_cast<clang::CallExpr>(child);
-    if (!call)
-      continue;
+    if (!call) continue;
     const clang::FunctionDecl *callee = call->getDirectCallee();
-    if (!callee)
-      continue;
+    if (!callee) continue;
     std::string name = callee->getNameAsString();
-    if (isVerifierGenerated(name) || name == "abort")
-      continue;
+    if (isVerifierGenerated(name) || name == "abort") continue;
     if (std::find(_ToRemove->begin(), _ToRemove->end(), name) != _ToRemove->end()) {
       // Erase the whole line -- indent, call, semicolon, trailing newline
       clang::SourceLocation begin = call->getBeginLoc();

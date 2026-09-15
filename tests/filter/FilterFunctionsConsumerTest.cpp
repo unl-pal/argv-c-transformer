@@ -33,7 +33,7 @@ namespace {
 // override the one or two keys it cares about.
 std::map<std::string, std::pair<int, int>> permissiveComplexityConfig() {
   return {
-      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}}, {"IfStmt", {0, 9999}},
+      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}},   {"IfStmt", {0, 9999}},
       {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}},
   };
 }
@@ -49,8 +49,7 @@ struct FilterResult {
   std::unique_ptr<clang::ASTUnit> ast;
   std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> funcs =
       std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
-  std::shared_ptr<std::vector<std::string>> toRemove =
-      std::make_shared<std::vector<std::string>>();
+  std::shared_ptr<std::vector<std::string>> toRemove = std::make_shared<std::vector<std::string>>();
 };
 
 // Parses `code`, runs CountingVisitor to populate real attribute counts, then
@@ -62,8 +61,7 @@ FilterResult runFilter(const std::string &code,
   FilterResult r;
   r.ast = clang::tooling::buildASTFromCodeWithArgs(code, {"-xc"}, "test.c");
   EXPECT_NE(r.ast, nullptr) << "AST failed to build for:\n" << code;
-  if (!r.ast)
-    return r;
+  if (!r.ast) return r;
 
   CountingVisitor counter(&r.ast->getASTContext(), r.funcs);
   counter.TraverseTranslationUnitDecl(r.ast->getASTContext().getTranslationUnitDecl());
@@ -99,7 +97,7 @@ TEST(FilterFunctionsConsumer, MainRemovedWhenConcurrencyForbidden) {
       return 0;
     }
   )",
-                       permissiveComplexityConfig(), features);
+                     permissiveComplexityConfig(), features);
   EXPECT_TRUE(contains(*r.toRemove, "main"));
 }
 
@@ -116,7 +114,7 @@ TEST(FilterFunctionsConsumer, MainKeptWhenConcurrencyIgnored) {
       return 0;
     }
   )",
-                       permissiveComplexityConfig(), permissiveFeatureConfig());
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
 
@@ -136,7 +134,7 @@ TEST(FilterFunctionsConsumer, MainRemovedByOrdinaryThresholdCheck) {
       return 0;
     }
   )",
-                       complexity, permissiveFeatureConfig());
+                     complexity, permissiveFeatureConfig());
   EXPECT_TRUE(contains(*r.toRemove, "main"));
 }
 
@@ -147,7 +145,7 @@ TEST(FilterFunctionsConsumer, MainKeptWhenThresholdsSatisfied) {
       return 0;
     }
   )",
-                       permissiveComplexityConfig(), permissiveFeatureConfig());
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
 
@@ -165,7 +163,7 @@ TEST(FilterFunctionsConsumer, MainNotRemovedForUnsupportedArgvParam) {
       return argc;
     }
   )",
-                       permissiveComplexityConfig(), permissiveFeatureConfig());
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
 
@@ -177,9 +175,60 @@ TEST(FilterFunctionsConsumer, OrdinaryFunctionRemovedForUnsupportedParam) {
     int main(void) { return 0; }
     void helper(char **argv) {}
   )",
-                       permissiveComplexityConfig(), permissiveFeatureConfig());
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_TRUE(contains(*r.toRemove, "helper"));
   EXPECT_FALSE(contains(*r.toRemove, "main"));
+}
+
+// ---------------------------------------------------------------------------
+// The param-type gate defers to HavocPolicy
+//
+// The filter must accept exactly what the transform can harness: reject a
+// pointer here and no downstream pointer support is ever reachable, but accept
+// one the transform will refuse and the function reaches main generation only
+// to be dropped there.
+// ---------------------------------------------------------------------------
+
+TEST(FilterFunctionsConsumer, PointerParamSurvivesTheGate) {
+  auto r = runFilter(R"(
+    int main(void) { return 0; }
+    int sum(int *values, int n) { return n; }
+    int first_char(const char *s) { return s[0]; }
+    int at(int fixed[3]) { return fixed[0]; }
+    int opaque(void *p) { return p != 0; }
+  )",
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
+  EXPECT_FALSE(contains(*r.toRemove, "sum"));
+  EXPECT_FALSE(contains(*r.toRemove, "first_char"));
+  EXPECT_FALSE(contains(*r.toRemove, "at"));
+  EXPECT_FALSE(contains(*r.toRemove, "opaque"));
+}
+
+TEST(FilterFunctionsConsumer, RecordPointerParamSurvivesWhenPointerFree) {
+  // struct Point has no pointer fields, so bulk nondet_memory over it is
+  // legal and the block can be sized with sizeof.
+  auto r = runFilter(R"(
+    int main(void) { return 0; }
+    struct Point { int x; int y; };
+    int point_x(struct Point *p) { return p->x; }
+  )",
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
+  EXPECT_FALSE(contains(*r.toRemove, "point_x"));
+}
+
+TEST(FilterFunctionsConsumer, NonViablePointerParamStillRemoved) {
+  // Each of these is a shape planPointer refuses: a struct carrying a pointer
+  // field, and a function pointer. Havocking either would hand the callee a
+  // raw nondet pointer value it may not dereference (or call).
+  auto r = runFilter(R"(
+    int main(void) { return 0; }
+    struct Node { int v; struct Node *next; };
+    int walk(struct Node *n) { return n->v; }
+    int apply(int (*cb)(int)) { return cb(1); }
+  )",
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
+  EXPECT_TRUE(contains(*r.toRemove, "walk"));
+  EXPECT_TRUE(contains(*r.toRemove, "apply"));
 }
 
 // ---------------------------------------------------------------------------
@@ -202,9 +251,8 @@ TEST(RemoveVisitor, StripsMainBodyWhenListed) {
   RemoveVisitor visitor(rewriter, toRemove);
   visitor.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
-  std::string rewritten = std::string(
-      rewriter.getRewriteBufferFor(mgr.getMainFileID())->begin(),
-      rewriter.getRewriteBufferFor(mgr.getMainFileID())->end());
+  std::string rewritten = std::string(rewriter.getRewriteBufferFor(mgr.getMainFileID())->begin(),
+                                      rewriter.getRewriteBufferFor(mgr.getMainFileID())->end());
   EXPECT_NE(rewritten.find("int main(void) ;"), std::string::npos) << rewritten;
   EXPECT_EQ(rewritten.find("return 0"), std::string::npos) << rewritten;
 }

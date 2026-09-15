@@ -15,27 +15,24 @@
 #include <llvm/Support/Casting.h>
 
 HavocCallsConsumer::HavocCallsConsumer(std::shared_ptr<std::set<std::string>> noOpFunctions,
+                                       std::shared_ptr<std::set<std::string>> neededFwdDecls,
                                        clang::Rewriter &rewriter)
-    : _NoOpFunctions(noOpFunctions), _Rewriter(rewriter) {}
+    : _NoOpFunctions(noOpFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter) {}
 
 void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
-  HavocCallsVisitor Visitor(&Context, _Rewriter);
+  HavocCallsVisitor Visitor(&Context, _NeededFwdDecls, _Rewriter);
   Visitor.TraverseDecl(Context.getTranslationUnitDecl());
 
   // Strip any function whose body collapsed entirely to no-ops
   clang::SourceManager &mgr = Context.getSourceManager();
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
     const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
-    if (!func || !mgr.isInMainFile(func->getLocation()))
-      continue;
-    if (!func->isThisDeclarationADefinition() || func->getLocation().isMacroID())
-      continue;
-    if (!Visitor.isNoOp(func->getBody()))
-      continue;
+    if (!func || !mgr.isInMainFile(func->getLocation())) continue;
+    if (!func->isThisDeclarationADefinition() || func->getLocation().isMacroID()) continue;
+    if (!Visitor.isNoOp(func->getBody())) continue;
     debugLog(2, "[transform] " + func->getNameAsString() + " body collapsed entirely to no-ops");
     clang::SourceRange bodyRange = func->getBody()->getSourceRange();
-    if (bodyRange.isValid())
-      _Rewriter.ReplaceText(bodyRange, ";");
+    if (bodyRange.isValid()) _Rewriter.ReplaceText(bodyRange, ";");
     _NoOpFunctions->insert(func->getNameAsString());
   }
 }

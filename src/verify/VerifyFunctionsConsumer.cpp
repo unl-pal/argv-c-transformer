@@ -18,8 +18,7 @@ VerifyFunctionsConsumer::VerifyFunctionsConsumer(
 
 void VerifyFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &) {
   for (const auto &[name, attr] : *_Counts) {
-    if (name == "FileScope" || name == "main" || isVerifierGenerated(name))
-      continue;
+    if (name == "FileScope" || name == "main" || isVerifierGenerated(name)) continue;
 
     bool reject = false;
     for (const auto &[metric, range] : *_ComplexityConfig) {
@@ -37,14 +36,13 @@ void VerifyFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &) {
         bool present = featureField(attr.Features, feature);
         if ((gate == FeatureGate::Require && !present) ||
             (gate == FeatureGate::Forbid && present)) {
-          debugLog(2, "[verify] " + name + ": feature gate '" + feature +
-                          "' violated post-transform");
+          debugLog(2,
+                   "[verify] " + name + ": feature gate '" + feature + "' violated post-transform");
           reject = true;
           break;
         }
       }
     }
-    if (reject)
-      _ToRemove->push_back(name);
+    if (reject) _ToRemove->push_back(name);
   }
 }
