@@ -193,6 +193,38 @@ TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
       << "sized Buf storage should not fall back to the opaque byte block:\n" << out;
 }
 
+TEST_F(HeaderClosureTest, RepeatedSystemIncludeDoesNotDivertTheClimbToAnInnerHeader) {
+  // <stdio.h> is #included twice: once angled from local1.h, once quoted from
+  // local2.h (both resolve to the same real system file). InclusionDirective
+  // fires for every occurrence, so the recorded IncludeInfo for stdio.h must
+  // keep the FIRST (angled) one - a plain map-assignment would let the second
+  // (quoted, local2.h-parented) occurrence clobber it. size_t's home header is
+  // reachable only by climbing *through* stdio.h's own internal #include of
+  // it, so if that clobber happens, the climb stops one hop short and reports
+  // the inner/private header size_t actually lives in instead of the public
+  // <stdio.h> a normal source file would write.
+  writeRepoFile("local1.h", "#include <stdio.h>\n");
+  writeRepoFile("local2.h", "#include \"stdio.h\"\n");
+  writeRepoFile("count.c", "#include \"local1.h\"\n"
+                           "#include \"local2.h\"\n"
+                           "int use(size_t x) { return x; }\n");
+
+  runPipeline("count.c");
+
+  // Assert on the filter stage's own output directly: transform's
+  // AddStdIncludesConsumer unconditionally re-adds <stddef.h> for size_t
+  // regardless of what the filter closure chose, which would mask a
+  // regression here if checked on the final benchmark instead.
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  EXPECT_NE(filtered().find("#include <stdio.h>"), std::string::npos) << filtered();
+  // A regressed climb reports size_t's actual (private, non-public) home
+  // header instead of walking out to <stdio.h>.
+  EXPECT_EQ(filtered().find("#include <stddef.h>"), std::string::npos)
+      << "climb should walk all the way out to <stdio.h>, not stop at size_t's "
+         "own inner header:\n"
+      << filtered();
+}
+
 TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedAndPrototypeIsDroppedAfterHavocking) {
   // Negative, and the one deliberate exception to "full definitions
   // everywhere". The transform is intraprocedural: HavocCallsVisitor havocs

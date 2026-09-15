@@ -44,6 +44,11 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
     const CountingVisitor::attributes &attr = func.second;
     if (key == "FileScope") continue;
 
+    if (declByName.contains(key) && declByName.at(key)->getLocation().isMacroID()) {
+      debugLog(2, "[filter] " + key + ": macro-declared, cannot strip body, skipping rejection");
+      continue;
+    }
+
     bool reject = false;
     for (const auto &[name, range] : *_ComplexityConfig) {
       int value = complexityField(attr.Complexity, name);
