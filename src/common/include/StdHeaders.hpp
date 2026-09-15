@@ -240,9 +240,20 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     // <signal.h>
     // types
     {"sig_atomic_t", "signal.h"},
+    {"sigset_t", "signal.h"},
+    {"siginfo_t", "signal.h"},
     // functions
     {"signal", "signal.h"},
     {"raise", "signal.h"},
+
+    // <sys/select.h>
+    {"fd_set", "sys/select.h"},
+
+    // <sched.h>
+    {"cpu_set_t", "sched.h"},
+
+    // <fenv.h>
+    {"fenv_t", "fenv.h"},
 
     // <setjmp.h>
     // types
@@ -294,6 +305,9 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
     {"pthread_rwlock_t", "pthread.h"},
     {"pthread_key_t", "pthread.h"},
     {"pthread_once_t", "pthread.h"},
+    {"pthread_barrier_t", "pthread.h"},
+    {"pthread_barrierattr_t", "pthread.h"},
+    {"pthread_spinlock_t", "pthread.h"},
     // functions
     {"thrd_create", "threads.h"},
     {"thrd_join", "threads.h"},

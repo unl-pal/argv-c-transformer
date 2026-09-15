@@ -94,6 +94,13 @@ public:
       return;
 
     if (isLocalHeaderLoc(_Mgr, decl->getLocation())) {
+      // if a system definition exists for what is presumably a shim use that
+      // and discard the shim declaration
+      const auto *named = llvm::dyn_cast<clang::NamedDecl>(decl);
+      if (named && StdHeaders.count(named->getNameAsString())) {
+        _FromSystem.push_back(decl);
+        return;
+      }
       _Needed.push_back(decl);
     } else if (_Mgr.isInSystemHeader(_Mgr.getFileLoc(decl->getLocation()))) {
       _FromSystem.push_back(decl);
@@ -233,11 +240,22 @@ std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::Sour
 }
 
 /**
+ * @brief True if `spelling` names a Linux kernel UAPI header (`linux/...`,
+ * `asm/...`, `asm-generic/...`)
+ */
+bool isKernelUapiHeader(llvm::StringRef spelling) {
+  return spelling.starts_with("linux/") || spelling.starts_with("asm/") ||
+        spelling.starts_with("asm-generic/");
+}
+
+/**
  * @brief Climbs the recorded #include chain from a declaration's (possibly
  * deeply-nested) file back up to the outermost system header a normal source
  * file would write to reach it.
  *
-  */
+ * Kernel UAPI headers are never accepted as the climb result due to incompatability
+ * with glibc userspcae headers
+ */
 std::optional<std::string> climbToPublicHeader(const clang::Decl *decl,
                                                const clang::SourceManager &mgr,
                                                const HeaderClosureState &state) {
@@ -254,7 +272,7 @@ std::optional<std::string> climbToPublicHeader(const clang::Decl *decl,
     auto it = state.includedFrom.find(current);
     if (it == state.includedFrom.end() || !it->second.isSystem)
       break;
-    if (it->second.isAngled)
+    if (it->second.isAngled && !isKernelUapiHeader(it->second.spelling))
       best = it->second.spelling;
     if (!it->second.parent)
       break;
@@ -280,8 +298,9 @@ std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
     // exceptions for sys, arpa, and netinet because e.g sys/types.h is a valid/portable include
     bool topLevel = !spelling.contains('/') || spelling.starts_with("sys/") ||
                     spelling.starts_with("arpa/") || spelling.starts_with("netinet/");
-    // A leading "__" marks a compiler-internal fragment so fallback to the StdHeaders map
-    if (topLevel && !spelling.empty() &&
+    // A leading "__" marks a compiler-internal fragment so fallback to the StdHeaders map.
+    // Kernel UAPI headers are also excluded
+    if (topLevel && !spelling.empty() && !isKernelUapiHeader(spelling) &&
         !llvm::StringRef(llvm::sys::path::filename(spelling)).starts_with("__"))
       return spelling.str();
   }
