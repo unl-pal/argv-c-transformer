@@ -333,13 +333,15 @@ void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clan
                                        clang::OptionalFileEntryRef File, llvm::StringRef,
                                        llvm::StringRef, const clang::Module *, bool,
                                        clang::SrcMgr::CharacteristicKind FileType) {
-  // Record how every included file was reached
+  // Record how every included file was reached. Only use the first
+  // occurence of an include
   if (File) {
     clang::OptionalFileEntryRef parent =
         _Mgr.getFileEntryRefForID(_Mgr.getFileID(HashLoc));
-    _State->includedFrom[&File->getFileEntry()] =
+    _State->includedFrom.try_emplace(
+        &File->getFileEntry(),
         IncludeInfo{FileName.str(), IsAngled, FileType != clang::SrcMgr::C_User,
-                    parent ? &parent->getFileEntry() : nullptr};
+                    parent ? &parent->getFileEntry() : nullptr});
   }
 
   // A quoted include is project-local by convention regardless of FileType.
