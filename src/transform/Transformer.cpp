@@ -30,8 +30,7 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
   configuration.filterDir = defaultFilterDir;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   configuration.nproc = 0;
-  if (!configFile.empty())
-    parseConfig(configFile);
+  if (!configFile.empty()) parseConfig(configFile);
   if (configuration.transformDir.empty())
     configuration.transformDir = inputBaseName(configuration.filterDir) + "-transformed";
   if (!inputPath.empty()) {
@@ -46,15 +45,12 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
 std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path path) {
   std::filesystem::path relPath = std::filesystem::relative(path, configuration.filterDir);
   // relative() yields "." when the input path IS the file (single-file mode).
-  if (relPath.empty() || *relPath.begin() == ".." || relPath == ".")
-    relPath = path.filename();
+  if (relPath.empty() || *relPath.begin() == ".." || relPath == ".") relPath = path.filename();
   std::string flatName;
   for (const std::filesystem::path &component : relPath) {
     std::string part = component.string();
-    if (part == ".." || part == ".")
-      continue;
-    if (!flatName.empty())
-      flatName += "_";
+    if (part == ".." || part == ".") continue;
+    if (!flatName.empty()) flatName += "_";
     flatName += part;
   }
   return std::filesystem::path(configuration.transformDir) / flatName;
@@ -105,13 +101,13 @@ void Transformer::cleanupPartialOutput(std::filesystem::path path) {
   std::filesystem::path outPath = flattenedOutputPath(path);
   // A top-level file flattens to its own name, so filterDir == transformDir
   // makes the "partial output" the input itself.
-  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath))
-    return;
+  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath)) return;
   std::error_code ec;
   std::filesystem::remove(outPath, ec);
 }
 
-void Transformer::collectCFiles(std::filesystem::path path, std::vector<std::filesystem::path> &files) {
+void Transformer::collectCFiles(std::filesystem::path path,
+                                std::vector<std::filesystem::path> &files) {
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[transform] path does not exist: " + path.string());
     return;
@@ -172,8 +168,7 @@ void Transformer::parseConfig(std::string configFile) {
   }
   // argv-c injects this via setDatabaseDir(); a standalone `transform` run
   // only has the config.
-  if (!config.databaseDir.empty())
-    configuration.databaseDir = config.databaseDir;
+  if (!config.databaseDir.empty()) configuration.databaseDir = config.databaseDir;
   configuration.havoc.argcMin = config.havoc.at("havocArgcMin");
   configuration.havoc.argcMax = config.havoc.at("havocArgcMax");
   configuration.havoc.strMax = config.havoc.at("havocStrMax");

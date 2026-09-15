@@ -80,8 +80,7 @@ protected:
 };
 
 TEST_F(TransformStageTest, FlatFileProducesTransformedSource) {
-  writeFile(filterDir / "simple.c",
-            "int add(int a, int b) { return a + b; }\n");
+  writeFile(filterDir / "simple.c", "int add(int a, int b) { return a + b; }\n");
 
   Transformer t(configPath.string());
   int count = t.run();
@@ -91,8 +90,7 @@ TEST_F(TransformStageTest, FlatFileProducesTransformedSource) {
 
   std::string src = readFile(transformDir / "simple.c");
   EXPECT_NE(src.find("int main(void)"), std::string::npos);
-  EXPECT_NE(src.find("add(__VERIFIER_nondet_int(), __VERIFIER_nondet_int());"),
-            std::string::npos);
+  EXPECT_NE(src.find("add(__VERIFIER_nondet_int(), __VERIFIER_nondet_int());"), std::string::npos);
 }
 
 TEST_F(TransformStageTest, NestedPathFlattensWithUnderscores) {
@@ -109,11 +107,10 @@ TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
   // Every function takes a struct by value, which has no nondet equivalent and
   // is not a pointer either → none can be harnessed → empty main. (A pointer
   // param would not do here any more: planPointer sizes those now.)
-  writeFile(filterDir / "aggregates_only.c",
-            "struct Point { int x; int y; };\n"
-            "int total(struct Point p) {\n"
-            "  return p.x + p.y;\n"
-            "}\n");
+  writeFile(filterDir / "aggregates_only.c", "struct Point { int x; int y; };\n"
+                                             "int total(struct Point p) {\n"
+                                             "  return p.x + p.y;\n"
+                                             "}\n");
 
   Transformer t(configPath.string());
   int count = t.run();
@@ -131,9 +128,8 @@ TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
 TEST_F(TransformStageTest, ConfigDatabaseDirResolvesLocalHeaders) {
   // The original repo tree keeps the header; the filtered tree mirrors only .c
   // files, so `mytypes.h` is reachable *only* via databaseDir.
-  writeFile(dbDir / "include" / "mytypes.h",
-            "typedef struct { int lo; int hi; } Range;\n"
-            "int rangeWidth(Range *r);\n");
+  writeFile(dbDir / "include" / "mytypes.h", "typedef struct { int lo; int hi; } Range;\n"
+                                             "int rangeWidth(Range *r);\n");
   const char *src = "#include \"mytypes.h\"\n"
                     "int rangeWidth(Range *r) { return r->hi - r->lo; }\n"
                     "int span(Range *r, int n) { return rangeWidth(r) + n; }\n";
@@ -162,10 +158,9 @@ TEST_F(TransformStageTest, ConfigDatabaseDirResolvesLocalHeaders) {
 }
 
 TEST_F(TransformStageTest, ArgcArgvMainProducesTransformedSource) {
-  writeFile(filterDir / "withmain.c",
-            "int main(int argc, char *argv[]) {\n"
-            "  return argc;\n"
-            "}\n");
+  writeFile(filterDir / "withmain.c", "int main(int argc, char *argv[]) {\n"
+                                      "  return argc;\n"
+                                      "}\n");
 
   Transformer t(configPath.string());
   int count = t.run();

@@ -461,11 +461,9 @@ inline const std::unordered_map<std::string, std::string> StdHeaders = {
  * @brief Named heap alloc/free functions relevant to memory-safety detection
  */
 inline const std::unordered_set<std::string> MemoryFunctions = {
-    "malloc",  "calloc",         "realloc",  "reallocarray", "aligned_alloc",
-    "posix_memalign", "memalign", "valloc",  "free",
-    "strdup",  "strndup",        "wcsdup",
-    "mmap",    "munmap",         "mremap",
-    "getline", "getdelim",       "asprintf", "vasprintf",
+    "malloc", "calloc",  "realloc",  "reallocarray", "aligned_alloc", "posix_memalign", "memalign",
+    "valloc", "free",    "strdup",   "strndup",      "wcsdup",        "mmap",           "munmap",
+    "mremap", "getline", "getdelim", "asprintf",     "vasprintf",
 };
 
 /**

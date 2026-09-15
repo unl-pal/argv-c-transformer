@@ -29,18 +29,17 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   std::vector<const clang::FunctionDecl *> defined;
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
     const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
-    if (!func || !mgr.isInMainFile(func->getLocation()))
-      continue;
+    if (!func || !mgr.isInMainFile(func->getLocation())) continue;
     if (func->isMain())
       _Rewriter.ReplaceText(func->getNameInfo().getSourceRange(), "original_main");
-    if (func->isThisDeclarationADefinition())
-      defined.push_back(func);
+    if (func->isThisDeclarationADefinition()) defined.push_back(func);
   }
 
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
     if (_NoOpFunctions->count(func->getNameAsString())) {
-      debugLog(2, "[transform] " + func->getNameAsString() + " body collapsed to no-ops; not harnessed");
+      debugLog(2, "[transform] " + func->getNameAsString() +
+                      " body collapsed to no-ops; not harnessed");
       continue;
     }
     if (func->isMain()) {
@@ -77,14 +76,13 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   std::string fwdDecls;
   for (const std::string &decl : *_NeededFwdDecls)
     fwdDecls += decl + ";\n";
-  if (!fwdDecls.empty())
-    prelude += fwdDecls;
+  if (!fwdDecls.empty()) prelude += fwdDecls;
 
   _Rewriter.InsertTextBefore(mgr.translateLineCol(mgr.getMainFileID(), 1, 1), prelude + "\n");
 }
 
-MainGenConsumer::HarnessCall
-MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTContext &Context) {
+MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::FunctionDecl *func,
+                                                             clang::ASTContext &Context) {
   const clang::SourceManager &mgr = Context.getSourceManager();
   HarnessCall call;
 
@@ -95,8 +93,7 @@ MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTConte
     PointerPlan plan;
     if (!verifierSuffixForType(parm->getOriginalType())) {
       plan = planPointer(parm->getOriginalType(), mgr);
-      if (!plan.viable)
-        return call;
+      if (!plan.viable) return call;
       anyPointer = true;
     }
     plans.push_back(plan);
@@ -106,18 +103,16 @@ MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTConte
   for (size_t i = 0; i < plans.size(); ++i) {
     const clang::ParmVarDecl *parm = func->parameters()[i];
     clang::QualType declared = parm->getOriginalType();
-    if (!call.args.empty())
-      call.args += ", ";
+    if (!call.args.empty()) call.args += ", ";
 
     std::optional<std::string> suffix = verifierSuffixForType(declared);
     if (!suffix) {
       std::string local = "__h" + std::to_string(counter++);
-      PointerStorage store = renderPointerStorage(plans[i], declared, local,
-                                                  parm->getType().getAsString());
+      PointerStorage store =
+          renderPointerStorage(plans[i], declared, local, parm->getType().getAsString());
       call.prologue += store.decls;
       call.args += store.arg;
-      if (!plans[i].fwdDecl.empty())
-        _NeededFwdDecls->insert(plans[i].fwdDecl);
+      if (!plans[i].fwdDecl.empty()) _NeededFwdDecls->insert(plans[i].fwdDecl);
       continue;
     }
 
@@ -126,8 +121,7 @@ MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTConte
       std::string local = "__h" + std::to_string(counter++);
       call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
                        " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
-      if (declared->isSignedIntegerType())
-        call.prologue += local + " < 0 || ";
+      if (declared->isSignedIntegerType()) call.prologue += local + " < 0 || ";
       call.prologue += local + " > __HAVOC_ARRAY_ELEMS) abort();\n";
       call.args += local;
       continue;
@@ -143,8 +137,7 @@ MainGenConsumer::genCallHarness(const clang::FunctionDecl *func, clang::ASTConte
 std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   unsigned numParams = mainFn->getNumParams();
 
-  if (numParams == 0)
-    return "  original_main();\n";
+  if (numParams == 0) return "  original_main();\n";
 
   std::string body;
   body += "  int argc = __HAVOC_ARGC();\n";

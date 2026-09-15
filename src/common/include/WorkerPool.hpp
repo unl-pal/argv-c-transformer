@@ -36,8 +36,7 @@ inline int resolveWorkerCount(int configuredNproc) {
     }
     return configuredNproc;
   }
-  if (hw == 0)
-    return 1;
+  if (hw == 0) return 1;
   return static_cast<int>(std::max(1u, hw * 3 / 4));
 }
 
@@ -111,8 +110,7 @@ inline void flushChildLog(const WorkerPoolJob &job) {
     std::string content = buf.str();
     if (!content.empty()) {
       std::cerr << "----- " << job.file.string() << " -----\n" << content;
-      if (content.back() != '\n')
-        std::cerr << '\n';
+      if (content.back() != '\n') std::cerr << '\n';
     }
   }
   std::error_code ec;
@@ -133,8 +131,7 @@ inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &
   std::error_code ec;
   std::filesystem::path logDir =
       std::filesystem::temp_directory_path(ec) / ("argv-c-pool-" + std::to_string(getpid()));
-  if (ec)
-    logDir = std::filesystem::path(".") / ("argv-c-pool-" + std::to_string(getpid()));
+  if (ec) logDir = std::filesystem::path(".") / ("argv-c-pool-" + std::to_string(getpid()));
   // allow fallback to stderr interleaved if logDir fails
   std::filesystem::create_directories(logDir, ec);
 
@@ -148,8 +145,9 @@ inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &
   // by every child.
   auto reportProgress = [&]() {
     if (!files.empty())
-      std::cout << "\r[" << work.label << "] " << (result.produced + result.declined + result.failed)
-                << "/" << files.size() << " processed" << std::flush;
+      std::cout << "\r[" << work.label << "] "
+                << (result.produced + result.declined + result.failed) << "/" << files.size()
+                << " processed" << std::flush;
   };
   reportProgress();
 
@@ -170,8 +168,7 @@ inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &
       pid_t pid = fork();
       if (pid < 0) {
         work.debugLog(0, "fork failed, running in-process: " + file.string());
-        if (work.runInProcess(file))
-          result.produced++;
+        if (work.runInProcess(file)) result.produced++;
         else
           result.declined++;
         reportProgress();
@@ -204,12 +201,12 @@ inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &
         } else if (WIFEXITED(status)) {
           result.failed++;
           work.debugLog(0, "failed (exit " + std::to_string(WEXITSTATUS(status)) +
-                                "), skipping: " + it->file.string());
+                               "), skipping: " + it->file.string());
           work.cleanupPartial(it->file);
         } else {
           result.failed++;
           work.debugLog(0, "crashed (signal " + std::to_string(WTERMSIG(status)) +
-                                "), skipping: " + it->file.string());
+                               "), skipping: " + it->file.string());
           work.cleanupPartial(it->file);
         }
         it = inFlight.erase(it);
@@ -229,8 +226,7 @@ inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &
       }
     }
 
-    if (reaped)
-      reportProgress();
+    if (reaped) reportProgress();
 
     // Nothing to reap and no free slot (or nothing left to submit): avoid a
     // busy-spin while children run.
@@ -240,8 +236,7 @@ inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &
     }
   }
 
-  if (!files.empty())
-    std::cout << std::endl;
+  if (!files.empty()) std::cout << std::endl;
 
   std::filesystem::remove_all(logDir, ec);
   return result;

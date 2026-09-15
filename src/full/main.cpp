@@ -36,8 +36,7 @@ int main(int argc, char **argv) {
   // When an input was given on the command line, the transform must read the
   // filter's resolved output directory, not the input itself.
   std::string transformInput;
-  if (!invocation->inputPath.empty())
-    transformInput = filter.getFilterDir();
+  if (!invocation->inputPath.empty()) transformInput = filter.getFilterDir();
   Transformer transformer(invocation->configFile, transformInput);
   // filter's resolved input tree, so transform can resolve local #includes
   // against it too (filterDir only mirrors .c files, not headers).

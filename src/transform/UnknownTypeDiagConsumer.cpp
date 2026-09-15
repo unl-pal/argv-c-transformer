@@ -11,18 +11,16 @@
 
 UnknownTypeDiagConsumer::UnknownTypeDiagConsumer(
     std::shared_ptr<std::set<std::string>> unresolvedTypeNames)
-    : _UnresolvedTypeNames(unresolvedTypeNames) {
-}
+    : _UnresolvedTypeNames(unresolvedTypeNames) {}
 
 void UnknownTypeDiagConsumer::HandleDiagnostic(clang::DiagnosticsEngine::Level,
                                                const clang::Diagnostic &Info) {
   unsigned id = Info.getID();
   bool isUnknownTypename =
       id == clang::diag::err_unknown_typename || id == clang::diag::err_unknown_typename_suggest;
-  bool isUndeclaredVarUse =
-      id == clang::diag::err_undeclared_var_use || id == clang::diag::err_undeclared_var_use_suggest;
-  if (!isUnknownTypename && !isUndeclaredVarUse)
-    return;
+  bool isUndeclaredVarUse = id == clang::diag::err_undeclared_var_use ||
+                            id == clang::diag::err_undeclared_var_use_suggest;
+  if (!isUnknownTypename && !isUndeclaredVarUse) return;
 
   // Clang does not guarantee a diagnostic ID always carries its name argument
   // with the same encoding: err_undeclared_var_use_suggest emits the same

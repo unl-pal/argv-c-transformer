@@ -25,7 +25,8 @@
 #include <string>
 #include <vector>
 
-/** @brief Aborts if built against Clang < 20: older versions miss APIs this project relies on and have caused AST-traversal crashes. */
+/** @brief Aborts if built against Clang < 20: older versions miss APIs this project relies on and
+ * have caused AST-traversal crashes. */
 inline void checkClangVersion() {
   if (CLANG_VERSION_MAJOR < 20) {
     std::cerr << "Error: built against Clang " << CLANG_VERSION_STRING
@@ -35,18 +36,17 @@ inline void checkClangVersion() {
   }
 }
 
-/** @brief Runs a shell command, returns its stdout stripped of the trailing newline, or nullopt if it couldn't run or produced no output. */
+/** @brief Runs a shell command, returns its stdout stripped of the trailing newline, or nullopt if
+ * it couldn't run or produced no output. */
 inline std::optional<std::string> readCommandOutput(const char *cmd) {
   FILE *pipe = popen(cmd, "r");
-  if (!pipe)
-    return std::nullopt;
+  if (!pipe) return std::nullopt;
   char buf[512];
   std::string result;
   while (fgets(buf, sizeof(buf), pipe))
     result += buf;
   pclose(pipe);
-  if (!result.empty() && result.back() == '\n')
-    result.pop_back();
+  if (!result.empty() && result.back() == '\n') result.pop_back();
   return result.empty() ? std::nullopt : std::optional<std::string>(result);
 }
 
@@ -81,7 +81,8 @@ inline void checkRuntimeClangVersion() {
   }
 }
 
-/** @brief Returns the macOS SDK sysroot (system C headers live inside the SDK there, not /usr/include), or nullopt on non-Apple platforms or if xcrun fails. */
+/** @brief Returns the macOS SDK sysroot (system C headers live inside the SDK there, not
+ * /usr/include), or nullopt on non-Apple platforms or if xcrun fails. */
 inline std::optional<std::string> getSysroot() {
 #ifndef __APPLE__
   return std::nullopt;
@@ -90,11 +91,11 @@ inline std::optional<std::string> getSysroot() {
 #endif
 }
 
-/** @brief Returns the clang resource directory: CLANG_RESOURCES if set, else `clang -print-resource-dir`. */
+/** @brief Returns the clang resource directory: CLANG_RESOURCES if set, else `clang
+ * -print-resource-dir`. */
 inline std::optional<std::string> getResourceDir() {
   const char *r = std::getenv("CLANG_RESOURCES");
-  if (r)
-    return std::string(r);
+  if (r) return std::string(r);
   return readCommandOutput("clang -print-resource-dir 2>/dev/null");
 }
 
@@ -105,11 +106,9 @@ inline std::optional<std::string> getResourceDir() {
  */
 inline std::optional<std::string> clangCommand(const std::string &flags) {
   std::optional<std::string> resourceDir = getResourceDir();
-  if (!resourceDir)
-    return std::nullopt;
+  if (!resourceDir) return std::nullopt;
   std::string cmd = "clang " + flags + " -resource-dir=" + *resourceDir;
-  if (std::optional<std::string> sysroot = getSysroot())
-    cmd += " -isysroot " + *sysroot;
+  if (std::optional<std::string> sysroot = getSysroot()) cmd += " -isysroot " + *sysroot;
   return cmd;
 }
 
@@ -129,16 +128,11 @@ inline std::optional<std::string> clangCommand(const std::string &flags) {
  *                         wouldn't otherwise find can still resolve.
  * @return Argument vector for {@code CommonOptionsParser::create}.
  */
-inline std::vector<std::string> buildClangArgs(const std::string &filePath,
-                                               const std::string &resourceDir,
-                                               const std::vector<std::string> &extraIncludeDirs = {}) {
+inline std::vector<std::string>
+buildClangArgs(const std::string &filePath, const std::string &resourceDir,
+               const std::vector<std::string> &extraIncludeDirs = {}) {
   std::vector<std::string> args = {
-      "clang",
-      filePath,
-      "--",
-      "-xc",
-      "-resource-dir=" + resourceDir,
-      "-fparse-all-comments",
+      "clang", filePath, "--", "-xc", "-resource-dir=" + resourceDir, "-fparse-all-comments",
   };
   for (const std::string &dir : extraIncludeDirs)
     args.push_back("-I" + dir);
@@ -232,8 +226,7 @@ inline bool runToolOnFile(const std::string &filePath,
  */
 inline bool harnessIsEmpty(std::filesystem::path path) {
   std::ifstream in(path);
-  if (!in)
-    return false;
+  if (!in) return false;
   std::stringstream buffer;
   buffer << in.rdbuf();
   std::string content = buffer.str();
@@ -246,8 +239,7 @@ inline std::string formatElapsed(std::chrono::steady_clock::duration d) {
   int minutes = static_cast<int>(totalSeconds) / 60;
   double seconds = totalSeconds - minutes * 60;
   std::ostringstream oss;
-  if (minutes > 0)
-    oss << minutes << "m ";
+  if (minutes > 0) oss << minutes << "m ";
   oss << std::fixed << std::setprecision(minutes > 0 ? 1 : 2) << seconds << "s";
   return oss.str();
 }

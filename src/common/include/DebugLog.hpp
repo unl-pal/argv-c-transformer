@@ -37,6 +37,5 @@ inline int &globalDebugLevel() {
  * @param msg   The message to write (a newline is appended).
  */
 inline void debugLog(int level, const std::string &msg) {
-  if (globalDebugLevel() >= level)
-    std::cerr << msg << std::endl;
+  if (globalDebugLevel() >= level) std::cerr << msg << std::endl;
 }

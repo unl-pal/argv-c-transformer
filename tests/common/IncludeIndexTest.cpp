@@ -36,7 +36,8 @@ public:
 TEST(IncludeIndex, ResolvesHeaderInDifferentSubtree) {
   TempTree tree("subtree");
   tree.writeFile("include/nested/mytypes.h", "typedef struct { int x; } point_t;\n");
-  tree.writeFile("src/main.c", "#include \"nested/mytypes.h\"\nint use(point_t p) { return p.x; }\n");
+  tree.writeFile("src/main.c",
+                 "#include \"nested/mytypes.h\"\nint use(point_t p) { return p.x; }\n");
 
   HeaderIndex index(tree.root);
   std::vector<std::string> dirs = collectLocalIncludeDirs(tree.root / "src/main.c", index);

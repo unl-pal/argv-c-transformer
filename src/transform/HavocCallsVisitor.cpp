@@ -45,19 +45,16 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
   }
 
   clang::QualType returnType = E->getCallReturnType(C);
-  if (returnType.isNull() || returnType.getTypePtrOrNull() == nullptr)
-    return std::nullopt;
+  if (returnType.isNull() || returnType.getTypePtrOrNull() == nullptr) return std::nullopt;
 
-  if (returnType->isVoidType())
-    return HavocAction{HavocAction::Mode::Erase, "", {}};
+  if (returnType->isVoidType()) return HavocAction{HavocAction::Mode::Erase, "", {}};
 
   if (std::optional<std::string> suffix = verifierSuffixForType(returnType))
     return HavocAction{HavocAction::Mode::Inline, "__VERIFIER_nondet_" + *suffix + "()", {}};
 
   if (returnType->isAnyPointerType()) {
     PointerPlan plan = planPointer(returnType, mgr); // storage/placement are the caller's job
-    if (!plan.viable)
-      return std::nullopt;
+    if (!plan.viable) return std::nullopt;
     return HavocAction{HavocAction::Mode::Pointer, "", plan};
   }
 
@@ -68,16 +65,14 @@ std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
   std::set<const clang::VarDecl *> vars;
   if (const auto *declStmt = clang::dyn_cast_or_null<clang::DeclStmt>(init)) {
     for (const clang::Decl *D : declStmt->decls()) {
-      if (const auto *VD = clang::dyn_cast<clang::VarDecl>(D))
-        vars.insert(VD);
+      if (const auto *VD = clang::dyn_cast<clang::VarDecl>(D)) vars.insert(VD);
     }
   }
   return vars;
 }
 
 const clang::VarDecl *referencedVar(const clang::Expr *E) {
-  if (!E)
-    return nullptr;
+  if (!E) return nullptr;
   if (const auto *DRE = clang::dyn_cast<clang::DeclRefExpr>(E->IgnoreParenCasts()))
     return clang::dyn_cast<clang::VarDecl>(DRE->getDecl());
   return nullptr;
@@ -94,8 +89,7 @@ void eatTrailingSemicolon(clang::ASTContext *C, clang::Rewriter &rewriter, const
 
 std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
   clang::PresumedLoc presumed = mgr.getPresumedLoc(loc);
-  if (!presumed.isValid())
-    return "<unknown>";
+  if (!presumed.isValid()) return "<unknown>";
   return std::string(presumed.getFilename()) + ":" + std::to_string(presumed.getLine());
 }
 
@@ -105,8 +99,7 @@ std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
 // `mutableVars`: a for-loop's own init-declared variables.
 bool HavocCallsVisitor::isSideEffectFree(
     const clang::Expr *E, const std::set<const clang::VarDecl *> &mutableVars) const {
-  if (!E)
-    return true;
+  if (!E) return true;
   E = E->IgnoreParenCasts();
   switch (E->getStmtClass()) {
   case clang::Stmt::DeclRefExprClass:
@@ -120,8 +113,7 @@ bool HavocCallsVisitor::isSideEffectFree(
   case clang::Stmt::CallExprClass: {
     const auto *CE = clang::cast<clang::CallExpr>(E);
     std::optional<HavocAction> action = classifyCall(CE, *_C);
-    if (!action)
-      return false;
+    if (!action) return false;
     if (action->mode == HavocAction::Mode::Pointer) {
       bool discarded = false;
       hoistAnchor(CE, discarded); // pure only if the hoisted storage goes unused
@@ -153,7 +145,8 @@ bool HavocCallsVisitor::isSideEffectFree(
     return isSideEffectFree(clang::cast<clang::MemberExpr>(E)->getBase(), mutableVars);
   case clang::Stmt::ArraySubscriptExprClass: {
     const auto *AS = clang::cast<clang::ArraySubscriptExpr>(E);
-    return isSideEffectFree(AS->getBase(), mutableVars) && isSideEffectFree(AS->getIdx(), mutableVars);
+    return isSideEffectFree(AS->getBase(), mutableVars) &&
+           isSideEffectFree(AS->getIdx(), mutableVars);
   }
   default:
     return false;
@@ -161,14 +154,11 @@ bool HavocCallsVisitor::isSideEffectFree(
 }
 
 bool HavocCallsVisitor::containsHavocedCall(const clang::Stmt *S) const {
-  if (!S)
-    return false;
+  if (!S) return false;
   if (const auto *CE = clang::dyn_cast<clang::CallExpr>(S))
-    if (classifyCall(CE, *_C))
-      return true;
+    if (classifyCall(CE, *_C)) return true;
   for (const clang::Stmt *child : S->children()) {
-    if (containsHavocedCall(child))
-      return true;
+    if (containsHavocedCall(child)) return true;
   }
   return false;
 }
@@ -177,8 +167,7 @@ bool HavocCallsVisitor::containsHavocedCall(const clang::Stmt *S) const {
 bool HavocCallsVisitor::isInitSideEffectFree(
     const clang::Stmt *init, const std::set<const clang::VarDecl *> &mutableVars) const {
   for (const clang::VarDecl *varDecl : mutableVars) {
-    if (!isSideEffectFree(varDecl->getInit(), mutableVars))
-      return false;
+    if (!isSideEffectFree(varDecl->getInit(), mutableVars)) return false;
   }
   if (const auto *E = clang::dyn_cast_or_null<clang::Expr>(init))
     return isSideEffectFree(E, mutableVars);
@@ -192,8 +181,7 @@ HavocCallsVisitor::HavocCallsVisitor(clang::ASTContext *C,
 
 bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   std::optional<HavocAction> action = classifyCall(E, *_C);
-  if (!action)
-    return true;
+  if (!action) return true;
 
   std::string where = locString(_C->getSourceManager(), E->getExprLoc());
   if (action->mode == HavocAction::Mode::Erase) {
@@ -201,8 +189,7 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     eraseStmt(E);
     return true;
   }
-  if (action->mode == HavocAction::Mode::Pointer)
-    return havocPointerReturn(E, action->plan, where);
+  if (action->mode == HavocAction::Mode::Pointer) return havocPointerReturn(E, action->plan, where);
 
   debugLog(4, "[transform] " + where + ": havocked call -> " + action->replacement);
   _Rewriter.ReplaceText(E->getSourceRange(), action->replacement);
@@ -214,13 +201,11 @@ const clang::Stmt *HavocCallsVisitor::hoistAnchor(const clang::CallExpr *E, bool
   clang::DynTypedNode node = clang::DynTypedNode::create(*E);
   while (true) {
     clang::DynTypedNodeList parents = _C->getParents(node);
-    if (parents.empty())
-      return nullptr;
+    if (parents.empty()) return nullptr;
     const clang::DynTypedNode &parent = parents[0];
     if (parent.get<clang::CompoundStmt>()) {
       const clang::Stmt *anchor = node.get<clang::Stmt>();
-      if (!anchor)
-        return nullptr;
+      if (!anchor) return nullptr;
       if (const auto *asExpr = clang::dyn_cast<clang::Expr>(anchor))
         discarded = asExpr->IgnoreParenImpCasts() == E;
       return anchor;
@@ -239,7 +224,8 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
     return true;
   }
   if (!anchor) {
-    debugLog(2, "[transform] " + where + ": pointer call has no statement to hoist above; left as-is");
+    debugLog(2,
+             "[transform] " + where + ": pointer call has no statement to hoist above; left as-is");
     return true;
   }
 
@@ -252,26 +238,23 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
                        /*indentNewLines=*/true);
   _Rewriter.ReplaceText(E->getSourceRange(), store.arg);
 
-  if (!plan.fwdDecl.empty())
-    _NeededFwdDecls->insert(plan.fwdDecl);
+  if (!plan.fwdDecl.empty()) _NeededFwdDecls->insert(plan.fwdDecl);
   debugLog(4, "[transform] " + where + ": havocked pointer call -> stack " + stub);
   return true;
 }
 
 // Idempotent: re-removing an already-erased range confuses the Rewriter's delta bookkeeping.
 void HavocCallsVisitor::eraseStmt(const clang::Stmt *S) {
-  if (!_ErasedStmts.insert(S).second)
-    return;
+  if (!_ErasedStmts.insert(S).second) return;
   _Rewriter.ReplaceText(S->getSourceRange(), "");
 }
 
 bool HavocCallsVisitor::isNoOp(const clang::Stmt *S) const {
-  if (!S || clang::isa<clang::NullStmt>(S))
-    return true;
+  if (!S || clang::isa<clang::NullStmt>(S)) return true;
   auto cached = _NoOpMemo.find(S);
-  if (cached != _NoOpMemo.end())
-    return cached->second;
-  return _NoOpMemo.emplace(S, computeNoOp(S)).first->second; // an enclosing statement re-asks about its children
+  if (cached != _NoOpMemo.end()) return cached->second;
+  return _NoOpMemo.emplace(S, computeNoOp(S))
+      .first->second; // an enclosing statement re-asks about its children
 }
 
 bool HavocCallsVisitor::computeNoOp(const clang::Stmt *S) const {
@@ -285,15 +268,13 @@ bool HavocCallsVisitor::computeNoOp(const clang::Stmt *S) const {
 
   if (const auto *CS = clang::dyn_cast<clang::CompoundStmt>(S)) {
     for (const clang::Stmt *child : CS->body()) {
-      if (!isNoOp(child))
-        return false;
+      if (!isNoOp(child)) return false;
     }
     return true;
   }
 
   if (const auto *ifS = clang::dyn_cast<clang::IfStmt>(S))
-    return isNoOp(ifS->getThen()) && isNoOp(ifS->getElse()) &&
-           isSideEffectFree(ifS->getCond(), {});
+    return isNoOp(ifS->getThen()) && isNoOp(ifS->getElse()) && isSideEffectFree(ifS->getCond(), {});
 
   // pruning may turn a hang into termination - accepted, these are havoc artifacts
   if (const auto *whileS = clang::dyn_cast<clang::WhileStmt>(S))
@@ -314,9 +295,9 @@ bool HavocCallsVisitor::computeNoOp(const clang::Stmt *S) const {
 
 bool HavocCallsVisitor::VisitCompoundStmt(clang::CompoundStmt *S) {
   for (const clang::Stmt *child : S->body()) {
-    if (!isNoOp(child))
-      continue;
-    if (clang::isa<clang::NullStmt>(child) || clang::isa<clang::CompoundStmt>(child)) // nothing further to erase
+    if (!isNoOp(child)) continue;
+    if (clang::isa<clang::NullStmt>(child) ||
+        clang::isa<clang::CompoundStmt>(child)) // nothing further to erase
       continue;
     eraseStmt(child);
     eatTrailingSemicolon(_C, _Rewriter, child);
@@ -325,10 +306,9 @@ bool HavocCallsVisitor::VisitCompoundStmt(clang::CompoundStmt *S) {
 }
 
 void HavocCallsVisitor::pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc) {
-  if (!isNoOp(S))
-    return;
-  debugLog(3, "[transform] " + locString(_C->getSourceManager(), keyLoc) +
-                  ": pruned no-op statement");
+  if (!isNoOp(S)) return;
+  debugLog(3,
+           "[transform] " + locString(_C->getSourceManager(), keyLoc) + ": pruned no-op statement");
   eraseStmt(S);
 }
 

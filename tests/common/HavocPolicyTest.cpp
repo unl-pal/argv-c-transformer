@@ -36,14 +36,12 @@ Parsed planFirstParam(const std::string &code, const std::string &func = "f") {
   Parsed p;
   p.ast = clang::tooling::buildASTFromCodeWithArgs(code, {"-xc"}, "test.c");
   EXPECT_NE(p.ast, nullptr) << "AST failed to build for:\n" << code;
-  if (!p.ast)
-    return p;
+  if (!p.ast) return p;
 
   clang::ASTContext &ctx = p.ast->getASTContext();
   for (clang::Decl *decl : ctx.getTranslationUnitDecl()->decls()) {
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
-    if (!fn || fn->getNameAsString() != func || fn->param_empty())
-      continue;
+    if (!fn || fn->getNameAsString() != func || fn->param_empty()) continue;
     p.declared = fn->getParamDecl(0)->getOriginalType();
     p.plan = planPointer(p.declared, ctx.getSourceManager());
     return p;

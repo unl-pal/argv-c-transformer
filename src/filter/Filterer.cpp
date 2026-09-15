@@ -30,8 +30,7 @@ Filterer::Filterer(std::string configFile, std::string inputPath) {
   configuration.databaseDir = defaultDatabaseDir;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   configuration.nproc = 0;
-  if (!configFile.empty())
-    parseConfigFile(configFile);
+  if (!configFile.empty()) parseConfigFile(configFile);
   if (configuration.filterDir.empty())
     configuration.filterDir = inputBaseName(configuration.databaseDir) + "-filtered";
   if (!inputPath.empty()) {
@@ -43,10 +42,8 @@ Filterer::Filterer(std::string configFile, std::string inputPath) {
 void Filterer::parseConfigFile(std::string configFile) {
   config = parsePipelineConfig(configFile);
 
-  if (!config.databaseDir.empty())
-    configuration.databaseDir = config.databaseDir;
-  if (!config.filterDir.empty())
-    configuration.filterDir = config.filterDir;
+  if (!config.databaseDir.empty()) configuration.databaseDir = config.databaseDir;
+  if (!config.filterDir.empty()) configuration.filterDir = config.filterDir;
 
   globalDebugLevel() = config.fileSettings.at("debugLevel");
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
@@ -60,9 +57,9 @@ void Filterer::parseConfigFile(std::string configFile) {
       dump += "\n  " + k + " = " + std::to_string(range.first) + "," + std::to_string(range.second);
     for (const auto &[k, gate] : config.features)
       dump += "\n  " + k + " = " +
-              (gate == FeatureGate::Require   ? "require"
+              (gate == FeatureGate::Require  ? "require"
                : gate == FeatureGate::Forbid ? "forbid"
-                                              : "ignore");
+                                             : "ignore");
     debugLog(1, dump);
   }
 }
@@ -77,8 +74,7 @@ bool Filterer::checkPotentialFile(std::string fileName) {
   std::string line;
   int count = 0;
   while (std::getline(file, line)) {
-    if (!line.empty())
-      count++;
+    if (!line.empty()) count++;
   }
 
   if (count < config.fileSettings.at("minFileLoC")) {
@@ -123,8 +119,8 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
         numFiles += getAllCFiles(entry.path(), filesToFilter);
       }
     } catch (const std::filesystem::filesystem_error &e) {
-      debugLog(1, "[filter] skipping unreadable directory " + pathObject.string() +
-                      ": " + e.what());
+      debugLog(1,
+               "[filter] skipping unreadable directory " + pathObject.string() + ": " + e.what());
     }
     return numFiles;
   } else {
@@ -139,8 +135,7 @@ int Filterer::getAllCFiles(std::filesystem::path pathObject,
 // relative() yields "." when the input path IS the file (single-file mode).
 std::filesystem::path Filterer::outputPath(std::filesystem::path oldPath) {
   std::filesystem::path relPath = std::filesystem::relative(oldPath, configuration.databaseDir);
-  if (relPath.empty() || *relPath.begin() == ".." || relPath == ".")
-    relPath = oldPath.filename();
+  if (relPath.empty() || *relPath.begin() == ".." || relPath == ".") relPath = oldPath.filename();
   return std::filesystem::path(configuration.filterDir) / relPath;
 }
 
@@ -203,8 +198,7 @@ int Filterer::run() {
   std::vector<std::filesystem::path> toProcess;
   for (const std::string &fileName : filesToFilter) {
     debugLog(1, "[filter] file: " + fileName);
-    if (!checkPotentialFile(fileName))
-      continue;
+    if (!checkPotentialFile(fileName)) continue;
     passed++;
     toProcess.emplace_back(fileName);
   }

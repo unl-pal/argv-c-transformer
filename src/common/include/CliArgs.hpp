@@ -32,8 +32,7 @@ struct CliInvocation {
  * @return The parsed invocation, or std::nullopt if parsing fails
  */
 inline std::optional<CliInvocation> parseCliArgs(int argc, char **argv) {
-  if (argc < 2 || argc > 3)
-    return std::nullopt;
+  if (argc < 2 || argc > 3) return std::nullopt;
 
   CliInvocation invocation;
   for (int i = 1; i < argc; i++) {

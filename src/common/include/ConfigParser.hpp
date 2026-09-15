@@ -34,24 +34,21 @@ struct PipelineConfig {
    * to {0, 9999}, meaning no filtering unless explicitly configured.
    */
   std::map<std::string, std::pair<int, int>> complexity = {
-      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}}, {"IfStmt", {0, 9999}},
-      {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}}, {"Operations", {0,9999}},
+      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}},   {"IfStmt", {0, 9999}},
+      {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}}, {"Operations", {0, 9999}},
   };
 
   /** Per-function feature gates: feature name → ignore|require|forbid. */
   std::map<std::string, FeatureGate> features = {
-      {"Concurrency", FeatureGate::Ignore},
-      {"FloatingPoint", FeatureGate::Ignore},
-      {"PointerOrArray", FeatureGate::Ignore},
-      {"PointerDeref", FeatureGate::Ignore},
-      {"MemAlloc", FeatureGate::Ignore},
-      {"MemFree", FeatureGate::Ignore},
+      {"Concurrency", FeatureGate::Ignore},    {"FloatingPoint", FeatureGate::Ignore},
+      {"PointerOrArray", FeatureGate::Ignore}, {"PointerDeref", FeatureGate::Ignore},
+      {"MemAlloc", FeatureGate::Ignore},       {"MemFree", FeatureGate::Ignore},
   };
 
   /** File-level integer settings (booleans are stored as 0/1). */
   std::map<std::string, int> fileSettings = {
-      {"debugLevel", 0},       {"minFileLoC", 0},        {"maxFileLoC", 9999},
-      {"fileTimeoutSecs", 60}, {"keepCompilesOnly", 1},  {"nproc", 0},
+      {"debugLevel", 0},       {"minFileLoC", 0},       {"maxFileLoC", 9999},
+      {"fileTimeoutSecs", 60}, {"keepCompilesOnly", 1}, {"nproc", 0},
   };
 
   /**
@@ -59,11 +56,8 @@ struct PipelineConfig {
    * transformed file (see HavocBounds.hpp).
    */
   std::map<std::string, int> havoc = {
-      {"havocArgcMin", 1},
-      {"havocArgcMax", 4},
-      {"havocStrMax", 16},
-      {"havocBlockMax", 128},
-      {"havocArrayElems", 8},
+      {"havocArgcMin", 1},    {"havocArgcMax", 4},    {"havocStrMax", 16},
+      {"havocBlockMax", 128}, {"havocArrayElems", 8},
   };
 
   std::string databaseDir;  ///< Input tree for the filter stage ("" = unset).
@@ -78,8 +72,7 @@ struct PipelineConfig {
 inline std::string trim(const std::string &s) {
   size_t start = s.find_first_not_of(" \t");
   size_t end = s.find_last_not_of(" \t");
-  if (start == std::string::npos)
-    return "";
+  if (start == std::string::npos) return "";
   return s.substr(start, end - start + 1);
 }
 
@@ -98,11 +91,9 @@ inline std::string trim(const std::string &s) {
  */
 inline std::map<std::string, std::string> parseIniFile(const std::string &configFile) {
   std::map<std::string, std::string> result;
-  if (!std::filesystem::exists(configFile))
-    return result;
+  if (!std::filesystem::exists(configFile)) return result;
   std::ifstream file(configFile);
-  if (!file.is_open())
-    return result;
+  if (!file.is_open()) return result;
   std::regex pattern(R"(^\s*(\w+)\s*=\s*([0-9]+|[\w\s,\-]+|[\w/\-_.]+)$)");
   std::string rawLine, line;
   int lineNum = 0;
@@ -162,8 +153,7 @@ inline std::optional<std::pair<int, int>> parseComplexityValue(const std::string
  */
 inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
   PipelineConfig config;
-  if (configFile.empty())
-    return config;
+  if (configFile.empty()) return config;
   if (!std::filesystem::exists(configFile)) {
     std::cerr << "Config file not found: " << configFile << " - using defaults" << std::endl;
     return config;

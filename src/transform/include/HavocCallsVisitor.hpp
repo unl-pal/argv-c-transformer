@@ -54,7 +54,8 @@ public:
   bool VisitCompoundStmt(clang::CompoundStmt *S);
 
   /**
-   * @brief Prunes an if statement whose branches are all no-ops and condition is side-effect-free. See pruneIfNoOp.
+   * @brief Prunes an if statement whose branches are all no-ops and condition is side-effect-free.
+   * See pruneIfNoOp.
    * @param S The if statement being visited.
    * @return true to continue traversal.
    */
@@ -86,7 +87,8 @@ public:
    */
   bool VisitForStmt(clang::ForStmt *S);
 
-  /** @brief Post-order traversal so a statement's children are classified before it is. @return true. */
+  /** @brief Post-order traversal so a statement's children are classified before it is. @return
+   * true. */
   bool shouldTraversePostOrder();
 
   /**

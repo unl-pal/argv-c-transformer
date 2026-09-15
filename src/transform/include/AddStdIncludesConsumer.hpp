@@ -29,7 +29,7 @@ public:
    *        by {@code IncludeFinder}); used to avoid emitting duplicates.
    * @param unresolvedTypeNames Unresolved type identifiers recovered by
    *        {@code UnknownTypeDiagConsumer} during parsing - names that never
-   *        made it into the AST 
+   *        made it into the AST
    * @param rewriter Shared rewriter for modifying the source buffer.
    */
   AddStdIncludesConsumer(std::shared_ptr<std::set<std::string>> existingIncludes,

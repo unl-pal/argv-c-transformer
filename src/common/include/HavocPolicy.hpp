@@ -57,11 +57,9 @@ inline bool recordHasPointerFields(const clang::RecordDecl *record, unsigned dep
     if (const auto *arrayType =
             llvm::dyn_cast_or_null<clang::ArrayType>(type->getAsArrayTypeUnsafe()))
       type = arrayType->getElementType();
-    if (type->isAnyPointerType())
-      return true;
+    if (type->isAnyPointerType()) return true;
     if (const clang::RecordDecl *nested = type->getAsRecordDecl())
-      if (recordHasPointerFields(nested, depth + 1))
-        return true;
+      if (recordHasPointerFields(nested, depth + 1)) return true;
   }
   return false;
 }
@@ -71,8 +69,7 @@ inline bool recordHasPointerFields(const clang::RecordDecl *record, unsigned dep
  */
 inline std::string pointeeFwdDecl(clang::QualType pointee, const clang::SourceManager &mgr) {
   const clang::TagDecl *tag = pointee->getAsTagDecl();
-  if (!tag)
-    return "";
+  if (!tag) return "";
   std::string kind(tag->getKindName());
   if (const auto *typedefType = pointee->getAs<clang::TypedefType>()) {
     const clang::TypedefNameDecl *decl = typedefType->getDecl();
@@ -83,8 +80,7 @@ inline std::string pointeeFwdDecl(clang::QualType pointee, const clang::SourceMa
     }
     return "";
   }
-  if (tag->getName().empty())
-    return "";
+  if (tag->getName().empty()) return "";
   return kind + " " + tag->getName().str();
 }
 
@@ -96,8 +92,7 @@ inline std::string pointeeFwdDecl(clang::QualType pointee, const clang::SourceMa
  */
 inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr) {
   PointerPlan plan;
-  if (QT.isNull() || QT.getTypePtrOrNull() == nullptr)
-    return plan;
+  if (QT.isNull() || QT.getTypePtrOrNull() == nullptr) return plan;
 
   clang::QualType pointee;
   if (const auto *arrayType =
@@ -143,7 +138,8 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
 
   if (pointee->isRecordType()) {
     plan.shape = PointerShape::Record;
-    if (recordHasPointerFields(pointee->getAsRecordDecl())) // not viable: no recursive field init yet
+    if (recordHasPointerFields(
+            pointee->getAsRecordDecl())) // not viable: no recursive field init yet
       return plan;
   }
 
@@ -155,7 +151,7 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
  * @brief A pointer havocked in statement position: setup plus the argument.
  */
 struct PointerStorage {
-  std::string decls;    ///< Prologue statements, indented and newline-terminated.
+  std::string decls; ///< Prologue statements, indented and newline-terminated.
   std::string arg;
   bool cstring = false;
 };
@@ -174,13 +170,12 @@ inline PointerStorage renderPointerStorage(const PointerPlan &plan, clang::QualT
                                            const std::string &name, const std::string &castType,
                                            const std::string &indent = "  ") {
   PointerStorage out;
-  if (!plan.viable)
-    return out;
+  if (!plan.viable) return out;
 
   // alignment potentially an issue
   if (plan.shape == PointerShape::Opaque) {
     out.decls = indent + "unsigned char " + name + "[__HAVOC_BLOCK_MAX];\n" + indent +
-               "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
+                "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
     out.arg = castType.empty() ? name : "(" + castType + ")" + name;
     return out;
   }
@@ -196,8 +191,7 @@ inline PointerStorage renderPointerStorage(const PointerPlan &plan, clang::QualT
     return out;
 
   std::string count;
-  if (plan.shape == PointerShape::Array)
-    count = std::to_string(plan.elems);
+  if (plan.shape == PointerShape::Array) count = std::to_string(plan.elems);
   else if (plan.shape == PointerShape::CString)
     count = "__HAVOC_STR_MAX";
   else

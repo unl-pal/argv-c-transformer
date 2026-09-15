@@ -23,8 +23,8 @@ protected:
   fs::path iniPath;
 
   void SetUp() override {
-    iniPath = fs::temp_directory_path() /
-              ("config_parser_test_" + std::to_string(getpid()) + ".config");
+    iniPath =
+        fs::temp_directory_path() / ("config_parser_test_" + std::to_string(getpid()) + ".config");
   }
 
   void TearDown() override { fs::remove(iniPath); }

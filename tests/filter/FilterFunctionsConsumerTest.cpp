@@ -33,7 +33,7 @@ namespace {
 // override the one or two keys it cares about.
 std::map<std::string, std::pair<int, int>> permissiveComplexityConfig() {
   return {
-      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}}, {"IfStmt", {0, 9999}},
+      {"CallFunc", {0, 9999}}, {"ForLoops", {0, 9999}},   {"IfStmt", {0, 9999}},
       {"Param", {0, 9999}},    {"WhileLoops", {0, 9999}},
   };
 }
@@ -49,8 +49,7 @@ struct FilterResult {
   std::unique_ptr<clang::ASTUnit> ast;
   std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> funcs =
       std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
-  std::shared_ptr<std::vector<std::string>> toRemove =
-      std::make_shared<std::vector<std::string>>();
+  std::shared_ptr<std::vector<std::string>> toRemove = std::make_shared<std::vector<std::string>>();
 };
 
 // Parses `code`, runs CountingVisitor to populate real attribute counts, then
@@ -62,8 +61,7 @@ FilterResult runFilter(const std::string &code,
   FilterResult r;
   r.ast = clang::tooling::buildASTFromCodeWithArgs(code, {"-xc"}, "test.c");
   EXPECT_NE(r.ast, nullptr) << "AST failed to build for:\n" << code;
-  if (!r.ast)
-    return r;
+  if (!r.ast) return r;
 
   CountingVisitor counter(&r.ast->getASTContext(), r.funcs);
   counter.TraverseTranslationUnitDecl(r.ast->getASTContext().getTranslationUnitDecl());
@@ -99,7 +97,7 @@ TEST(FilterFunctionsConsumer, MainRemovedWhenConcurrencyForbidden) {
       return 0;
     }
   )",
-                       permissiveComplexityConfig(), features);
+                     permissiveComplexityConfig(), features);
   EXPECT_TRUE(contains(*r.toRemove, "main"));
 }
 
@@ -116,7 +114,7 @@ TEST(FilterFunctionsConsumer, MainKeptWhenConcurrencyIgnored) {
       return 0;
     }
   )",
-                       permissiveComplexityConfig(), permissiveFeatureConfig());
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
 
@@ -136,7 +134,7 @@ TEST(FilterFunctionsConsumer, MainRemovedByOrdinaryThresholdCheck) {
       return 0;
     }
   )",
-                       complexity, permissiveFeatureConfig());
+                     complexity, permissiveFeatureConfig());
   EXPECT_TRUE(contains(*r.toRemove, "main"));
 }
 
@@ -147,7 +145,7 @@ TEST(FilterFunctionsConsumer, MainKeptWhenThresholdsSatisfied) {
       return 0;
     }
   )",
-                       permissiveComplexityConfig(), permissiveFeatureConfig());
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
 
@@ -165,7 +163,7 @@ TEST(FilterFunctionsConsumer, MainNotRemovedForUnsupportedArgvParam) {
       return argc;
     }
   )",
-                       permissiveComplexityConfig(), permissiveFeatureConfig());
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
 
@@ -177,7 +175,7 @@ TEST(FilterFunctionsConsumer, OrdinaryFunctionRemovedForUnsupportedParam) {
     int main(void) { return 0; }
     void helper(char **argv) {}
   )",
-                       permissiveComplexityConfig(), permissiveFeatureConfig());
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_TRUE(contains(*r.toRemove, "helper"));
   EXPECT_FALSE(contains(*r.toRemove, "main"));
 }
@@ -253,9 +251,8 @@ TEST(RemoveVisitor, StripsMainBodyWhenListed) {
   RemoveVisitor visitor(rewriter, toRemove);
   visitor.TraverseDecl(ast->getASTContext().getTranslationUnitDecl());
 
-  std::string rewritten = std::string(
-      rewriter.getRewriteBufferFor(mgr.getMainFileID())->begin(),
-      rewriter.getRewriteBufferFor(mgr.getMainFileID())->end());
+  std::string rewritten = std::string(rewriter.getRewriteBufferFor(mgr.getMainFileID())->begin(),
+                                      rewriter.getRewriteBufferFor(mgr.getMainFileID())->end());
   EXPECT_NE(rewritten.find("int main(void) ;"), std::string::npos) << rewritten;
   EXPECT_EQ(rewritten.find("return 0"), std::string::npos) << rewritten;
 }

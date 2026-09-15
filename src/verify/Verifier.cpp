@@ -37,8 +37,7 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   configuration.nproc = config.fileSettings.at("nproc");
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
-  if (!inputPath.empty())
-    configuration.transformDir = inputPath;
+  if (!inputPath.empty()) configuration.transformDir = inputPath;
   configuration.benchmarkDir = config.benchmarkDir.empty()
                                    ? inputBaseName(configuration.transformDir) + "-benchmarks"
                                    : config.benchmarkDir;
@@ -111,8 +110,7 @@ void Verifier::cleanupPartialOutput(std::filesystem::path path) {
   std::filesystem::path outPath =
       std::filesystem::path(configuration.benchmarkDir) / path.filename();
   // transformDir == benchmarkDir makes the "partial output" the input itself.
-  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath))
-    return;
+  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath)) return;
   std::error_code ec;
   std::filesystem::remove(outPath, ec);
   std::filesystem::path ymlPath = outPath;
@@ -123,7 +121,8 @@ void Verifier::cleanupPartialOutput(std::filesystem::path path) {
   std::filesystem::remove(iPath, ec);
 }
 
-void Verifier::collectCFiles(std::filesystem::path path, std::vector<std::filesystem::path> &files) {
+void Verifier::collectCFiles(std::filesystem::path path,
+                             std::vector<std::filesystem::path> &files) {
   if (!std::filesystem::exists(path)) {
     debugLog(1, "[verify] path does not exist: " + path.string());
     return;
@@ -153,8 +152,8 @@ WorkerPoolResult Verifier::verifyAll(std::filesystem::path path) {
 
   int workers = resolveWorkerCount(configuration.nproc);
   debugLog(1, "[verify] worker pool size: " + std::to_string(workers));
-  std::cout << "[verify] processing " << files.size() << " file(s) with " << workers
-            << " worker(s)" << std::endl;
+  std::cout << "[verify] processing " << files.size() << " file(s) with " << workers << " worker(s)"
+            << std::endl;
 
   IsolatedWork work;
   work.child = [this](const std::filesystem::path &p) {
@@ -176,8 +175,7 @@ WorkerPoolResult Verifier::verifyAll(std::filesystem::path path) {
 // pathological filename containing shell metacharacters could inject commands
 bool Verifier::checkCompilable(std::filesystem::path path) {
   std::optional<std::string> cmd = clangCommand("-fsyntax-only -xc");
-  if (!cmd)
-    return false;
+  if (!cmd) return false;
 
   *cmd += " " + path.string() + " 2>/dev/null";
   return std::system(cmd->c_str()) == 0;
@@ -186,8 +184,7 @@ bool Verifier::checkCompilable(std::filesystem::path path) {
 std::vector<BenchmarkProperty> Verifier::selectProperties(
     const std::unordered_map<std::string, CountingVisitor::attributes> &counts) {
   std::vector<BenchmarkProperty> properties;
-  if (counts.count("reach_error"))
-    properties.push_back({"../properties/unreach-call.prp", true});
+  if (counts.count("reach_error")) properties.push_back({"../properties/unreach-call.prp", true});
   bool loopsPresent = false;
   bool intArithPresent = false;
   bool memsafetyPresent = false;
@@ -197,7 +194,8 @@ std::vector<BenchmarkProperty> Verifier::selectProperties(
       properties.push_back({"../properties/termination.prp", true});
     }
     if (!intArithPresent && attr.Complexity.Operations) {
-      // The operations check is pretty naive as it counts any/all binary and unary operations with side effects
+      // The operations check is pretty naive as it counts any/all binary and unary operations with
+      // side effects
       intArithPresent = true;
       properties.push_back({"../properties/no-overflow.prp", true});
     }
@@ -207,8 +205,7 @@ std::vector<BenchmarkProperty> Verifier::selectProperties(
       memsafetyPresent = true;
       properties.push_back({"../properties/valid-memsafety.prp", true});
     }
-    if (loopsPresent && intArithPresent && memsafetyPresent)
-      break;
+    if (loopsPresent && intArithPresent && memsafetyPresent) break;
   }
   return properties;
 }
@@ -245,8 +242,7 @@ void Verifier::writeBenchmarkTask(
       << "options:\n"
       << "  language: C\n"
       << "  data_model: LP64\n";
-  if (properties.empty())
-    debugLog(1, "[verify] WARN: no properties found for " + cPath.string());
+  if (properties.empty()) debugLog(1, "[verify] WARN: no properties found for " + cPath.string());
 }
 
 namespace {
@@ -266,8 +262,7 @@ const std::vector<std::regex> &knownNoiseTypedefs() {
 // Strips knownNoiseTypedefs() lines from an already-preprocessed .i file.
 void stripNoiseTypedefs(const std::filesystem::path &iPath) {
   std::ifstream in(iPath);
-  if (!in)
-    return;
+  if (!in) return;
   std::vector<std::string> kept;
   std::string line;
   bool changed = false;
@@ -286,8 +281,7 @@ void stripNoiseTypedefs(const std::filesystem::path &iPath) {
     kept.push_back(std::move(line));
   }
   in.close();
-  if (!changed)
-    return;
+  if (!changed) return;
   std::ofstream out(iPath, std::ios::trunc);
   for (const std::string &l : kept)
     out << l << "\n";
@@ -301,11 +295,9 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
   iPath.replace_extension(".i");
 
   std::optional<std::string> cmd = clangCommand("-E -P -std=gnu11");
-  if (!cmd)
-    return false;
+  if (!cmd) return false;
   *cmd += " " + cPath.string() + " -o " + iPath.string() + " 2>/dev/null";
-  if (std::system(cmd->c_str()) != 0)
-    return false;
+  if (std::system(cmd->c_str()) != 0) return false;
   stripNoiseTypedefs(iPath);
   return true;
 }
