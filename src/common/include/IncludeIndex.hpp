@@ -4,11 +4,12 @@
 
 #pragma once
 
-#include <algorithm>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <regex>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -124,16 +125,28 @@ resolveIncludeDir(const std::string &includeQuote, const HeaderIndex &index,
 }
 
 /** @brief Resolves every quoted #include in `filePath` to a -I dir via `resolveIncludeDir`,
- * deduplicated, first-seen order. */
+ * deduplicated, first-seen order. Follows quoted includes transitively into the headers
+ * they resolve to */
 inline std::vector<std::string> collectLocalIncludeDirs(const std::filesystem::path &filePath,
                                                         const HeaderIndex &index) {
   std::vector<std::string> dirs;
-  for (const std::string &quote : extractQuotedIncludes(filePath)) {
-    std::optional<std::filesystem::path> dir =
-        resolveIncludeDir(quote, index, filePath.parent_path());
-    if (!dir) continue;
-    std::string s = dir->string();
-    if (std::find(dirs.begin(), dirs.end(), s) == dirs.end()) dirs.push_back(s);
+  std::set<std::string> seenDirs;
+  std::set<std::string> visitedFiles;
+  std::deque<std::filesystem::path> pending{filePath};
+  visitedFiles.insert(filePath.lexically_normal().string());
+
+  while (!pending.empty()) {
+    std::filesystem::path current = std::move(pending.front());
+    pending.pop_front();
+    for (const std::string &quote : extractQuotedIncludes(current)) {
+      std::optional<std::filesystem::path> dir =
+          resolveIncludeDir(quote, index, current.parent_path());
+      if (!dir) continue;
+      if (seenDirs.insert(dir->string()).second) dirs.push_back(dir->string());
+
+      std::filesystem::path resolvedFile = (*dir / quote).lexically_normal();
+      if (visitedFiles.insert(resolvedFile.string()).second) pending.push_back(resolvedFile);
+    }
   }
   return dirs;
 }
