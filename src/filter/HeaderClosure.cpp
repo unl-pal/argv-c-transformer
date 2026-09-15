@@ -233,10 +233,45 @@ std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::Sour
 }
 
 /**
+ * @brief Climbs the recorded #include chain from a declaration's (possibly
+ * deeply-nested) file back up to the outermost system header a normal source
+ * file would write to reach it.
+ *
+  */
+std::optional<std::string> climbToPublicHeader(const clang::Decl *decl,
+                                               const clang::SourceManager &mgr,
+                                               const HeaderClosureState &state) {
+  clang::OptionalFileEntryRef file =
+      mgr.getFileEntryRefForID(mgr.getFileID(mgr.getFileLoc(decl->getLocation())));
+  if (!file)
+    return std::nullopt;
+
+  const clang::FileEntry *current = &file->getFileEntry();
+  std::optional<std::string> best;
+  // Bound the climb generously; a real #include nesting is never this deep,
+  // so this only guards against an unexpected cycle in the recorded state.
+  for (int hop = 0; hop < 64; ++hop) {
+    auto it = state.includedFrom.find(current);
+    if (it == state.includedFrom.end() || !it->second.isSystem)
+      break;
+    if (it->second.isAngled)
+      best = it->second.spelling;
+    if (!it->second.parent)
+      break;
+    current = it->second.parent;
+  }
+  return best;
+}
+
+/**
  * @brief Gets the `#include <...>` that supplies a declaration reached in a system header.
  */
 std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
-                                           const clang::SourceManager &mgr) {
+                                           const clang::SourceManager &mgr,
+                                           const HeaderClosureState &state) {
+  if (std::optional<std::string> climbed = climbToPublicHeader(decl, mgr, state))
+    return climbed;
+
   llvm::StringRef path = mgr.getFilename(mgr.getFileLoc(decl->getLocation()));
   if (!path.empty()) {
     // by convention most std/sys headers live under some include/ subdir
@@ -295,9 +330,18 @@ LocalHeaderPP::LocalHeaderPP(clang::SourceManager &SM, const clang::LangOptions 
 void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &,
                                        llvm::StringRef FileName, bool IsAngled,
                                        clang::CharSourceRange FilenameRange,
-                                       clang::OptionalFileEntryRef, llvm::StringRef,
+                                       clang::OptionalFileEntryRef File, llvm::StringRef,
                                        llvm::StringRef, const clang::Module *, bool,
                                        clang::SrcMgr::CharacteristicKind FileType) {
+  // Record how every included file was reached
+  if (File) {
+    clang::OptionalFileEntryRef parent =
+        _Mgr.getFileEntryRefForID(_Mgr.getFileID(HashLoc));
+    _State->includedFrom[&File->getFileEntry()] =
+        IncludeInfo{FileName.str(), IsAngled, FileType != clang::SrcMgr::C_User,
+                    parent ? &parent->getFileEntry() : nullptr};
+  }
+
   // A quoted include is project-local by convention regardless of FileType.
   bool localTarget = !IsAngled || FileType == clang::SrcMgr::C_User;
 
@@ -483,7 +527,7 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   // --- system headers the closure still needs -----------------------------
   std::set<std::string> includes = _State->systemIncludes;
   for (const clang::Decl *decl : collector.fromSystem()) {
-    std::optional<std::string> header = systemHeaderFor(decl, mgr);
+    std::optional<std::string> header = systemHeaderFor(decl, mgr, *_State);
     if (header) {
       includes.insert(*header);
       continue;
