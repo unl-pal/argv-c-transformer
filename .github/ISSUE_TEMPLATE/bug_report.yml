@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in filter/transform/verify (or argv-c) isn't behaving correctly.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Which stage?
+      description: Where does the problem first show up?
+      options:
+        - argv-c (combined pipeline)
+        - filter
+        - transform
+        - verify
+        - Build / CMake
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you get instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >
+        Smallest input `.c` file (or a link to one) and the config file (or
+        the relevant `[section]` options) that trigger it. If it only
+        happens on a large/real-world repo, name the repo and file path.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Console output, diagnostics, or the diff between expected and actual generated `.c`/`.yml`.
+      render: shell
+
+  - type: input
+    id: clang-version
+    attributes:
+      label: Clang/LLVM version
+      placeholder: "clang --version, e.g. clang 20.1.0"
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "e.g. Ubuntu 24.04, macOS 15"
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit / branch
+      placeholder: "git rev-parse HEAD, and branch name if not master"
