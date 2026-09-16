@@ -42,7 +42,7 @@ endif()
 
 link_directories(${LLVM_LIBRARY_DIRS})
 
-set(LLVM_LIBS LLVM LLVMSupport clang-cpp clang)
+set(LLVM_LIBS LLVMSupport clang-cpp clang)
 
 set(HEADERS_FILTER src/filter/include)
 set(HEADERS_TRANSFORM src/transform/include)
@@ -130,11 +130,14 @@ if(UNIX)
   set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
   set_property(TARGET verify PROPERTY LINKER_TYPE LLD)
   set_property(TARGET argv-c PROPERTY LINKER_TYPE LLD)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused -fcolor-diagnostics")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused -fcolor-diagnostics -fno-rtti")
 endif()
 
-enable_testing()
-add_subdirectory(tests)
+option(BUILD_TESTS "Build the test suite (fetches GoogleTest; needs CMake 3.24+)" ON)
+if(BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
 
 # Only argv-c is meant for a normal user's install
 install(TARGETS argv-c)
