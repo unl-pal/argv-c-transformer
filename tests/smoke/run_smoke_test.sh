@@ -61,7 +61,10 @@ EOF
 
 echo
 echo "--- Assertion: baseline file produces a benchmark ---"
-if [ ! -f "$WORK/bench-default/clean_ok.c" ]; then
+# clean_ok.c is split one output per surviving function (e.g.
+# clean_ok__compute.c), so match by prefix rather than the exact source name.
+clean_ok_bench=$(ls "$WORK/bench-default"/clean_ok__*.c 2>/dev/null | head -n1)
+if [ -z "$clean_ok_bench" ]; then
   echo "FAIL: clean_ok.c did not produce a benchmark; pipeline itself is broken on this platform"
   fail=1
 else
@@ -70,7 +73,8 @@ fi
 
 echo
 echo "--- Assertion: benchmark has task file and preprocessed input ---"
-if [ ! -f "$WORK/bench-default/clean_ok.yml" ] || [ ! -f "$WORK/bench-default/clean_ok.i" ]; then
+clean_ok_base=${clean_ok_bench%.c}
+if [ -z "$clean_ok_bench" ] || [ ! -f "$clean_ok_base.yml" ] || [ ! -f "$clean_ok_base.i" ]; then
   echo "FAIL: clean_ok benchmark is missing its .yml or .i (verify finalization broken)"
   fail=1
 else

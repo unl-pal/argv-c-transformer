@@ -141,6 +141,12 @@ std::filesystem::path Filterer::outputPath(std::filesystem::path oldPath) {
   return std::filesystem::path(configuration.filterDir) / relPath;
 }
 
+std::filesystem::path Filterer::splitPath(const std::filesystem::path &basePath,
+                                          const std::string &functionName) {
+  return basePath.parent_path() /
+         (basePath.stem().string() + "__" + functionName + basePath.extension().string());
+}
+
 bool Filterer::filterFile(std::filesystem::path oldPath) {
   std::filesystem::path newPath = outputPath(oldPath);
 
@@ -151,25 +157,32 @@ bool Filterer::filterFile(std::filesystem::path oldPath) {
   }
 
   std::filesystem::create_directories(newPath.parent_path());
-  std::error_code ec;
-  llvm::raw_fd_ostream output(llvm::StringRef(newPath.string()), ec);
-  if (ec) {
-    debugLog(0, "Cannot open output file " + newPath.string() + ": " + ec.message());
-    return false;
-  }
+
+  bool wroteAny = false;
+  bool writeFailed = false;
+  auto writeOutput = [&](const std::string &functionName, llvm::StringRef contents) {
+    std::filesystem::path splitOutput = splitPath(newPath, functionName);
+    std::error_code ec;
+    llvm::raw_fd_ostream out(llvm::StringRef(splitOutput.string()), ec);
+    if (ec) {
+      debugLog(0, "Cannot open output file " + splitOutput.string() + ": " + ec.message());
+      writeFailed = true;
+      return;
+    }
+    out << contents;
+    wroteAny = true;
+  };
 
   std::vector<std::string> includeDirs = collectLocalIncludeDirs(oldPath, *headerIndex);
 
-  FrontendFactoryWithArgs factory(&config.complexity, &config.features, output);
+  FrontendFactoryWithArgs factory(&config.complexity, &config.features, writeOutput);
   bool ran = runToolOnFile(oldPath.string(), factory, includeDirs);
-  output.close();
-  if (!ran) {
-    debugLog(1, "[filter] clang tool failed on: " + oldPath.string());
-    // The stream above already created/truncated newPath.
+  if (!ran || writeFailed) {
+    if (!ran) debugLog(1, "[filter] clang tool failed on: " + oldPath.string());
     cleanupPartialOutput(oldPath);
     return false;
   }
-  return true;
+  return wroteAny;
 }
 
 void Filterer::cleanupPartialOutput(std::filesystem::path oldPath) {
@@ -178,8 +191,18 @@ void Filterer::cleanupPartialOutput(std::filesystem::path oldPath) {
   // filterDir resolve to one directory, the "partial output" is the input.
   if (std::filesystem::weakly_canonical(oldPath) == std::filesystem::weakly_canonical(newPath))
     return;
+  // Splitting means one source can leave any number of "<stem>__<fn><ext>"
+  // outputs behind; glob them all rather than tracking exactly which landed.
   std::error_code ec;
-  std::filesystem::remove(newPath, ec);
+  std::string prefix = newPath.stem().string() + "__";
+  std::string ext = newPath.extension().string();
+  for (const std::filesystem::directory_entry &entry :
+       std::filesystem::directory_iterator(newPath.parent_path(), ec)) {
+    if (ec) break;
+    const std::filesystem::path &candidate = entry.path();
+    if (candidate.extension() == ext && candidate.stem().string().starts_with(prefix))
+      std::filesystem::remove(candidate, ec);
+  }
 }
 
 int Filterer::run() {

@@ -93,6 +93,29 @@ TEST_F(TransformStageTest, FlatFileProducesTransformedSource) {
   EXPECT_NE(src.find("add(__VERIFIER_nondet_int(), __VERIFIER_nondet_int());"), std::string::npos);
 }
 
+TEST_F(TransformStageTest, BodylessSiblingReferencedAsFunctionPointerIsNotDropped) {
+  // Mirrors what SplitConsumer hands transform: a target function plus a
+  // sibling stripped to a bare prototype. If that sibling were only ever
+  // *called* directly, MainGenConsumer correctly drops the leftover
+  // prototype once HavocCallsVisitor havocks the call away. But here it's
+  // captured as a function pointer and called indirectly through `fp` - a
+  // call HavocCallsVisitor never touches, since `fp` isn't a named in-file
+  // function. Dropping helper's prototype would leave `caller` referencing
+  // an undeclared identifier.
+  writeFile(filterDir / "ptr.c", "int helper(int x) ;\n"
+                                 "int caller(int x) {\n"
+                                 "  int (*fp)(int) = helper;\n"
+                                 "  return fp(x);\n"
+                                 "}\n");
+
+  Transformer t(configPath.string());
+  int count = t.run();
+
+  EXPECT_GE(count, 1);
+  std::string src = readFile(transformDir / "ptr.c");
+  EXPECT_NE(src.find("int helper(int x) ;"), std::string::npos) << src;
+}
+
 TEST_F(TransformStageTest, NestedPathFlattensWithUnderscores) {
   writeFile(filterDir / "owner" / "repo" / "src" / "util.c",
             "int square(int x) { return x * x; }\n");

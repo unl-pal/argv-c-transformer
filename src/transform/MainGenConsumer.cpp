@@ -11,12 +11,71 @@
 
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/Expr.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/Support/Casting.h>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
+
+namespace {
+
+/**
+ * @brief Finds every bodyless in-file function still referenced as a value
+ * (e.g. passed as a function pointer) rather than only called directly.
+ *
+ * A call whose direct callee is an in-file function never counts: whatever
+ * it returns, HavocCallsVisitor always either replaces that call's entire
+ * text (callee and arguments alike) or discards its enclosing function
+ * outright, so nothing inside it — including an argument that happens to
+ * name our candidate — survives into the output either way. Skipping the
+ * whole subtree there (rather than just the callee) is what a plain
+ * "is this DeclRefExpr a callee" check would miss. What's left after that
+ * exclusion is genuine: a function pointer value that must keep resolving to
+ * a real declaration.
+ */
+class LiveValueReferenceCollector : public clang::RecursiveASTVisitor<LiveValueReferenceCollector> {
+public:
+  LiveValueReferenceCollector(clang::SourceManager &mgr,
+                              const std::set<std::string> &discardedFunctions,
+                              std::set<const clang::FunctionDecl *> &liveTargets)
+      : _Mgr(mgr), _Discarded(discardedFunctions), _Live(liveTargets) {}
+
+  bool TraverseFunctionDecl(clang::FunctionDecl *decl) {
+    bool wasDiscarded = _InDiscardedBody;
+    _InDiscardedBody =
+        decl->doesThisDeclarationHaveABody() && _Discarded.count(decl->getNameAsString()) != 0;
+    bool result = RecursiveASTVisitor::TraverseFunctionDecl(decl);
+    _InDiscardedBody = wasDiscarded;
+    return result;
+  }
+
+  bool TraverseCallExpr(clang::CallExpr *call) {
+    const clang::FunctionDecl *callee = call->getDirectCallee();
+    if (callee && _Mgr.isInMainFile(_Mgr.getFileLoc(callee->getLocation())))
+      return true; // whole call is havocked or rejected away; nothing inside it survives
+    return RecursiveASTVisitor::TraverseCallExpr(call);
+  }
+
+  bool VisitDeclRefExpr(clang::DeclRefExpr *ref) {
+    if (_InDiscardedBody)
+      return true;
+    if (const auto *func = llvm::dyn_cast<clang::FunctionDecl>(ref->getDecl()))
+      _Live.insert(func->getCanonicalDecl());
+    return true;
+  }
+
+private:
+  clang::SourceManager &_Mgr;
+  const std::set<std::string> &_Discarded;
+  std::set<const clang::FunctionDecl *> &_Live;
+  bool _InDiscardedBody = false;
+};
+
+} // namespace
 
 MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                                  std::shared_ptr<std::set<std::string>> neededFwdDecls,
@@ -26,6 +85,10 @@ MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> discarde
 
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &mgr = Context.getSourceManager();
+
+  std::set<const clang::FunctionDecl *> liveValueReferences;
+  LiveValueReferenceCollector(mgr, *_DiscardedFunctions, liveValueReferences)
+      .TraverseDecl(Context.getTranslationUnitDecl());
 
   std::vector<const clang::FunctionDecl *> defined;
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
@@ -37,7 +100,11 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       defined.push_back(func);
       continue;
     }
-    // remove functions stripped by filter stage
+    // A prototype the filter stripped/left behind: drop it, unless something
+    // still uses it as a value (e.g. a function pointer) rather than a call
+    // callee - a call is either havocked away or its caller discarded, so it
+    // never needs the callee's declaration to survive.
+    if (liveValueReferences.count(func->getCanonicalDecl())) continue;
     clang::SourceLocation semiLoc = clang::Lexer::findLocationAfterToken(
         func->getEndLoc(), clang::tok::semi, mgr, Context.getLangOpts(), false);
     if (semiLoc.isValid()) _Rewriter.RemoveText(clang::SourceRange(func->getBeginLoc(), semiLoc));

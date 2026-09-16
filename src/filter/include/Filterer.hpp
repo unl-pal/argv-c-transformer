@@ -69,27 +69,43 @@ public:
   bool checkPotentialFile(std::string fileName);
 
   /**
-   * @brief Computes the mirrored filterDir output path for a source file.
+   * @brief Computes the mirrored filterDir base path for a source file.
+   *
+   * Not written to directly: {@code filterFile} splits the output one file
+   * per surviving function, each derived from this base via {@code splitPath}.
    *
    * @param oldPath Path to the source .c file, under databaseDir.
-   * @return The {@code filterDir/<relative path>} the filter writes to.
+   * @return The {@code filterDir/<relative path>} base the filter derives from.
    */
   std::filesystem::path outputPath(std::filesystem::path oldPath);
 
   /**
+   * @brief Derives one surviving function's split output path from the base
+   * path {@code outputPath} returns.
+   *
+   * @param basePath     The mirrored base path (pre-split) for the source file.
+   * @param functionName Name of the surviving function this output isolates.
+   * @return {@code <basePath's dir>/<stem>__<functionName><ext>}.
+   */
+  static std::filesystem::path splitPath(const std::filesystem::path &basePath,
+                                         const std::string &functionName);
+
+  /**
    * @brief Runs the full Clang AST pipeline on a single C file.
    *
-   * Writes the filtered result to the mirrored path under filterDir.
+   * Writes one filtered output per surviving function, each split off from
+   * the mirrored base path under filterDir (see {@code splitPath}).
    *
    * @param oldPath Path to the source .c file to filter.
-   * @return true if a filtered .c was produced.
+   * @return true if at least one split output was produced.
    */
   bool filterFile(std::filesystem::path oldPath);
 
   /**
-   * @brief Removes any .c a crashed or timed-out child left behind.
+   * @brief Removes every split output a crashed or timed-out child left
+   * behind for one source file.
    *
-   * @param oldPath Path to the source .c file whose output to clean up.
+   * @param oldPath Path to the source .c file whose outputs to clean up.
    */
   void cleanupPartialOutput(std::filesystem::path oldPath);
 

@@ -56,7 +56,9 @@ public:
    * definitions. Each is harnessed according to its signature: primitive-param
    * functions get {@code __VERIFIER_nondet_*} arguments, {@code main} is
    * delegated to {@code genMainHarness}, and unsupported/variadic functions are
-   * skipped.
+   * skipped. A bodyless in-file function (the filter stripped it, or it's a
+   * split sibling with only its prototype kept) is dropped too, unless it's
+   * still referenced as a value rather than only as a havocked call's callee.
    *
    * @param Context The AST context for the translation unit being transformed.
    */
