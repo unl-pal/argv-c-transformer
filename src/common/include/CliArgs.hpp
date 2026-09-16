@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -96,4 +97,25 @@ inline std::string inputBaseName(const std::string &inputPath) {
     }
   }
   return name;
+}
+
+/**
+ * @brief Guards a stage's output directory against a silent overwrite.
+ *
+ * @param dir         Output directory the caller is about to write into.
+ * @param cleanOutput If set, wipes existing contents instead of erroring.
+ */
+inline void checkOrCleanOutputDir(const std::string &dir, bool cleanOutput) {
+  std::filesystem::path path(dir);
+  if (std::filesystem::exists(path) && !std::filesystem::is_empty(path)) {
+    if (!cleanOutput) {
+      std::cerr << "output directory '" << dir << "' already exists and is not empty.\n"
+                << "Set cleanOutput=true in the config to wipe it first, or remove it manually."
+                << std::endl;
+      std::exit(1);
+    }
+    for (const auto &entry : std::filesystem::directory_iterator(path))
+      std::filesystem::remove_all(entry.path());
+  }
+  std::filesystem::create_directories(path);
 }
