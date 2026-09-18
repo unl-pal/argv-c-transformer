@@ -367,8 +367,11 @@ void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clan
   bool localTarget = !IsAngled || FileType == clang::SrcMgr::C_User;
 
   if (_Mgr.isInMainFile(HashLoc)) {
-    if (!localTarget)
-      return; // system include, kept by reference
+    if (!localTarget) {
+      // add these includes to the closure in cases a def/decl neecds them
+      _State->systemIncludes.insert(FileName.str());
+      return;
+    }
     debugLog(3, "[filter] inlining project-local include: " + FileName.str());
     _State->strippedLocalInclude = true;
     _Rewriter.RemoveText(clang::CharSourceRange::getCharRange(HashLoc, FilenameRange.getEnd()));
