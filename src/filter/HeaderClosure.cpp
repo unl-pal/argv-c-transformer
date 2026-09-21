@@ -282,6 +282,32 @@ std::optional<std::string> climbToPublicHeader(const clang::Decl *decl,
 }
 
 /**
+ * @brief True if `decl` already resolves through a header we're keeping verbatim.
+ *
+ * protects against redefinition errors
+ */
+bool alreadyResolvable(const clang::Decl *decl, const clang::SourceManager &mgr,
+                       const HeaderClosureState &state, const std::set<std::string> &kept) {
+  clang::OptionalFileEntryRef file =
+      mgr.getFileEntryRefForID(mgr.getFileID(mgr.getFileLoc(decl->getLocation())));
+  if (!file)
+    return false;
+
+  const clang::FileEntry *current = &file->getFileEntry();
+  for (int hop = 0; hop < 64; ++hop) {
+    auto it = state.includedFrom.find(current);
+    if (it == state.includedFrom.end())
+      break;
+    if (kept.count(it->second.spelling))
+      return true;
+    if (!it->second.parent)
+      break;
+    current = it->second.parent;
+  }
+  return false;
+}
+
+/**
  * @brief Gets the `#include <...>` that supplies a declaration reached in a system header.
  */
 std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
@@ -551,6 +577,7 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   // --- system headers the closure still needs -----------------------------
   std::set<std::string> includes = _State->systemIncludes;
   for (const clang::Decl *decl : collector.fromSystem()) {
+    if (alreadyResolvable(decl, mgr, *_State, includes)) continue;
     std::optional<std::string> header = systemHeaderFor(decl, mgr, *_State);
     if (header) {
       includes.insert(*header);

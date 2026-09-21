@@ -225,6 +225,34 @@ TEST_F(HeaderClosureTest, RepeatedSystemIncludeDoesNotDivertTheClimbToAnInnerHea
       << filtered();
 }
 
+TEST_F(HeaderClosureTest, AlreadyPresentSystemHeaderIsNotDuplicatedByCanonicalFallback) {
+  // struct timespec is reachable only through the .c file's own <linux/time.h>
+  // - never through glibc's <time.h>. systemHeaderFor's climb deliberately
+  // refuses to land on a kernel-uapi header (isKernelUapiHeader), so on its
+  // own it would fall through to StdHeaders and add the canonical "time.h" -
+  // a second, differently-spelled header for a type that already resolves,
+  // and a real redefinition risk since the kernel and glibc definitions of a
+  // shared-name type aren't guaranteed compatible (in fact <linux/time.h>
+  // combined with glibc's own headers hits exactly that on this system, via
+  // struct timeval rather than timespec - which is why this test stops at
+  // the filter stage instead of running the full pipeline through verify's
+  // compile check).
+  writeRepoFile("box.h", "#include <linux/time.h>\n"
+                         "struct Box { struct timespec ts; };\n");
+  writeRepoFile("use.c", "#include <linux/time.h>\n"
+                         "#include \"box.h\"\n"
+                         "int use(struct Box *b) { return (int)b->ts.tv_sec; }\n");
+
+  Filterer(configPath.string()).run();
+  std::string out = readFile(filterDir / "use.c");
+
+  EXPECT_NE(out.find("#include <linux/time.h>"), std::string::npos) << out;
+  EXPECT_EQ(out.find("#include <time.h>"), std::string::npos)
+      << "closure should not add a canonical substitute header for a type "
+         "that already resolves through an already-kept header:\n"
+      << out;
+}
+
 TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedAndPrototypeIsDroppedAfterHavocking) {
   // Negative, and the one deliberate exception to "full definitions
   // everywhere". The transform is intraprocedural: HavocCallsVisitor havocs

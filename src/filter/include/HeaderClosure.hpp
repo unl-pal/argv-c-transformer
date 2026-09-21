@@ -51,7 +51,7 @@ struct IncludeInfo {
  */
 struct HeaderClosureState {
   bool strippedLocalInclude = false; // flag to check if closure is needed
-  /// local headers' system includes
+  /// local headers' and target file's system includes
   std::set<std::string> systemIncludes;
   /// every macro defined in local headers, keyed by name
   std::map<std::string, MacroRecord> localMacros;
