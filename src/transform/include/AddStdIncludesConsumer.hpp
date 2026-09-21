@@ -15,10 +15,12 @@
 /**
  * @brief ASTConsumer that re-injects standard headers stripped includes left missing.
  *
- * Walks the AST for used standard types and called standard functions (see
- * {@code TypeCollector} / {@code FunctionCollector} in the .cpp), maps each to
- * its header via {@code StdHeaders.hpp}, and inserts any {@code #include <...>}
- * not already present (tracked in {@code existingIncludes}).
+ * Covers two cases where a name resolves without ever going through a real,
+ * already-present declaration: an implicitly-declared function call (see
+ * {@code FunctionCollector} in the .cpp) and a type/identifier Sema couldn't
+ * resolve at all ({@code unresolvedTypeNames}). Maps each to its header via
+ * {@code StdHeaders.hpp} and inserts any {@code #include <...>} not already
+ * present (tracked in {@code existingIncludes}).
  */
 class AddStdIncludesConsumer : public clang::ASTConsumer {
 public:
