@@ -182,9 +182,10 @@ TEST_F(FiltererStageTest, StripsFunctionFailingComplexityThreshold) {
   EXPECT_EQ(out.find("return x + 1;"), std::string::npos) << out;
 }
 
-// filterFile refuses to run when the output path resolves to the input, so
-// every file declines - and the decline must not take the source with it.
-TEST_F(FiltererStageTest, DatabaseDirEqualToFilterDirLeavesTheSourceIntact) {
+// filterDir resolving to databaseDir is a misconfiguration, not a supported
+// mode - run() must refuse it loudly rather than silently declining every
+// file (which would look like a clean run that happened to filter nothing).
+TEST_F(FiltererStageTest, DatabaseDirEqualToFilterDirIsRejected) {
   std::ofstream cfg(configPath);
   cfg << "[File Locations]\n"
       << "databaseDir = " << databaseDir.string() << "\n"
@@ -195,7 +196,5 @@ TEST_F(FiltererStageTest, DatabaseDirEqualToFilterDirLeavesTheSourceIntact) {
   writeFile(databaseDir / "keepme.c", "int add(int a, int b) { return a + b; }\n");
 
   Filterer f(configPath.string());
-  f.run();
-
-  EXPECT_TRUE(fs::exists(databaseDir / "keepme.c"));
+  EXPECT_DEATH(f.run(), "cannot be the same as its input directory");
 }

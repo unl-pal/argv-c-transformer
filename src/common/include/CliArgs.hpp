@@ -103,10 +103,21 @@ inline std::string inputBaseName(const std::string &inputPath) {
  * @brief Guards a stage's output directory against a silent overwrite.
  *
  * @param dir         Output directory the caller is about to write into.
+ * @param inputDir    The stage's input directory; @p dir resolving to the
+ *                     same path is a misconfiguration, not a supported mode,
+ *                     and errors immediately rather than falling through to
+ *                     the per-file overwrite guard (e.g. Filterer::filterFile),
+ *                     which would otherwise decline every file silently.
  * @param cleanOutput If set, wipes existing contents instead of erroring.
  */
-inline void checkOrCleanOutputDir(const std::string &dir, bool cleanOutput) {
+inline void checkOrCleanOutputDir(const std::string &dir, const std::string &inputDir,
+                                   bool cleanOutput) {
   std::filesystem::path path(dir);
+  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(inputDir)) {
+    std::cerr << "output directory '" << dir << "' cannot be the same as its input directory '"
+              << inputDir << "'." << std::endl;
+    std::exit(1);
+  }
   if (std::filesystem::exists(path) && !std::filesystem::is_empty(path)) {
     if (!cleanOutput) {
       std::cerr << "output directory '" << dir << "' already exists and is not empty.\n"
