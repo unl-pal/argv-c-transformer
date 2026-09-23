@@ -94,11 +94,8 @@ public:
       return;
 
     if (isLocalHeaderLoc(_Mgr, decl->getLocation())) {
-      // if a system definition exists for what is presumably a shim use that
-      // and discard the shim declaration
-      const auto *named = llvm::dyn_cast<clang::NamedDecl>(decl);
-      if (named && StdHeaders.count(named->getNameAsString())) {
-        _FromSystem.push_back(decl);
+      if (const clang::Decl *system = systemRedecl(decl)) { // local shim of a system typedef
+        _FromSystem.push_back(system);
         return;
       }
       _Needed.push_back(decl);
@@ -111,6 +108,16 @@ public:
   }
 
 private:
+  /** @brief A system-header redeclaration of typedef `decl`, or null if it has none. */
+  const clang::Decl *systemRedecl(const clang::Decl *decl) const {
+    if (!llvm::isa<clang::TypedefNameDecl>(decl))
+      return nullptr;
+    for (const clang::Decl *redecl : decl->redecls())
+      if (_Mgr.isInSystemHeader(_Mgr.getFileLoc(redecl->getLocation())))
+        return redecl;
+    return nullptr;
+  }
+
   void recurse(const clang::Decl *decl) {
     if (const auto *typedefDecl = llvm::dyn_cast<clang::TypedefNameDecl>(decl)) {
       addType(typedefDecl->getUnderlyingType());
