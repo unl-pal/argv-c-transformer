@@ -141,10 +141,19 @@ target_link_libraries(verify PRIVATE verify_lib filter_lib ${LLVM_LIBS})
 target_link_libraries(argv-c PRIVATE filter_lib transform_lib verify_lib ${LLVM_LIBS})
 
 if(UNIX)
-  set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
-  set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
-  set_property(TARGET verify PROPERTY LINKER_TYPE LLD)
-  set_property(TARGET argv-c PROPERTY LINKER_TYPE LLD)
+  # Homebrew will install a different linker so search explicitly and pass -B
+  find_program(ARGV_C_LLD_LINKER NAMES ld.lld ld64.lld lld
+    PATHS "${LLVM_TOOLS_BINARY_DIR}" "${LLVM_HOMEBREW_PREFIX}/bin")
+  if(ARGV_C_LLD_LINKER)
+    get_filename_component(ARGV_C_LLD_DIR "${ARGV_C_LLD_LINKER}" DIRECTORY)
+    string(APPEND CMAKE_EXE_LINKER_FLAGS " -B${ARGV_C_LLD_DIR}")
+    set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
+    set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
+    set_property(TARGET verify PROPERTY LINKER_TYPE LLD)
+    set_property(TARGET argv-c PROPERTY LINKER_TYPE LLD)
+  else()
+    message(WARNING "lld not found; falling back to the platform default linker")
+  endif()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused -fcolor-diagnostics")
 endif()
 
