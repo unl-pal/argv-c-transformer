@@ -44,12 +44,19 @@ int main(int argc, char **argv) {
   // of default / config / derived-from-input won.
   Verifier verifier(invocation->configFile, transformer.getTransformDir());
 
-  // fail fast if any output dir already exists and is not empty
+  // fail fast if any output dir overlaps another pipeline dir, or already exists and is not empty
+  const std::vector<std::string> outputDirs = {filter.getFilterDir(), transformer.getTransformDir(),
+                                               verifier.getBenchmarkDir()};
+  for (size_t i = 0; i < outputDirs.size(); i++) {
+    std::vector<std::string> others = {filter.getDatabaseDir()};
+    for (size_t j = 0; j < outputDirs.size(); j++)
+      if (j != i) others.push_back(outputDirs[j]);
+    checkOutputDirOverlap(outputDirs[i], others);
+  }
   PipelineConfig rawConfig = parsePipelineConfig(invocation->configFile);
   bool cleanOutput = rawConfig.fileSettings.at("cleanOutput") != 0;
   if (!cleanOutput) {
-    for (const std::string &dir :
-         {filter.getFilterDir(), transformer.getTransformDir(), verifier.getBenchmarkDir()}) {
+    for (const std::string &dir : outputDirs) {
       std::filesystem::path path(dir);
       if (std::filesystem::exists(path) && !std::filesystem::is_empty(path)) {
         std::cerr << "argv-c: output directory '" << dir << "' already exists and is not empty.\n"

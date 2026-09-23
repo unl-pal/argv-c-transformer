@@ -195,7 +195,8 @@ void Transformer::parseConfig(std::string configFile) {
 
 int Transformer::run() {
   auto startTime = std::chrono::steady_clock::now();
-  checkOrCleanOutputDir(configuration.transformDir, configuration.filterDir, configuration.cleanOutput);
+  checkOrCleanOutputDir(configuration.transformDir, {configuration.filterDir, configuration.databaseDir},
+                        configuration.cleanOutput);
   std::filesystem::path path(configuration.filterDir);
   // Built before any fork; each child inherits the index as-is.
   headerIndex.emplace(configuration.databaseDir);

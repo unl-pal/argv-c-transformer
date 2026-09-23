@@ -4,11 +4,13 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <optional>
 #include <string>
+#include <vector>
 
 /**
  * @brief What the user asked for on the command line.
@@ -99,30 +101,61 @@ inline std::string inputBaseName(const std::string &inputPath) {
   return name;
 }
 
+/** @brief True if `ancestor` is `path` or one of its parent directories, after resolving both. */
+inline bool isSameOrAncestor(const std::filesystem::path &ancestor,
+                             const std::filesystem::path &path) {
+  auto resolve = [](const std::filesystem::path &p) {
+    std::filesystem::path r = std::filesystem::weakly_canonical(p);
+    return r.has_filename() ? r : r.parent_path(); // drop a trailing separator
+  };
+  std::filesystem::path a = resolve(ancestor), p = resolve(path);
+  auto [ait, pit] = std::mismatch(a.begin(), a.end(), p.begin(), p.end());
+  return ait == a.end();
+}
+
+/**
+ * @brief Exits with an error if output directory `dir` is, or contains, any of
+ * `protectedDirs` or the current working directory. Empty entries are ignored.
+ */
+inline void checkOutputDirOverlap(const std::string &dir,
+                                  const std::vector<std::string> &protectedDirs) {
+  std::vector<std::string> guarded = protectedDirs;
+  guarded.push_back(std::filesystem::current_path().string());
+  for (const std::string &other : guarded) {
+    if (other.empty() || !isSameOrAncestor(dir, other)) continue;
+    std::cerr << "output directory '" << dir << "' overlaps '" << other
+              << "', which it must not contain or equal." << std::endl;
+    std::exit(1);
+  }
+}
+
 /**
  * @brief Guards a stage's output directory against a silent overwrite.
  *
- * @param dir         Output directory the caller is about to write into.
- * @param inputDir    The stage's input directory; @p dir resolving to the
- *                     same path is a misconfiguration, not a supported mode,
- *                     and errors immediately rather than falling through to
- *                     the per-file overwrite guard (e.g. Filterer::filterFile),
- *                     which would otherwise decline every file silently.
- * @param cleanOutput If set, wipes existing contents instead of erroring.
+ * Exits with an error on any overlap `checkOutputDirOverlap` rejects, or if
+ * @p dir is non-empty and @p cleanOutput is unset. Wiping is also refused when
+ * @p dir lies inside a protected directory.
+ *
+ * @param dir           Output directory the caller is about to write into.
+ * @param protectedDirs The stage's input and the original source tree; empty entries are ignored.
+ * @param cleanOutput   If set, wipes existing contents instead of erroring.
  */
-inline void checkOrCleanOutputDir(const std::string &dir, const std::string &inputDir,
-                                   bool cleanOutput) {
+inline void checkOrCleanOutputDir(const std::string &dir,
+                                  const std::vector<std::string> &protectedDirs,
+                                  bool cleanOutput) {
   std::filesystem::path path(dir);
-  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(inputDir)) {
-    std::cerr << "output directory '" << dir << "' cannot be the same as its input directory '"
-              << inputDir << "'." << std::endl;
-    std::exit(1);
-  }
+  checkOutputDirOverlap(dir, protectedDirs);
   if (std::filesystem::exists(path) && !std::filesystem::is_empty(path)) {
     if (!cleanOutput) {
       std::cerr << "output directory '" << dir << "' already exists and is not empty.\n"
                 << "Set cleanOutput=true in the config to wipe it first, or remove it manually."
                 << std::endl;
+      std::exit(1);
+    }
+    for (const std::string &other : protectedDirs) {
+      if (other.empty() || !isSameOrAncestor(other, path)) continue;
+      std::cerr << "refusing to wipe output directory '" << dir << "': it lies inside '" << other
+                << "'." << std::endl;
       std::exit(1);
     }
     for (const auto &entry : std::filesystem::directory_iterator(path))

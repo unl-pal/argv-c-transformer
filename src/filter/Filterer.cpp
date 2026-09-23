@@ -184,7 +184,7 @@ void Filterer::cleanupPartialOutput(std::filesystem::path oldPath) {
 
 int Filterer::run() {
   auto startTime = std::chrono::steady_clock::now();
-  checkOrCleanOutputDir(configuration.filterDir, configuration.databaseDir, configuration.cleanOutput);
+  checkOrCleanOutputDir(configuration.filterDir, {configuration.databaseDir}, configuration.cleanOutput);
   std::filesystem::path pathObject(configuration.databaseDir);
   std::vector<std::string> filesToFilter;
 

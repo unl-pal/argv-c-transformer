@@ -211,10 +211,7 @@ TEST_F(HeaderClosureTest, RepeatedSystemIncludeDoesNotDivertTheClimbToAnInnerHea
 
   runPipeline("count.c");
 
-  // Assert on the filter stage's own output directly: transform's
-  // AddStdIncludesConsumer unconditionally re-adds <stddef.h> for size_t
-  // regardless of what the filter closure chose, which would mask a
-  // regression here if checked on the final benchmark instead.
+  // The closure's include choice is made in filter, so assert on filter's output.
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_NE(filtered().find("#include <stdio.h>"), std::string::npos) << filtered();
   // A regressed climb reports size_t's actual (private, non-public) home
