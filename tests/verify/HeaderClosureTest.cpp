@@ -211,6 +211,9 @@ TEST_F(HeaderClosureTest, ClimbNeverSettlesOnAPrivateSystemHeader) {
 }
 
 TEST_F(HeaderClosureTest, AlreadyPresentSystemHeaderIsNotDuplicatedByCanonicalFallback) {
+#ifndef __linux__
+  GTEST_SKIP() << "relies on the Linux-only <linux/time.h>";
+#endif
   // struct timespec is reachable only through the .c file's own <linux/time.h>
   // - never through glibc's <time.h>. systemHeaderFor's climb deliberately
   // refuses to land on a kernel-uapi header (isKernelUapiHeader), so on its

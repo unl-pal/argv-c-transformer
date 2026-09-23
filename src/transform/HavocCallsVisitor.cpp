@@ -95,6 +95,8 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
   if (const clang::FunctionDecl *callee = E->getDirectCallee()) {
     if (callee->getIdentifier() && callee->getName().starts_with("__VERIFIER_"))
       return std::nullopt;
+    if (callee->isImplicit() && callee->getBuiltinID() != 0) // e.g. __builtin_expect: no header
+      return std::nullopt;
     if (!callee->isImplicit() &&
         !mgr.isInMainFile(callee->getLocation()) && mgr.isInSystemHeader(callee->getLocation()))
       return std::nullopt;
