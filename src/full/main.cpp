@@ -60,8 +60,8 @@ int main(int argc, char **argv) {
       std::filesystem::path path(dir);
       if (std::filesystem::exists(path) && !std::filesystem::is_empty(path)) {
         std::cerr << "argv-c: output directory '" << dir << "' already exists and is not empty.\n"
-                   << "Set cleanOutput=true in the config to wipe it first, or remove it manually."
-                   << std::endl;
+                  << "Delete it (rm -r '" << dir << "'), or set cleanOutput=true in a config"
+                  << " file to wipe it automatically." << std::endl;
         return 1;
       }
     }
