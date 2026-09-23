@@ -40,7 +40,8 @@ public:
                     clang::Rewriter &rewriter);
 
   /**
-   * @brief Havocs a call if it should be (in-file, non-library, non-verifier, non-macro).
+   * @brief Havocs a call if it should be (in-file, non-library, non-verifier). A call inside a
+   * macro is rewritten where it is spelled; one with no rewritable spelling taints its function.
    * @param E The call expression being visited.
    * @return false to stop traversal, true to continue.
    */
@@ -212,4 +213,7 @@ private:
   std::set<const clang::FunctionDecl *> _Tainted;
   /** Names every hoisted pointer-return stub across the TU, keeping them unique. */
   unsigned _StubCounter = 0;
+  /** File offsets of call text already replaced, so text spelled once but expanded often is
+   * rewritten once. */
+  std::set<unsigned> _RewrittenSpellings;
 };
