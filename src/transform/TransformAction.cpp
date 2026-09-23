@@ -39,7 +39,8 @@ IncludeFinder::IncludeFinder(clang::SourceManager &SM, clang::Rewriter &rewriter
     : _Mgr(SM), _Rewriter(rewriter), _ExistingIncludes(existingIncludes) {}
 
 // assert(cond) expands with the macro name token first and the closing paren
-// last, so Range brackets exactly the text to replace.
+// last, so Range brackets exactly the text to replace. Only `assert(` and the
+// closing `)` are replaced, leaving cond's text free for havocking calls in it.
 void AssertRewriter::MacroExpands(const clang::Token &MacroNameTok,
                                   const clang::MacroDefinition &MD, clang::SourceRange Range,
                                   const clang::MacroArgs *) {
@@ -62,7 +63,9 @@ void AssertRewriter::MacroExpands(const clang::Token &MacroNameTok,
   llvm::StringRef cond = text.substr(openParen + 1, closeParen - openParen - 1);
 
   debugLog(3, "[transform] rewrote assert(" + cond.str() + ") -> reach_error()");
-  _Rewriter.ReplaceText(charRange, ("if (!(" + cond + ")) reach_error()").str());
+  clang::SourceLocation begin = charRange.getBegin();
+  _Rewriter.ReplaceText(begin, openParen + 1, "if (!(");
+  _Rewriter.ReplaceText(begin.getLocWithOffset(closeParen), 1, ")) reach_error()");
 }
 
 AssertRewriter::AssertRewriter(clang::SourceManager &SM, clang::Rewriter &rewriter,

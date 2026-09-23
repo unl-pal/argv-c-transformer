@@ -36,6 +36,7 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
   configuration.nproc = config.fileSettings.at("nproc");
+  configuration.cleanOutput = config.fileSettings.at("cleanOutput") != 0;
   configuration.transformDir =
       config.transformDir.empty() ? defaultTransformDir : config.transformDir;
   if (!inputPath.empty()) configuration.transformDir = inputPath;
@@ -368,6 +369,8 @@ int Verifier::run() {
     debugLog(0, "Transform directory not found: " + configuration.transformDir);
     return 0;
   }
+  checkOrCleanOutputDir(configuration.benchmarkDir, {configuration.transformDir, config.databaseDir},
+                        configuration.cleanOutput);
   writeHarnessHeader();
   WorkerPoolResult result = verifyAll(path);
   std::cout << "\n=== Verify summary ===\n"

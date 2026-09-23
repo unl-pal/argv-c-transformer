@@ -30,14 +30,16 @@ void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
     const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!func || !mgr.isInMainFile(func->getLocation())) continue;
-    if (!func->isThisDeclarationADefinition() || func->getLocation().isMacroID()) continue;
+    if (!func->isThisDeclarationADefinition()) continue;
+    bool macroDefined = func->getLocation().isMacroID();
     bool tainted = Visitor.tainted().count(func) != 0;
-    if (!tainted && !Visitor.isNoOp(func->getBody())) continue;
+    if (!tainted && (macroDefined || !Visitor.isNoOp(func->getBody()))) continue;
     debugLog(2, "[transform] " + func->getNameAsString() +
                     (tainted ? " contains an unhavockable call; discarded"
                              : " body collapsed entirely to no-ops"));
     clang::SourceRange bodyRange = func->getBody()->getSourceRange();
-    if (bodyRange.isValid()) _Rewriter.ReplaceText(bodyRange, ";");
+    if (bodyRange.isValid() && !macroDefined) // a macro-expanded body can't be rewritten
+      _Rewriter.ReplaceText(bodyRange, ";");
     _DiscardedFunctions->insert(func->getNameAsString());
   }
 }

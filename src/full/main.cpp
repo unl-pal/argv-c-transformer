@@ -30,7 +30,6 @@ int main(int argc, char **argv) {
     std::cerr << "Database directory not found: " << filter.getDatabaseDir() << std::endl;
     return 1;
   }
-  filter.run();
 
   // When an input was given on the command line, the transform must read the
   // filter's resolved output directory, not the input itself.
@@ -40,23 +39,39 @@ int main(int argc, char **argv) {
   // filter's resolved input tree, so transform can resolve local #includes
   // against it too (filterDir only mirrors .c files, not headers).
   transformer.setDatabaseDir(filter.getDatabaseDir());
-  if (!std::filesystem::exists(transformer.getFilterDir())) {
-    std::cerr << "Filter directory not found: " << transformer.getFilterDir() << std::endl;
-    return 1;
-  }
-  transformer.run();
 
   // Verify always reads the transform's resolved output directory, whichever
   // of default / config / derived-from-input won.
   Verifier verifier(invocation->configFile, transformer.getTransformDir());
-  if (!std::filesystem::exists(verifier.getTransformDir())) {
-    std::cerr << "Transform directory not found: " << verifier.getTransformDir() << std::endl;
-    return 1;
+
+  // fail fast if any output dir overlaps another pipeline dir, or already exists and is not empty
+  const std::vector<std::string> outputDirs = {filter.getFilterDir(), transformer.getTransformDir(),
+                                               verifier.getBenchmarkDir()};
+  for (size_t i = 0; i < outputDirs.size(); i++) {
+    std::vector<std::string> others = {filter.getDatabaseDir()};
+    for (size_t j = 0; j < outputDirs.size(); j++)
+      if (j != i) others.push_back(outputDirs[j]);
+    checkOutputDirOverlap(outputDirs[i], others);
   }
+  PipelineConfig rawConfig = parsePipelineConfig(invocation->configFile);
+  bool cleanOutput = rawConfig.fileSettings.at("cleanOutput") != 0;
+  if (!cleanOutput) {
+    for (const std::string &dir : outputDirs) {
+      std::filesystem::path path(dir);
+      if (std::filesystem::exists(path) && !std::filesystem::is_empty(path)) {
+        std::cerr << "argv-c: output directory '" << dir << "' already exists and is not empty.\n"
+                  << "Delete it (rm -r '" << dir << "'), or set cleanOutput=true in a config"
+                  << " file to wipe it automatically." << std::endl;
+        return 1;
+      }
+    }
+  }
+
+  filter.run();
+  transformer.run();
   verifier.run();
 
   // cleanup if user didn't specify intermediate dirs
-  PipelineConfig rawConfig = parsePipelineConfig(invocation->configFile);
   if (rawConfig.filterDir.empty() && rawConfig.transformDir.empty()) {
     std::error_code ec;
     std::filesystem::remove_all(filter.getFilterDir(), ec);

@@ -4,6 +4,6 @@ SPDX-PackageSupplier = "The ARG-V Project"
 SPDX-PackageDownloadLocation = "https://github.com/unl-pal/argv-c-transformer"
 
 [[annotations]]
-path = [".gitignore", "repos.csv", "tests/transform/cases/**"]
+path = [".gitignore", "repos.csv", "tests/transform/cases/**", "tests/smoke/samples/**", "docs/tutorial/**"]
 SPDX-FileCopyrightText = "Copyright (C) 2026 The ARG-V Project"
 SPDX-License-Identifier = "Apache-2.0"

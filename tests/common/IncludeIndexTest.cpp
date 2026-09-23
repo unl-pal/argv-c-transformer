@@ -81,6 +81,24 @@ TEST(IncludeIndex, NoLocalIncludesYieldsNoDirs) {
   EXPECT_TRUE(dirs.empty());
 }
 
+TEST(IncludeIndex, FollowsTransitiveQuotedIncludeChain) {
+  TempTree tree("transitive");
+  // main.c only quotes "a.h"; a.h itself quotes "nested/c.h", resolving to a
+  // second, unrelated directory. Only scanning main.c's own quotes (the
+  // pre-fix behavior) would miss the -I dir c.h needs.
+  tree.writeFile("libA/a.h", "#include \"nested/c.h\"\ntypedef int a_t;\n");
+  tree.writeFile("otherlib/nested/c.h", "typedef int c_t;\n");
+  tree.writeFile("src/main.c",
+                 "#include \"a.h\"\nint use(a_t x, c_t y) { return x + y; }\n");
+
+  HeaderIndex index(tree.root);
+  std::vector<std::string> dirs = collectLocalIncludeDirs(tree.root / "src/main.c", index);
+
+  ASSERT_EQ(dirs.size(), 2u);
+  EXPECT_EQ(std::filesystem::path(dirs[0]), tree.root / "libA");
+  EXPECT_EQ(std::filesystem::path(dirs[1]), tree.root / "otherlib");
+}
+
 TEST(IncludeIndex, MissingRootLeavesIndexEmpty) {
   HeaderIndex index(std::filesystem::path("/no/such/directory/at/all"));
   EXPECT_EQ(index.find("foo.h"), nullptr);

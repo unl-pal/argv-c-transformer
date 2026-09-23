@@ -30,6 +30,7 @@ Filterer::Filterer(std::string configFile, std::string inputPath) {
   configuration.databaseDir = defaultDatabaseDir;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   configuration.nproc = 0;
+  configuration.cleanOutput = false;
   if (!configFile.empty()) parseConfigFile(configFile);
   if (configuration.filterDir.empty())
     configuration.filterDir = inputBaseName(configuration.databaseDir) + "-filtered";
@@ -48,6 +49,7 @@ void Filterer::parseConfigFile(std::string configFile) {
   globalDebugLevel() = config.fileSettings.at("debugLevel");
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
   configuration.nproc = config.fileSettings.at("nproc");
+  configuration.cleanOutput = config.fileSettings.at("cleanOutput") != 0;
 
   if (globalDebugLevel() >= 1) {
     std::string dump = "[filter] loaded config: " + configFile;
@@ -182,6 +184,7 @@ void Filterer::cleanupPartialOutput(std::filesystem::path oldPath) {
 
 int Filterer::run() {
   auto startTime = std::chrono::steady_clock::now();
+  checkOrCleanOutputDir(configuration.filterDir, {configuration.databaseDir}, configuration.cleanOutput);
   std::filesystem::path pathObject(configuration.databaseDir);
   std::vector<std::string> filesToFilter;
 

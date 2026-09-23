@@ -24,9 +24,64 @@ namespace {
 
 struct HavocAction {
   enum class Mode { Erase, Inline, Pointer, Reject } mode;
-  std::string replacement; // Inline only.
-  PointerPlan plan;        // Pointer only.
+  std::string replacement;     // Inline only.
+  PointerPlan plan;            // Pointer only.
+  clang::CharSourceRange text; // Inline, and Erase inside a macro: the file text to replace.
 };
+
+// True if `text` is exactly one call: parens balanced and closing at the end, with no top-level
+// `,` or `;`, which would mean the range spans several macro arguments.
+bool isSingleCallText(llvm::StringRef text) {
+  int depth = 0;
+  bool opened = false;
+  for (size_t i = 0; i < text.size(); ++i) {
+    char c = text[i];
+    if (c == '"' || c == '\'') {
+      for (++i; i < text.size() && text[i] != c; ++i)
+        if (text[i] == '\\') ++i;
+      continue;
+    }
+    if (c == '(') {
+      ++depth;
+      opened = true;
+    } else if (c == ')') {
+      if (--depth < 0) return false;
+    } else if ((c == ',' || c == ';') && depth == 0) {
+      return false;
+    }
+  }
+  return opened && depth == 0 && text.ends_with(")");
+}
+
+// The main-file text spelling call E, if one contiguous run of it can be rewritten: the call as
+// written, a whole macro use (`CHECK(v)`), its text in a macro argument (`MAX(f(x), 1)`), or its
+// text in one macro's #define body. Rewriting a #define body havocs every expansion of it.
+std::optional<clang::CharSourceRange> rewritableSpelling(const clang::CallExpr *E,
+                                                         clang::ASTContext &C) {
+  const clang::SourceManager &mgr = C.getSourceManager();
+  const clang::LangOptions &langOpts = C.getLangOpts();
+  clang::CharSourceRange range = clang::Lexer::makeFileCharRange(
+      clang::CharSourceRange::getTokenRange(E->getSourceRange()), mgr, langOpts);
+  if (range.isInvalid()) {
+    clang::SourceLocation begin = E->getBeginLoc(), end = E->getEndLoc();
+    while (begin.isMacroID() && end.isMacroID()) { // walk out of one macro body at a time
+      if (mgr.isMacroArgExpansion(begin) || mgr.isMacroArgExpansion(end) ||
+          mgr.getFileID(begin) != mgr.getFileID(end))
+        return std::nullopt;
+      begin = mgr.getImmediateSpellingLoc(begin);
+      end = mgr.getImmediateSpellingLoc(end);
+    }
+    if (begin.isMacroID() || end.isMacroID()) return std::nullopt;
+    range = clang::Lexer::makeFileCharRange(clang::CharSourceRange::getTokenRange(begin, end), mgr,
+                                            langOpts);
+  }
+  if (range.isInvalid() || !mgr.isInMainFile(range.getBegin())) return std::nullopt;
+
+  bool invalid = false;
+  llvm::StringRef text = clang::Lexer::getSourceText(range, mgr, langOpts, &invalid);
+  if (invalid || !isSingleCallText(text)) return std::nullopt;
+  return range;
+}
 
 // Decides whether a call is havocked, and into what. nullopt leaves a genuine
 // library/verifier call alone; Mode::Reject also leaves the call's text alone
@@ -35,12 +90,12 @@ struct HavocAction {
 // callable repeatedly for the same call.
 std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTContext &C) {
   clang::SourceManager &mgr = C.getSourceManager();
-  clang::SourceLocation loc = E->getExprLoc();
-  if (!mgr.isInMainFile(loc) || loc.isMacroID()) // a macro expansion has no rewritable range
-    return std::nullopt;
+  if (!mgr.isInMainFile(E->getExprLoc())) return std::nullopt;
 
   if (const clang::FunctionDecl *callee = E->getDirectCallee()) {
     if (callee->getIdentifier() && callee->getName().starts_with("__VERIFIER_"))
+      return std::nullopt;
+    if (callee->isImplicit() && callee->getBuiltinID() != 0) // e.g. __builtin_expect: no header
       return std::nullopt;
     if (!callee->isImplicit() &&
         !mgr.isInMainFile(callee->getLocation()) && mgr.isInSystemHeader(callee->getLocation()))
@@ -50,23 +105,37 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
   clang::QualType returnType = E->getCallReturnType(C);
   if (returnType.isNull() || returnType.getTypePtrOrNull() == nullptr) return std::nullopt;
 
-  if (returnType->isVoidType()) return HavocAction{HavocAction::Mode::Erase, "", {}};
-
-  if (std::optional<std::string> suffix = verifierSuffixForType(returnType))
-    return HavocAction{HavocAction::Mode::Inline, "__VERIFIER_nondet_" + *suffix + "()", {}};
-
-  if (returnType->isAnyPointerType()) {
+  HavocAction action{HavocAction::Mode::Reject, "", {}, {}};
+  if (returnType->isVoidType()) {
+    action.mode = HavocAction::Mode::Erase;
+  } else if (std::optional<std::string> suffix = verifierSuffixForType(returnType)) {
+    action.mode = HavocAction::Mode::Inline;
+    action.replacement = "__VERIFIER_nondet_" + *suffix + "()";
+  } else if (returnType->isAnyPointerType()) {
     PointerPlan plan = planPointer(returnType, mgr); // storage/placement are the caller's job
-    if (!plan.viable) return HavocAction{HavocAction::Mode::Reject, "", {}};
-    return HavocAction{HavocAction::Mode::Pointer, "", plan};
+    if (plan.viable) {
+      action.mode = HavocAction::Mode::Pointer;
+      action.plan = plan;
+    }
   }
-
-  // Aggregate return: no expression-position nondet equivalent. Reject rather
+  // Otherwise an aggregate return: no expression-position nondet equivalent. Reject rather
   // than leave the real call in place — the callee may have no definition in
   // the output at all (a header-closure prototype, or a filter-rejected
   // sibling), and even when it does, leaving the call real breaks the
   // intraprocedural guarantee every other havocked call gives.
-  return HavocAction{HavocAction::Mode::Reject, "", {}};
+  if (action.mode == HavocAction::Mode::Reject) return action;
+
+  if (!E->getBeginLoc().isMacroID() && !E->getEndLoc().isMacroID()) {
+    action.text = clang::CharSourceRange::getTokenRange(E->getSourceRange());
+    return action;
+  }
+  // Inside a macro: rewrite where the call is spelled. Pointer storage has no statement there
+  // to hoist above.
+  std::optional<clang::CharSourceRange> spelling = rewritableSpelling(E, C);
+  if (!spelling || action.mode == HavocAction::Mode::Pointer)
+    return HavocAction{HavocAction::Mode::Reject, "", {}, {}};
+  action.text = *spelling;
+  return action;
 }
 
 std::set<const clang::VarDecl *> loopLocalVars(const clang::Stmt *init) {
@@ -212,13 +281,19 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   }
   if (action->mode == HavocAction::Mode::Erase) {
     debugLog(4, "[transform] " + where + ": dropped void call");
-    eraseStmt(E);
+    if (E->getBeginLoc().isMacroID() || E->getEndLoc().isMacroID())
+      dropMacroSpelledCall(E, action->text);
+    else
+      eraseStmt(E);
     return true;
   }
   if (action->mode == HavocAction::Mode::Pointer) return havocPointerReturn(E, action->plan, where);
 
+  clang::SourceManager &mgr = _C->getSourceManager();
+  if (!_RewrittenSpellings.insert(mgr.getFileOffset(action->text.getBegin())).second)
+    return true; // text shared by several expansions (a #define body, a twice-used macro arg)
   debugLog(4, "[transform] " + where + ": havocked call -> " + action->replacement);
-  _Rewriter.ReplaceText(E->getSourceRange(), action->replacement);
+  _Rewriter.ReplaceText(action->text, action->replacement);
   return true;
 }
 
@@ -282,6 +357,23 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
   if (!plan.fwdDecl.empty()) _NeededFwdDecls->insert(plan.fwdDecl);
   debugLog(4, "[transform] " + where + ": havocked pointer call -> stack " + stub);
   return true;
+}
+
+void HavocCallsVisitor::dropMacroSpelledCall(const clang::CallExpr *E,
+                                             clang::CharSourceRange text) {
+  clang::SourceManager &mgr = _C->getSourceManager();
+  if (!_RewrittenSpellings.insert(mgr.getFileOffset(text.getBegin())).second) return;
+  bool discarded = false;
+  hoistAnchor(E, discarded);
+  if (!discarded) { // the value feeds an expression, e.g. (LOG(v), 1)
+    _Rewriter.ReplaceText(text, "((void)0)");
+    return;
+  }
+  _Rewriter.RemoveText(text);
+  const char *after = mgr.getCharacterData(text.getEnd());
+  unsigned skip = 0;
+  while (after[skip] == ' ' || after[skip] == '\t') ++skip;
+  if (after[skip] == ';') _Rewriter.RemoveText(text.getEnd().getLocWithOffset(skip), 1);
 }
 
 // Idempotent: re-removing an already-erased range confuses the Rewriter's delta bookkeeping.

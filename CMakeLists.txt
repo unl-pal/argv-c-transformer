@@ -24,6 +24,21 @@ if(APPLE)
   set(CMAKE_CXX_COMPILER "${LLVM_HOMEBREW_PREFIX}/bin/clang++")
   set(CMAKE_C_COMPILER "${LLVM_HOMEBREW_PREFIX}/bin/clang")
   list(APPEND CMAKE_PREFIX_PATH "${LLVM_HOMEBREW_PREFIX}")
+elseif(NOT DEFINED CMAKE_CXX_COMPILER AND NOT DEFINED ENV{CXX})
+  # This project links libclang-cpp/libLLVM and compiles against Clang's C++
+  # headers directly, so it must be built with clang, not whatever CMake's
+  # default search would otherwise pick (e.g. GCC on most Linux distros).
+  find_program(ARGV_C_CLANGXX NAMES clang++-22 clang++-21 clang++-20 clang++)
+  find_program(ARGV_C_CLANG NAMES clang-22 clang-21 clang-20 clang)
+  if(ARGV_C_CLANGXX AND ARGV_C_CLANG)
+    set(CMAKE_CXX_COMPILER "${ARGV_C_CLANGXX}")
+    set(CMAKE_C_COMPILER "${ARGV_C_CLANG}")
+  else()
+    message(WARNING "No clang found on PATH. This project requires clang/LLVM "
+      "20+ and will likely fail to build with CMake's default compiler. "
+      "Install clang or point cmake at one: "
+      "CXX=clang++ CC=clang cmake -B build -S .")
+  endif()
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
@@ -126,10 +141,19 @@ target_link_libraries(verify PRIVATE verify_lib filter_lib ${LLVM_LIBS})
 target_link_libraries(argv-c PRIVATE filter_lib transform_lib verify_lib ${LLVM_LIBS})
 
 if(UNIX)
-  set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
-  set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
-  set_property(TARGET verify PROPERTY LINKER_TYPE LLD)
-  set_property(TARGET argv-c PROPERTY LINKER_TYPE LLD)
+  # Homebrew will install a different linker so search explicitly and pass -B
+  find_program(ARGV_C_LLD_LINKER NAMES ld.lld ld64.lld lld
+    PATHS "${LLVM_TOOLS_BINARY_DIR}" "${LLVM_HOMEBREW_PREFIX}/bin")
+  if(ARGV_C_LLD_LINKER)
+    get_filename_component(ARGV_C_LLD_DIR "${ARGV_C_LLD_LINKER}" DIRECTORY)
+    string(APPEND CMAKE_EXE_LINKER_FLAGS " -B${ARGV_C_LLD_DIR}")
+    set_property(TARGET filter PROPERTY LINKER_TYPE LLD)
+    set_property(TARGET transform PROPERTY LINKER_TYPE LLD)
+    set_property(TARGET verify PROPERTY LINKER_TYPE LLD)
+    set_property(TARGET argv-c PROPERTY LINKER_TYPE LLD)
+  else()
+    message(WARNING "lld not found; falling back to the platform default linker")
+  endif()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wunused -fcolor-diagnostics")
 endif()
 

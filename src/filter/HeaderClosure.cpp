@@ -94,6 +94,10 @@ public:
       return;
 
     if (isLocalHeaderLoc(_Mgr, decl->getLocation())) {
+      if (const clang::Decl *system = systemRedecl(decl)) { // local shim of a system typedef
+        _FromSystem.push_back(system);
+        return;
+      }
       _Needed.push_back(decl);
     } else if (_Mgr.isInSystemHeader(_Mgr.getFileLoc(decl->getLocation()))) {
       _FromSystem.push_back(decl);
@@ -104,6 +108,16 @@ public:
   }
 
 private:
+  /** @brief A system-header redeclaration of typedef `decl`, or null if it has none. */
+  const clang::Decl *systemRedecl(const clang::Decl *decl) const {
+    if (!llvm::isa<clang::TypedefNameDecl>(decl))
+      return nullptr;
+    for (const clang::Decl *redecl : decl->redecls())
+      if (_Mgr.isInSystemHeader(_Mgr.getFileLoc(redecl->getLocation())))
+        return redecl;
+    return nullptr;
+  }
+
   void recurse(const clang::Decl *decl) {
     if (const auto *typedefDecl = llvm::dyn_cast<clang::TypedefNameDecl>(decl)) {
       addType(typedefDecl->getUnderlyingType());
@@ -233,10 +247,90 @@ std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::Sour
 }
 
 /**
+ * @brief True if `spelling` names a Linux kernel UAPI header (`linux/...`,
+ * `asm/...`, `asm-generic/...`)
+ */
+bool isKernelUapiHeader(llvm::StringRef spelling) {
+  return spelling.starts_with("linux/") || spelling.starts_with("asm/") ||
+        spelling.starts_with("asm-generic/");
+}
+
+/**
+ * @brief True if `spelling` must never be written as an #include: a `bits/`
+ * fragment, a `__`-prefixed compiler internal, or a kernel UAPI header (which
+ * conflicts with glibc's userspace headers).
+ */
+bool isPrivateHeader(llvm::StringRef spelling) {
+  return spelling.starts_with("bits/") || spelling.contains("/bits/") ||
+         llvm::StringRef(llvm::sys::path::filename(spelling)).starts_with("__") ||
+         isKernelUapiHeader(spelling);
+}
+
+/**
+ * @brief Climbs the recorded #include chain from a declaration's (possibly
+ * deeply-nested) file back up to the outermost non-private angled system
+ * include a normal source file would write to reach it.
+ */
+std::optional<std::string> climbToPublicHeader(const clang::Decl *decl,
+                                               const clang::SourceManager &mgr,
+                                               const HeaderClosureState &state) {
+  clang::OptionalFileEntryRef file =
+      mgr.getFileEntryRefForID(mgr.getFileID(mgr.getFileLoc(decl->getLocation())));
+  if (!file)
+    return std::nullopt;
+
+  const clang::FileEntry *current = &file->getFileEntry();
+  std::optional<std::string> best;
+  // Bound the climb generously; a real #include nesting is never this deep,
+  // so this only guards against an unexpected cycle in the recorded state.
+  for (int hop = 0; hop < 64; ++hop) {
+    auto it = state.includedFrom.find(current);
+    if (it == state.includedFrom.end() || !it->second.isSystem)
+      break;
+    if (it->second.isAngled && !isPrivateHeader(it->second.spelling))
+      best = it->second.spelling;
+    if (!it->second.parent)
+      break;
+    current = it->second.parent;
+  }
+  return best;
+}
+
+/**
+ * @brief True if `decl` already resolves through a header we're keeping verbatim.
+ *
+ * protects against redefinition errors
+ */
+bool alreadyResolvable(const clang::Decl *decl, const clang::SourceManager &mgr,
+                       const HeaderClosureState &state, const std::set<std::string> &kept) {
+  clang::OptionalFileEntryRef file =
+      mgr.getFileEntryRefForID(mgr.getFileID(mgr.getFileLoc(decl->getLocation())));
+  if (!file)
+    return false;
+
+  const clang::FileEntry *current = &file->getFileEntry();
+  for (int hop = 0; hop < 64; ++hop) {
+    auto it = state.includedFrom.find(current);
+    if (it == state.includedFrom.end())
+      break;
+    if (kept.count(it->second.spelling))
+      return true;
+    if (!it->second.parent)
+      break;
+    current = it->second.parent;
+  }
+  return false;
+}
+
+/**
  * @brief Gets the `#include <...>` that supplies a declaration reached in a system header.
  */
 std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
-                                           const clang::SourceManager &mgr) {
+                                           const clang::SourceManager &mgr,
+                                           const HeaderClosureState &state) {
+  if (std::optional<std::string> climbed = climbToPublicHeader(decl, mgr, state))
+    return climbed;
+
   llvm::StringRef path = mgr.getFilename(mgr.getFileLoc(decl->getLocation()));
   if (!path.empty()) {
     // by convention most std/sys headers live under some include/ subdir
@@ -245,9 +339,7 @@ std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
     // exceptions for sys, arpa, and netinet because e.g sys/types.h is a valid/portable include
     bool topLevel = !spelling.contains('/') || spelling.starts_with("sys/") ||
                     spelling.starts_with("arpa/") || spelling.starts_with("netinet/");
-    // A leading "__" marks a compiler-internal fragment so fallback to the StdHeaders map
-    if (topLevel && !spelling.empty() &&
-        !llvm::StringRef(llvm::sys::path::filename(spelling)).starts_with("__"))
+    if (topLevel && !spelling.empty() && !isPrivateHeader(spelling))
       return spelling.str();
   }
 
@@ -295,15 +387,29 @@ LocalHeaderPP::LocalHeaderPP(clang::SourceManager &SM, const clang::LangOptions 
 void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &,
                                        llvm::StringRef FileName, bool IsAngled,
                                        clang::CharSourceRange FilenameRange,
-                                       clang::OptionalFileEntryRef, llvm::StringRef,
+                                       clang::OptionalFileEntryRef File, llvm::StringRef,
                                        llvm::StringRef, const clang::Module *, bool,
                                        clang::SrcMgr::CharacteristicKind FileType) {
+  // Record how every included file was reached. Only use the first
+  // occurence of an include
+  if (File) {
+    clang::OptionalFileEntryRef parent =
+        _Mgr.getFileEntryRefForID(_Mgr.getFileID(HashLoc));
+    _State->includedFrom.try_emplace(
+        &File->getFileEntry(),
+        IncludeInfo{FileName.str(), IsAngled, FileType != clang::SrcMgr::C_User,
+                    parent ? &parent->getFileEntry() : nullptr});
+  }
+
   // A quoted include is project-local by convention regardless of FileType.
   bool localTarget = !IsAngled || FileType == clang::SrcMgr::C_User;
 
   if (_Mgr.isInMainFile(HashLoc)) {
-    if (!localTarget)
-      return; // system include, kept by reference
+    if (!localTarget) {
+      // add these includes to the closure in cases a def/decl neecds them
+      _State->systemIncludes.insert(FileName.str());
+      return;
+    }
     debugLog(3, "[filter] inlining project-local include: " + FileName.str());
     _State->strippedLocalInclude = true;
     _Rewriter.RemoveText(clang::CharSourceRange::getCharRange(HashLoc, FilenameRange.getEnd()));
@@ -389,7 +495,8 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
     collector.addDecl(func);
     if (!func->doesThisDeclarationHaveABody() || !func->getBody())
       continue;
-    if (!rejected.count(func->getNameAsString())) {
+    // RemoveVisitor can't strip a macro-expanded body, so a rejected one still ships and needs its deps
+    if (!rejected.count(func->getNameAsString()) || func->getLocation().isMacroID()) {
       collector.TraverseStmt(func->getBody());
       continue;
     }
@@ -483,7 +590,8 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   // --- system headers the closure still needs -----------------------------
   std::set<std::string> includes = _State->systemIncludes;
   for (const clang::Decl *decl : collector.fromSystem()) {
-    std::optional<std::string> header = systemHeaderFor(decl, mgr);
+    if (alreadyResolvable(decl, mgr, *_State, includes)) continue;
+    std::optional<std::string> header = systemHeaderFor(decl, mgr, *_State);
     if (header) {
       includes.insert(*header);
       continue;

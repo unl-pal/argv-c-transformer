@@ -58,3 +58,25 @@ jobs:
 
       - name: Smoke test (end-to-end filter/transform/verify)
         run: ./tests/smoke/run_smoke_test.sh ./build/filter ./build/transform ./build/verify
+
+  install-script:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Run install.sh
+        run: ./scripts/install.sh
+
+      - name: Verify argv-c runs
+        run: |
+          # No args is expected usage (exit 1 + usage text) - anything else
+          # (command not found, missing shared library, a crash) is a real failure.
+          status=0
+          output="$(argv-c 2>&1)" || status=$?
+          echo "$output"
+          [ "$status" -eq 1 ]
+          echo "$output" | grep -qi "usage"
