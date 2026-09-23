@@ -4,20 +4,13 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-# No-fuss install: detects the platform, installs the pinned LLVM/Clang 20
-# toolchain via apt or brew, builds argv-c, and installs it.
-#
-# There is no prebuilt binary because argv-c dynamically links libclang-cpp/
-# libLLVM at runtime *and* shells out to a bare `clang` for preprocessing
-# (see README.md, "`clang` on `PATH` must match the build") - a downloaded
-# binary would still require the user to separately install a matching LLVM
-# 20, so building from source with the right toolchain is the actual
-# no-friction path.
+# No-fuss install: if cmake, ninja, and a compatible clang (LLVM 20+) are
+# already on PATH, builds argv-c against them as-is. Otherwise installs them
+# via apt (Debian/Ubuntu) or Homebrew (macOS). On any other platform, or if
+# apt/brew aren't available, it just reports what's missing rather than
+# guessing how to install it
 #
 # Usage: ./scripts/install.sh [--prefix <dir>]
-#
-# Run from a clone of this repo. Requires sudo (Linux) for apt-get and for
-# installing to the default prefix (/usr/local).
 
 set -eu
 
@@ -31,45 +24,73 @@ fi
 
 os="$(uname -s)"
 
-case "$os" in
-  Linux)
-    if ! command -v apt-get >/dev/null 2>&1; then
-      echo "error: apt-get not found. This script only supports Debian/Ubuntu on Linux." >&2
-      echo "See README.md's Build section for manual instructions on other distros." >&2
+have_prereqs() {
+  command -v cmake >/dev/null 2>&1 || return 1
+  command -v ninja >/dev/null 2>&1 || return 1
+  command -v clang >/dev/null 2>&1 || return 1
+  command -v clang++ >/dev/null 2>&1 || return 1
+  major="$(clang -dumpversion 2>/dev/null | cut -d. -f1)"
+  [ -n "$major" ] && [ "$major" -ge 20 ] 2>/dev/null
+}
+
+print_missing() {
+  echo "error: missing prerequisites (need cmake, ninja, and clang/LLVM 20 or newer)." >&2
+  echo "This script only knows how to install them automatically on Debian/Ubuntu (apt) and macOS (Homebrew)." >&2
+  echo "See README.md's Build section for manual instructions on '$os'." >&2
+}
+
+configure_extra=""
+
+if have_prereqs; then
+  echo "==> Using existing toolchain: $(command -v clang) (clang $major)"
+  export CC="$(command -v clang)"
+  export CXX="$(command -v clang++)"
+  if command -v llvm-config >/dev/null 2>&1; then
+    configure_extra="-DLLVM_DIR=$(llvm-config --cmakedir)"
+  fi
+  if [ "$os" = "Darwin" ]; then
+    configure_extra="$configure_extra -DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)"
+  fi
+else
+  case "$os" in
+    Linux)
+      if ! command -v apt-get >/dev/null 2>&1; then
+        print_missing
+        exit 1
+      fi
+
+      echo "==> Installing LLVM/Clang 20 toolchain via apt"
+      sudo apt-get update
+      sudo apt-get install -y cmake ninja-build \
+        clang-20 libclang-20-dev libclang-cpp20-dev llvm-20-dev lld-20 \
+        zlib1g-dev libzstd-dev libedit-dev
+
+      export CC=clang-20
+      export CXX=clang++-20
+      export PATH="/usr/lib/llvm-20/bin:$PATH"
+      configure_extra="-DLLVM_DIR=$(llvm-config-20 --cmakedir)"
+      ;;
+    Darwin)
+      if ! command -v brew >/dev/null 2>&1; then
+        print_missing
+        exit 1
+      fi
+
+      echo "==> Installing LLVM/Clang toolchain via Homebrew"
+      brew install cmake ninja llvm lld
+
+      llvm_prefix="$(brew --prefix llvm)"
+      export CC="$llvm_prefix/bin/clang"
+      export CXX="$llvm_prefix/bin/clang++"
+      export PATH="$llvm_prefix/bin:$PATH"
+      configure_extra="-DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)"
+      ;;
+    *)
+      print_missing
       exit 1
-    fi
-
-    echo "==> Installing LLVM/Clang 20 toolchain via apt"
-    sudo apt-get update
-    sudo apt-get install -y cmake ninja-build \
-      clang-20 libclang-20-dev libclang-cpp20-dev llvm-20-dev lld-20 \
-      zlib1g-dev libzstd-dev libedit-dev
-
-    export CC=clang-20
-    export CXX=clang++-20
-    versioned_bin="/usr/lib/llvm-20/bin"
-    export PATH="$versioned_bin:$PATH"
-    configure_extra="-DLLVM_DIR=$(llvm-config-20 --cmakedir)"
-    ;;
-  Darwin)
-    if ! command -v brew >/dev/null 2>&1; then
-      echo "error: Homebrew not found. Install it from https://brew.sh first." >&2
-      exit 1
-    fi
-
-    echo "==> Installing LLVM/Clang 20 toolchain via Homebrew"
-    brew install cmake ninja llvm@20 lld@20
-
-    versioned_bin="$(brew --prefix llvm@20)/bin"
-    export PATH="$versioned_bin:$PATH"
-    configure_extra="-DCMAKE_OSX_SYSROOT=$(xcrun --show-sdk-path)"
-    ;;
-  *)
-    echo "error: unsupported platform '$os'. This script only supports Linux (apt) and macOS (brew)." >&2
-    echo "See README.md's Build section for manual instructions." >&2
-    exit 1
-    ;;
-esac
+      ;;
+  esac
+fi
 
 echo "==> Configuring"
 # shellcheck disable=SC2086
@@ -92,12 +113,8 @@ else
   argv-c || true
 fi
 
-cat <<EOF
+cat <<'EOF'
 
-Note: argv-c shells out to a bare 'clang' at runtime and requires it to
-resolve to Clang 20+ on PATH. This script put the versioned toolchain first
-on PATH for this session only - add the line below to your shell rc file
-to make it permanent:
-
-  export PATH="$versioned_bin:\$PATH"
+Note: argv-c needs a `clang` resolvable on PATH at runtime (to ask
+it for its resource directory), and it must be Clang 20+
 EOF
