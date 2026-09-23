@@ -196,5 +196,39 @@ TEST_F(FiltererStageTest, DatabaseDirEqualToFilterDirIsRejected) {
   writeFile(databaseDir / "keepme.c", "int add(int a, int b) { return a + b; }\n");
 
   Filterer f(configPath.string());
-  EXPECT_DEATH(f.run(), "cannot be the same as its input directory");
+  EXPECT_DEATH(f.run(), "overlaps");
+}
+
+// With cleanOutput set, a filterDir that contains databaseDir would otherwise
+// be wiped along with the source tree inside it.
+TEST_F(FiltererStageTest, FilterDirContainingDatabaseDirIsRejectedEvenWithCleanOutput) {
+  std::ofstream cfg(configPath);
+  cfg << "[File Locations]\n"
+      << "databaseDir = " << databaseDir.string() << "\n"
+      << "filterDir = " << tmpDir.string() << "\n"
+      << "[File Settings]\n"
+      << "cleanOutput = true\n";
+  cfg.close();
+  writeFile(databaseDir / "keepme.c", "int add(int a, int b) { return a + b; }\n");
+
+  Filterer f(configPath.string());
+  EXPECT_DEATH(f.run(), "overlaps");
+  EXPECT_TRUE(fs::exists(databaseDir / "keepme.c"));
+  EXPECT_TRUE(fs::exists(configPath));
+}
+
+TEST_F(FiltererStageTest, CleanOutputRefusesToWipeFilterDirInsideDatabaseDir) {
+  fs::path nested = databaseDir / "src";
+  std::ofstream cfg(configPath);
+  cfg << "[File Locations]\n"
+      << "databaseDir = " << databaseDir.string() << "\n"
+      << "filterDir = " << nested.string() << "\n"
+      << "[File Settings]\n"
+      << "cleanOutput = true\n";
+  cfg.close();
+  writeFile(nested / "keepme.c", "int add(int a, int b) { return a + b; }\n");
+
+  Filterer f(configPath.string());
+  EXPECT_DEATH(f.run(), "refusing to wipe");
+  EXPECT_TRUE(fs::exists(nested / "keepme.c"));
 }

@@ -369,7 +369,8 @@ int Verifier::run() {
     debugLog(0, "Transform directory not found: " + configuration.transformDir);
     return 0;
   }
-  checkOrCleanOutputDir(configuration.benchmarkDir, configuration.transformDir, configuration.cleanOutput);
+  checkOrCleanOutputDir(configuration.benchmarkDir, {configuration.transformDir, config.databaseDir},
+                        configuration.cleanOutput);
   writeHarnessHeader();
   WorkerPoolResult result = verifyAll(path);
   std::cout << "\n=== Verify summary ===\n"
