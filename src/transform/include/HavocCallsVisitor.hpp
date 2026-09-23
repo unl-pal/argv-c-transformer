@@ -124,6 +124,14 @@ private:
   void eraseStmt(const clang::Stmt *S);
 
   /**
+   * @brief Drops a void call spelled in macro text: erased with its trailing `;` when it is a
+   * whole statement, otherwise replaced by `((void)0)`. Shared text is edited once.
+   * @param E    The void call.
+   * @param text Its main-file spelling, from rewritableSpelling.
+   */
+  void dropMacroSpelledCall(const clang::CallExpr *E, clang::CharSourceRange text);
+
+  /**
    * @brief True if E can be deleted without changing observable behaviour.
    *
    * Havocked calls count as pure; calls left alone (system calls, aggregate

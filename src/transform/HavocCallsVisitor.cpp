@@ -26,7 +26,7 @@ struct HavocAction {
   enum class Mode { Erase, Inline, Pointer, Reject } mode;
   std::string replacement;     // Inline only.
   PointerPlan plan;            // Pointer only.
-  clang::CharSourceRange text; // Inline only: the file text to replace.
+  clang::CharSourceRange text; // Inline, and Erase inside a macro: the file text to replace.
 };
 
 // True if `text` is exactly one call: parens balanced and closing at the end, with no top-level
@@ -128,14 +128,10 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
     return action;
   }
   // Inside a macro: rewrite where the call is spelled. Pointer storage has no statement there
-  // to hoist above, and a dropped void call may sit in an expression, so it becomes one.
+  // to hoist above.
   std::optional<clang::CharSourceRange> spelling = rewritableSpelling(E, C);
   if (!spelling || action.mode == HavocAction::Mode::Pointer)
     return HavocAction{HavocAction::Mode::Reject, "", {}, {}};
-  if (action.mode == HavocAction::Mode::Erase) {
-    action.mode = HavocAction::Mode::Inline;
-    action.replacement = "((void)0)";
-  }
   action.text = *spelling;
   return action;
 }
@@ -283,7 +279,10 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
   }
   if (action->mode == HavocAction::Mode::Erase) {
     debugLog(4, "[transform] " + where + ": dropped void call");
-    eraseStmt(E);
+    if (E->getBeginLoc().isMacroID() || E->getEndLoc().isMacroID())
+      dropMacroSpelledCall(E, action->text);
+    else
+      eraseStmt(E);
     return true;
   }
   if (action->mode == HavocAction::Mode::Pointer) return havocPointerReturn(E, action->plan, where);
@@ -356,6 +355,23 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
   if (!plan.fwdDecl.empty()) _NeededFwdDecls->insert(plan.fwdDecl);
   debugLog(4, "[transform] " + where + ": havocked pointer call -> stack " + stub);
   return true;
+}
+
+void HavocCallsVisitor::dropMacroSpelledCall(const clang::CallExpr *E,
+                                             clang::CharSourceRange text) {
+  clang::SourceManager &mgr = _C->getSourceManager();
+  if (!_RewrittenSpellings.insert(mgr.getFileOffset(text.getBegin())).second) return;
+  bool discarded = false;
+  hoistAnchor(E, discarded);
+  if (!discarded) { // the value feeds an expression, e.g. (LOG(v), 1)
+    _Rewriter.ReplaceText(text, "((void)0)");
+    return;
+  }
+  _Rewriter.RemoveText(text);
+  const char *after = mgr.getCharacterData(text.getEnd());
+  unsigned skip = 0;
+  while (after[skip] == ' ' || after[skip] == '\t') ++skip;
+  if (after[skip] == ';') _Rewriter.RemoveText(text.getEnd().getLocWithOffset(skip), 1);
 }
 
 // Idempotent: re-removing an already-erased range confuses the Rewriter's delta bookkeeping.
