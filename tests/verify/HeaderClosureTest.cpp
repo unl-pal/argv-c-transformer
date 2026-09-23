@@ -238,6 +238,23 @@ TEST_F(HeaderClosureTest, AlreadyPresentSystemHeaderIsNotDuplicatedByCanonicalFa
       << out;
 }
 
+TEST_F(HeaderClosureTest, RejectedMacroDefinedFunctionStillPullsInItsDependencies) {
+  // get() fails IfStmt >= 1, but its body is a macro expansion RemoveVisitor can't strip, so
+  // it ships anyway and Box must still be inlined for the benchmark to compile.
+  std::ofstream(configPath, std::ios::app) << "[Complexity Requirements]\nIfStmt = 1\n";
+  writeRepoFile("box.h", "typedef struct { int n; } Box;\n");
+  writeRepoFile("get.c", "#include \"box.h\"\n"
+                         "#define GETTER(name) int name(int v) { Box b; b.n = v; return b.n; }\n"
+                         "GETTER(get)\n"
+                         "int keep(int v) { if (v) return 1; return 0; }\n");
+
+  std::string out = runPipeline("get.c");
+
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  EXPECT_NE(filtered().find("typedef struct { int n; } Box;"), std::string::npos) << filtered();
+  EXPECT_EQ(out.find("get(__VERIFIER"), std::string::npos) << "rejected get() harnessed:\n" << out;
+}
+
 TEST_F(HeaderClosureTest, LocalDeclsNamedLikeStdSymbolsAreInlinedNotSwappedForSystemHeaders) {
   // read() and the time field share names with <unistd.h>/<time.h> symbols but
   // are the project's own; swapping them for those headers leaves struct clock

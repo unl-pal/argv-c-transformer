@@ -495,7 +495,8 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
     collector.addDecl(func);
     if (!func->doesThisDeclarationHaveABody() || !func->getBody())
       continue;
-    if (!rejected.count(func->getNameAsString())) {
+    // RemoveVisitor can't strip a macro-expanded body, so a rejected one still ships and needs its deps
+    if (!rejected.count(func->getNameAsString()) || func->getLocation().isMacroID()) {
       collector.TraverseStmt(func->getBody());
       continue;
     }
