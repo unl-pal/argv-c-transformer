@@ -250,6 +250,39 @@ TEST_F(HeaderClosureTest, AlreadyPresentSystemHeaderIsNotDuplicatedByCanonicalFa
       << out;
 }
 
+TEST_F(HeaderClosureTest, LocalDeclsNamedLikeStdSymbolsAreInlinedNotSwappedForSystemHeaders) {
+  // read() and the time field share names with <unistd.h>/<time.h> symbols but
+  // are the project's own; swapping them for those headers leaves struct clock
+  // half-defined and read() with a conflicting prototype.
+  writeRepoFile("api.h", "struct clock { int time; };\n"
+                         "int read(struct clock *c);\n");
+  writeRepoFile("use.c", "#include \"api.h\"\n"
+                         "int use(struct clock *c) { return read(c) + c->time; }\n");
+
+  runPipeline("use.c");
+
+  EXPECT_NE(filtered().find("struct clock { int time; }"), std::string::npos) << filtered();
+  EXPECT_NE(filtered().find("int read(struct clock *c);"), std::string::npos) << filtered();
+  EXPECT_EQ(filtered().find("#include <unistd.h>"), std::string::npos) << filtered();
+  EXPECT_EQ(filtered().find("#include <time.h>"), std::string::npos) << filtered();
+}
+
+TEST_F(HeaderClosureTest, TypedefShimOfSystemTypeResolvesToTheSystemHeader) {
+  // compat.h repeats <stddef.h>'s size_t typedef (legal C11). The shim must
+  // resolve through the system redeclaration, never through its own path,
+  // which under an include/ directory would spell a nonexistent <compat.h>.
+  writeRepoFile("include/compat.h", "#include <stddef.h>\n"
+                                    "typedef __SIZE_TYPE__ size_t;\n");
+  writeRepoFile("src/count.c", "#include \"compat.h\"\n"
+                               "int count(size_t n) { return (int)n; }\n");
+
+  runPipeline("src/count.c");
+
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  EXPECT_EQ(filtered().find("#include <compat.h>"), std::string::npos) << filtered();
+  EXPECT_NE(filtered().find("#include <stddef.h>"), std::string::npos) << filtered();
+}
+
 TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedAndPrototypeIsDroppedAfterHavocking) {
   // Negative, and the one deliberate exception to "full definitions
   // everywhere". The transform is intraprocedural: HavocCallsVisitor havocs
