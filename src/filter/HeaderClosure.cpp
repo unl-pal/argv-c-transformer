@@ -256,12 +256,20 @@ bool isKernelUapiHeader(llvm::StringRef spelling) {
 }
 
 /**
+ * @brief True if `spelling` must never be written as an #include: a `bits/`
+ * fragment, a `__`-prefixed compiler internal, or a kernel UAPI header (which
+ * conflicts with glibc's userspace headers).
+ */
+bool isPrivateHeader(llvm::StringRef spelling) {
+  return spelling.starts_with("bits/") || spelling.contains("/bits/") ||
+         llvm::StringRef(llvm::sys::path::filename(spelling)).starts_with("__") ||
+         isKernelUapiHeader(spelling);
+}
+
+/**
  * @brief Climbs the recorded #include chain from a declaration's (possibly
- * deeply-nested) file back up to the outermost system header a normal source
- * file would write to reach it.
- *
- * Kernel UAPI headers are never accepted as the climb result due to incompatability
- * with glibc userspcae headers
+ * deeply-nested) file back up to the outermost non-private angled system
+ * include a normal source file would write to reach it.
  */
 std::optional<std::string> climbToPublicHeader(const clang::Decl *decl,
                                                const clang::SourceManager &mgr,
@@ -279,7 +287,7 @@ std::optional<std::string> climbToPublicHeader(const clang::Decl *decl,
     auto it = state.includedFrom.find(current);
     if (it == state.includedFrom.end() || !it->second.isSystem)
       break;
-    if (it->second.isAngled && !isKernelUapiHeader(it->second.spelling))
+    if (it->second.isAngled && !isPrivateHeader(it->second.spelling))
       best = it->second.spelling;
     if (!it->second.parent)
       break;
@@ -331,10 +339,7 @@ std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
     // exceptions for sys, arpa, and netinet because e.g sys/types.h is a valid/portable include
     bool topLevel = !spelling.contains('/') || spelling.starts_with("sys/") ||
                     spelling.starts_with("arpa/") || spelling.starts_with("netinet/");
-    // A leading "__" marks a compiler-internal fragment so fallback to the StdHeaders map.
-    // Kernel UAPI headers are also excluded
-    if (topLevel && !spelling.empty() && !isKernelUapiHeader(spelling) &&
-        !llvm::StringRef(llvm::sys::path::filename(spelling)).starts_with("__"))
+    if (topLevel && !spelling.empty() && !isPrivateHeader(spelling))
       return spelling.str();
   }
 

@@ -148,8 +148,8 @@ inline void checkOrCleanOutputDir(const std::string &dir,
   if (std::filesystem::exists(path) && !std::filesystem::is_empty(path)) {
     if (!cleanOutput) {
       std::cerr << "output directory '" << dir << "' already exists and is not empty.\n"
-                << "Set cleanOutput=true in the config to wipe it first, or remove it manually."
-                << std::endl;
+                << "Delete it (rm -r '" << dir << "'), or set cleanOutput=true in a config"
+                << " file to wipe it automatically." << std::endl;
       std::exit(1);
     }
     for (const std::string &other : protectedDirs) {

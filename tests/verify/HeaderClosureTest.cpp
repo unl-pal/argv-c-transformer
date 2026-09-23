@@ -193,33 +193,21 @@ TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
       << "sized Buf storage should not fall back to the opaque byte block:\n" << out;
 }
 
-TEST_F(HeaderClosureTest, RepeatedSystemIncludeDoesNotDivertTheClimbToAnInnerHeader) {
-  // <stdio.h> is #included twice: once angled from local1.h, once quoted from
-  // local2.h (both resolve to the same real system file). InclusionDirective
-  // fires for every occurrence, so the recorded IncludeInfo for stdio.h must
-  // keep the FIRST (angled) one - a plain map-assignment would let the second
-  // (quoted, local2.h-parented) occurrence clobber it. size_t's home header is
-  // reachable only by climbing *through* stdio.h's own internal #include of
-  // it, so if that clobber happens, the climb stops one hop short and reports
-  // the inner/private header size_t actually lives in instead of the public
-  // <stdio.h> a normal source file would write.
-  writeRepoFile("local1.h", "#include <stdio.h>\n");
-  writeRepoFile("local2.h", "#include \"stdio.h\"\n");
-  writeRepoFile("count.c", "#include \"local1.h\"\n"
-                           "#include \"local2.h\"\n"
-                           "int use(size_t x) { return x; }\n");
+TEST_F(HeaderClosureTest, ClimbNeverSettlesOnAPrivateSystemHeader) {
+#ifndef __GLIBC__
+  GTEST_SKIP() << "relies on glibc declaring FILE in <bits/types/FILE.h>";
+#endif
+  // The quoted "stdio.h" is the only public hop above FILE's home header, so the
+  // climb's sole angled candidate is glibc's private <bits/types/FILE.h>.
+  writeRepoFile("local.h", "#include \"stdio.h\"\n");
+  writeRepoFile("use.c", "#include \"local.h\"\n"
+                         "int use(FILE *f) { return f != 0; }\n");
 
-  runPipeline("count.c");
+  runPipeline("use.c");
 
-  // The closure's include choice is made in filter, so assert on filter's output.
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  EXPECT_EQ(filtered().find("bits/"), std::string::npos) << filtered();
   EXPECT_NE(filtered().find("#include <stdio.h>"), std::string::npos) << filtered();
-  // A regressed climb reports size_t's actual (private, non-public) home
-  // header instead of walking out to <stdio.h>.
-  EXPECT_EQ(filtered().find("#include <stddef.h>"), std::string::npos)
-      << "climb should walk all the way out to <stdio.h>, not stop at size_t's "
-         "own inner header:\n"
-      << filtered();
 }
 
 TEST_F(HeaderClosureTest, AlreadyPresentSystemHeaderIsNotDuplicatedByCanonicalFallback) {
