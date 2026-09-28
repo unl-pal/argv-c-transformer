@@ -13,5 +13,6 @@ docs/tutorial/filtered-files/
 docs/tutorial/transformed-files/
 docs/tutorial/benchmark-files/
 
-# AI artifacts
-CLAUDE.md
+# Local-only clang compatibility investigation (see docker/run.sh)
+/docker/
+/.dockerignore
