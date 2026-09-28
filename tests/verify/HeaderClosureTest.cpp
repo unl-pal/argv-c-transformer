@@ -193,6 +193,104 @@ TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
       << "sized Buf storage should not fall back to the opaque byte block:\n" << out;
 }
 
+TEST_F(HeaderClosureTest, ClimbNeverSettlesOnAPrivateSystemHeader) {
+#ifndef __GLIBC__
+  GTEST_SKIP() << "relies on glibc declaring FILE in <bits/types/FILE.h>";
+#endif
+  // The quoted "stdio.h" is the only public hop above FILE's home header, so the
+  // climb's sole angled candidate is glibc's private <bits/types/FILE.h>.
+  writeRepoFile("local.h", "#include \"stdio.h\"\n");
+  writeRepoFile("use.c", "#include \"local.h\"\n"
+                         "int use(FILE *f) { return f != 0; }\n");
+
+  runPipeline("use.c");
+
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  EXPECT_EQ(filtered().find("bits/"), std::string::npos) << filtered();
+  EXPECT_NE(filtered().find("#include <stdio.h>"), std::string::npos) << filtered();
+}
+
+TEST_F(HeaderClosureTest, AlreadyPresentSystemHeaderIsNotDuplicatedByCanonicalFallback) {
+#ifndef __linux__
+  GTEST_SKIP() << "relies on the Linux-only <linux/time.h>";
+#endif
+  // struct timespec is reachable only through the .c file's own <linux/time.h>
+  // - never through glibc's <time.h>. systemHeaderFor's climb deliberately
+  // refuses to land on a kernel-uapi header (isKernelUapiHeader), so on its
+  // own it would fall through to StdHeaders and add the canonical "time.h" -
+  // a second, differently-spelled header for a type that already resolves,
+  // and a real redefinition risk since the kernel and glibc definitions of a
+  // shared-name type aren't guaranteed compatible (in fact <linux/time.h>
+  // combined with glibc's own headers hits exactly that on this system, via
+  // struct timeval rather than timespec - which is why this test stops at
+  // the filter stage instead of running the full pipeline through verify's
+  // compile check).
+  writeRepoFile("box.h", "#include <linux/time.h>\n"
+                         "struct Box { struct timespec ts; };\n");
+  writeRepoFile("use.c", "#include <linux/time.h>\n"
+                         "#include \"box.h\"\n"
+                         "int use(struct Box *b) { return (int)b->ts.tv_sec; }\n");
+
+  Filterer(configPath.string()).run();
+  std::string out = readFile(filterDir / "use.c");
+
+  EXPECT_NE(out.find("#include <linux/time.h>"), std::string::npos) << out;
+  EXPECT_EQ(out.find("#include <time.h>"), std::string::npos)
+      << "closure should not add a canonical substitute header for a type "
+         "that already resolves through an already-kept header:\n"
+      << out;
+}
+
+TEST_F(HeaderClosureTest, RejectedMacroDefinedFunctionStillPullsInItsDependencies) {
+  // get() fails IfStmt >= 1, but its body is a macro expansion RemoveVisitor can't strip, so
+  // it ships anyway and Box must still be inlined for the benchmark to compile.
+  std::ofstream(configPath, std::ios::app) << "[Complexity Requirements]\nIfStmt = 1\n";
+  writeRepoFile("box.h", "typedef struct { int n; } Box;\n");
+  writeRepoFile("get.c", "#include \"box.h\"\n"
+                         "#define GETTER(name) int name(int v) { Box b; b.n = v; return b.n; }\n"
+                         "GETTER(get)\n"
+                         "int keep(int v) { if (v) return 1; return 0; }\n");
+
+  std::string out = runPipeline("get.c");
+
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  EXPECT_NE(filtered().find("typedef struct { int n; } Box;"), std::string::npos) << filtered();
+  EXPECT_EQ(out.find("get(__VERIFIER"), std::string::npos) << "rejected get() harnessed:\n" << out;
+}
+
+TEST_F(HeaderClosureTest, LocalDeclsNamedLikeStdSymbolsAreInlinedNotSwappedForSystemHeaders) {
+  // read() and the time field share names with <unistd.h>/<time.h> symbols but
+  // are the project's own; swapping them for those headers leaves struct clock
+  // half-defined and read() with a conflicting prototype.
+  writeRepoFile("api.h", "struct clock { int time; };\n"
+                         "int read(struct clock *c);\n");
+  writeRepoFile("use.c", "#include \"api.h\"\n"
+                         "int use(struct clock *c) { return read(c) + c->time; }\n");
+
+  runPipeline("use.c");
+
+  EXPECT_NE(filtered().find("struct clock { int time; }"), std::string::npos) << filtered();
+  EXPECT_NE(filtered().find("int read(struct clock *c);"), std::string::npos) << filtered();
+  EXPECT_EQ(filtered().find("#include <unistd.h>"), std::string::npos) << filtered();
+  EXPECT_EQ(filtered().find("#include <time.h>"), std::string::npos) << filtered();
+}
+
+TEST_F(HeaderClosureTest, TypedefShimOfSystemTypeResolvesToTheSystemHeader) {
+  // compat.h repeats <stddef.h>'s size_t typedef (legal C11). The shim must
+  // resolve through the system redeclaration, never through its own path,
+  // which under an include/ directory would spell a nonexistent <compat.h>.
+  writeRepoFile("include/compat.h", "#include <stddef.h>\n"
+                                    "typedef __SIZE_TYPE__ size_t;\n");
+  writeRepoFile("src/count.c", "#include \"compat.h\"\n"
+                               "int count(size_t n) { return (int)n; }\n");
+
+  runPipeline("src/count.c");
+
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  EXPECT_EQ(filtered().find("#include <compat.h>"), std::string::npos) << filtered();
+  EXPECT_NE(filtered().find("#include <stddef.h>"), std::string::npos) << filtered();
+}
+
 TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedAndPrototypeIsDroppedAfterHavocking) {
   // Negative, and the one deliberate exception to "full definitions
   // everywhere". The transform is intraprocedural: HavocCallsVisitor havocs

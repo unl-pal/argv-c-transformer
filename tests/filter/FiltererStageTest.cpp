@@ -182,9 +182,10 @@ TEST_F(FiltererStageTest, StripsFunctionFailingComplexityThreshold) {
   EXPECT_EQ(out.find("return x + 1;"), std::string::npos) << out;
 }
 
-// filterFile refuses to run when the output path resolves to the input, so
-// every file declines - and the decline must not take the source with it.
-TEST_F(FiltererStageTest, DatabaseDirEqualToFilterDirLeavesTheSourceIntact) {
+// filterDir resolving to databaseDir is a misconfiguration, not a supported
+// mode - run() must refuse it loudly rather than silently declining every
+// file (which would look like a clean run that happened to filter nothing).
+TEST_F(FiltererStageTest, DatabaseDirEqualToFilterDirIsRejected) {
   std::ofstream cfg(configPath);
   cfg << "[File Locations]\n"
       << "databaseDir = " << databaseDir.string() << "\n"
@@ -195,7 +196,39 @@ TEST_F(FiltererStageTest, DatabaseDirEqualToFilterDirLeavesTheSourceIntact) {
   writeFile(databaseDir / "keepme.c", "int add(int a, int b) { return a + b; }\n");
 
   Filterer f(configPath.string());
-  f.run();
+  EXPECT_DEATH(f.run(), "overlaps");
+}
 
+// With cleanOutput set, a filterDir that contains databaseDir would otherwise
+// be wiped along with the source tree inside it.
+TEST_F(FiltererStageTest, FilterDirContainingDatabaseDirIsRejectedEvenWithCleanOutput) {
+  std::ofstream cfg(configPath);
+  cfg << "[File Locations]\n"
+      << "databaseDir = " << databaseDir.string() << "\n"
+      << "filterDir = " << tmpDir.string() << "\n"
+      << "[File Settings]\n"
+      << "cleanOutput = true\n";
+  cfg.close();
+  writeFile(databaseDir / "keepme.c", "int add(int a, int b) { return a + b; }\n");
+
+  Filterer f(configPath.string());
+  EXPECT_DEATH(f.run(), "overlaps");
   EXPECT_TRUE(fs::exists(databaseDir / "keepme.c"));
+  EXPECT_TRUE(fs::exists(configPath));
+}
+
+TEST_F(FiltererStageTest, CleanOutputRefusesToWipeFilterDirInsideDatabaseDir) {
+  fs::path nested = databaseDir / "src";
+  std::ofstream cfg(configPath);
+  cfg << "[File Locations]\n"
+      << "databaseDir = " << databaseDir.string() << "\n"
+      << "filterDir = " << nested.string() << "\n"
+      << "[File Settings]\n"
+      << "cleanOutput = true\n";
+  cfg.close();
+  writeFile(nested / "keepme.c", "int add(int a, int b) { return a + b; }\n");
+
+  Filterer f(configPath.string());
+  EXPECT_DEATH(f.run(), "refusing to wipe");
+  EXPECT_TRUE(fs::exists(nested / "keepme.c"));
 }

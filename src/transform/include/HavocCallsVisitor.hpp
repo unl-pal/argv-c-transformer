@@ -40,7 +40,8 @@ public:
                     clang::Rewriter &rewriter);
 
   /**
-   * @brief Havocs a call if it should be (in-file, non-library, non-verifier, non-macro).
+   * @brief Havocs a call if it should be (in-file, non-library, non-verifier). A call inside a
+   * macro is rewritten where it is spelled; one with no rewritable spelling taints its function.
    * @param E The call expression being visited.
    * @return false to stop traversal, true to continue.
    */
@@ -121,6 +122,14 @@ private:
    * @param S The statement to remove from the output buffer.
    */
   void eraseStmt(const clang::Stmt *S);
+
+  /**
+   * @brief Drops a void call spelled in macro text: erased with its trailing `;` when it is a
+   * whole statement, otherwise replaced by `((void)0)`. Shared text is edited once.
+   * @param E    The void call.
+   * @param text Its main-file spelling, from rewritableSpelling.
+   */
+  void dropMacroSpelledCall(const clang::CallExpr *E, clang::CharSourceRange text);
 
   /**
    * @brief True if E can be deleted without changing observable behaviour.
@@ -212,4 +221,7 @@ private:
   std::set<const clang::FunctionDecl *> _Tainted;
   /** Names every hoisted pointer-return stub across the TU, keeping them unique. */
   unsigned _StubCounter = 0;
+  /** File offsets of call text already replaced, so text spelled once but expanded often is
+   * rewritten once. */
+  std::set<unsigned> _RewrittenSpellings;
 };

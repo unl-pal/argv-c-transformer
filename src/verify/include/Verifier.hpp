@@ -31,6 +31,7 @@ struct verifyConfigs {
   std::string benchmarkDir; ///< Output directory for finalized benchmarks.
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated verify child.
   int nproc;                ///< Worker pool size (0 = auto, three quarters of detected cores).
+  bool cleanOutput;         ///< If true, wipe a pre-populated benchmarkDir instead of erroring.
 };
 
 /**
@@ -126,6 +127,13 @@ public:
    * Lets the driver check this exists before calling run().
    */
   const std::string &getTransformDir() const { return configuration.transformDir; }
+
+  /**
+   * @brief Returns the resolved output directory verify writes benchmarks to.
+   *
+   * Lets the full pipeline preflight-check it before any stage runs.
+   */
+  const std::string &getBenchmarkDir() const { return configuration.benchmarkDir; }
 
   /**
    * @brief Returns the set of verification properties for a benchmark.

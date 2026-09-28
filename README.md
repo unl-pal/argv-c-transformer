@@ -95,16 +95,7 @@ ninja -C build
 ```
 
 Each stage's binary and the full `argv-c` version can then be found and run from
-the `build/` directory. You may need to point cmake at the necessary clang version:
-
-```sh
-CXX=clang++-20 CC=clang-20 cmake -B build -S . -G Ninja
-```
-
-`CXX`/`CC` only need to be set for this one invocation since CMake caches the
-compiler choice in `build/`. Now you should be able to run `ninja -C build` successfully.
-
-Additionally, it is recommended to put argv-c on your path:
+the `build/` directory. Additionally, it is recommended to put argv-c on your path:
 
 ```sh
 cmake --install build

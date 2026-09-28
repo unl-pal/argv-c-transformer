@@ -5,6 +5,7 @@
 #pragma once
 
 #include <clang/AST/ASTConsumer.h>
+#include <clang/Basic/FileEntry.h>
 #include <clang/Basic/LangOptions.h>
 #include <clang/Basic/SourceLocation.h>
 #include <clang/Basic/SourceManager.h>
@@ -17,6 +18,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -33,16 +35,30 @@ struct MacroRecord {
 };
 
 /**
+ * @brief How one file was pulled in, recorded for every #include seen while
+ * preprocessing. System header defined types are often in nested includes and
+ * we want to find the outermost system include.
+ */
+struct IncludeInfo {
+  std::string spelling; // FileName as written in the #include
+  bool isAngled = false;
+  bool isSystem = false;              // this file's own FileType
+  const clang::FileEntry *parent = nullptr; // file containing the #include
+};
+
+/**
  * @brief State handed from the preprocessor callbacks to the closure consumer.
  */
 struct HeaderClosureState {
   bool strippedLocalInclude = false; // flag to check if closure is needed
-  /// local headers' system includes
+  /// local headers' and target file's system includes
   std::set<std::string> systemIncludes;
   /// every macro defined in local headers, keyed by name
   std::map<std::string, MacroRecord> localMacros;
   /// Macros referenced in the main file with their location
   std::vector<std::pair<std::string, clang::SourceLocation>> macroUses;
+  /// Every #include seen anywhere in the TU, keyed by the file it pulled in.
+  std::unordered_map<const clang::FileEntry *, IncludeInfo> includedFrom;
 };
 
 /**

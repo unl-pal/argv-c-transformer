@@ -31,6 +31,7 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
   configuration.filterDir = defaultFilterDir;
   configuration.fileTimeoutSecs = defaultFileTimeoutSecs;
   configuration.nproc = 0;
+  configuration.cleanOutput = false;
   if (!configFile.empty()) parseConfig(configFile);
   if (configuration.transformDir.empty())
     configuration.transformDir = inputBaseName(configuration.filterDir) + "-transformed";
@@ -175,6 +176,7 @@ void Transformer::parseConfig(std::string configFile) {
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
   configuration.nproc = config.fileSettings.at("nproc");
+  configuration.cleanOutput = config.fileSettings.at("cleanOutput") != 0;
   if (!config.transformDir.empty()) {
     configuration.transformDir = config.transformDir;
   }
@@ -193,6 +195,8 @@ void Transformer::parseConfig(std::string configFile) {
 
 int Transformer::run() {
   auto startTime = std::chrono::steady_clock::now();
+  checkOrCleanOutputDir(configuration.transformDir, {configuration.filterDir, configuration.databaseDir},
+                        configuration.cleanOutput);
   std::filesystem::path path(configuration.filterDir);
   // Built before any fork; each child inherits the index as-is.
   headerIndex.emplace(configuration.databaseDir);

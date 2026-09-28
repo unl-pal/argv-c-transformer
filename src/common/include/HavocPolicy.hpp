@@ -73,7 +73,8 @@ inline std::string pointeeFwdDecl(clang::QualType pointee, const clang::SourceMa
   std::string kind(tag->getKindName());
   if (const auto *typedefType = pointee->getAs<clang::TypedefType>()) {
     const clang::TypedefNameDecl *decl = typedefType->getDecl();
-    if (decl && !mgr.isInMainFile(decl->getLocation())) {
+    if (decl && !mgr.isInMainFile(decl->getLocation()) &&
+        !mgr.isInSystemHeader(mgr.getFileLoc(decl->getLocation()))) {
       std::string name = decl->getName().str();
       std::string synth = tag->getName().empty() ? "__havoc_" + name : tag->getName().str();
       return "typedef " + kind + " " + synth + " " + name;
