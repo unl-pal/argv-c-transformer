@@ -5,11 +5,11 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
-extern int external_thing(int x);
-void quiet(void);
-char *make_name(void);
-int *make_buf(void);
-float fval(void);
+
+
+
+
+
 
 int compute(int n) {
   int a = __VERIFIER_nondet_int();

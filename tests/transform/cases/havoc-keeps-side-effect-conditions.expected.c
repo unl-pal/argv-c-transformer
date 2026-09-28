@@ -5,7 +5,7 @@
 #define __HAVOC_ARRAY_ELEMS 8
 #include "argv_c_harness.h"
 
-void quiet(void);
+
 
 /* The loop body is a dropped void call, but the condition mutates x, which
  * is observed after the loop - the loop must survive pruning. */
