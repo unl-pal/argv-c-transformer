@@ -72,7 +72,7 @@ AssertRewriter::AssertRewriter(clang::SourceManager &SM, clang::Rewriter &rewrit
                                const clang::LangOptions &langOpts)
     : _Mgr(SM), _Rewriter(rewriter), _LangOpts(langOpts) {}
 
-TransformAction::TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc)
+TransformAction::TransformAction(TransformOutput &output, const HavocBounds &havoc)
     : _Output(output), _Rewriter(), _UnresolvedTypeNames(std::make_shared<std::set<std::string>>()),
       _Havoc(havoc) {}
 
@@ -96,8 +96,10 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(
       std::make_unique<HavocCallsConsumer>(discardedFunctions, neededFwdDecls, _Rewriter));
-  tempVector.emplace_back(
-      std::make_unique<MainGenConsumer>(discardedFunctions, neededFwdDecls, _Rewriter, _Havoc));
+  auto entries = std::make_shared<std::vector<HarnessEntry>>();
+  _Entries = entries;
+  tempVector.emplace_back(std::make_unique<MainGenConsumer>(discardedFunctions, neededFwdDecls,
+                                                            entries, _Rewriter, _Havoc));
   tempVector.emplace_back(
       std::make_unique<AddStdIncludesConsumer>(existingIncludes, _UnresolvedTypeNames, _Rewriter));
 
@@ -113,10 +115,13 @@ bool TransformAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
 }
 
 void TransformAction::EndSourceFileAction() {
-  _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
+  llvm::raw_string_ostream os(_Output.shared);
+  _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(os);
+  os.flush();
+  _Output.entries = std::move(*_Entries);
 }
 
-ArgsFrontendFactory::ArgsFrontendFactory(llvm::raw_ostream &output, const HavocBounds &havoc)
+ArgsFrontendFactory::ArgsFrontendFactory(TransformOutput &output, const HavocBounds &havoc)
     : _Output(output), _Havoc(havoc) {}
 
 std::unique_ptr<clang::FrontendAction> ArgsFrontendFactory::create() {

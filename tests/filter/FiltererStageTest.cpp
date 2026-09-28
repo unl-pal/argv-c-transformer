@@ -73,8 +73,8 @@ TEST_F(FiltererStageTest, PassingFileIsCopiedToFilterDir) {
   Filterer f(configPath.string());
   f.run();
 
-  ASSERT_TRUE(fs::exists(filterDir / "simple__add.c"));
-  EXPECT_NE(readFile(filterDir / "simple__add.c").find("return a + b;"), std::string::npos);
+  ASSERT_TRUE(fs::exists(filterDir / "simple.c"));
+  EXPECT_NE(readFile(filterDir / "simple.c").find("return a + b;"), std::string::npos);
 }
 
 TEST_F(FiltererStageTest, MirrorsDirectoryStructure) {
@@ -84,31 +84,7 @@ TEST_F(FiltererStageTest, MirrorsDirectoryStructure) {
   Filterer f(configPath.string());
   f.run();
 
-  EXPECT_TRUE(fs::exists(filterDir / "owner" / "repo" / "util__square.c"));
-}
-
-TEST_F(FiltererStageTest, EachSurvivingFunctionGetsItsOwnOutput) {
-  // The point of splitting: two independent functions in one source file
-  // become two independent filtered outputs, each with only one live body.
-  writeConfig();
-  writeFile(databaseDir / "multi.c", "int add(int a, int b) { return a + b; }\n"
-                                     "int sub(int a, int b) { return a - b; }\n");
-
-  Filterer f(configPath.string());
-  f.run();
-
-  ASSERT_TRUE(fs::exists(filterDir / "multi__add.c"));
-  ASSERT_TRUE(fs::exists(filterDir / "multi__sub.c"));
-
-  std::string addOut = readFile(filterDir / "multi__add.c");
-  EXPECT_NE(addOut.find("return a + b;"), std::string::npos) << addOut;
-  EXPECT_NE(addOut.find("int sub(int a, int b) ;"), std::string::npos) << addOut;
-  EXPECT_EQ(addOut.find("return a - b;"), std::string::npos) << addOut;
-
-  std::string subOut = readFile(filterDir / "multi__sub.c");
-  EXPECT_NE(subOut.find("return a - b;"), std::string::npos) << subOut;
-  EXPECT_NE(subOut.find("int add(int a, int b) ;"), std::string::npos) << subOut;
-  EXPECT_EQ(subOut.find("return a + b;"), std::string::npos) << subOut;
+  EXPECT_TRUE(fs::exists(filterDir / "owner" / "repo" / "util.c"));
 }
 
 TEST_F(FiltererStageTest, RejectsFileBelowMinLoC) {
@@ -141,7 +117,7 @@ TEST_F(FiltererStageTest, AcceptsStdHeader) {
   Filterer f(configPath.string());
   f.run();
 
-  EXPECT_TRUE(fs::exists(filterDir / "uses_std__f.c"));
+  EXPECT_TRUE(fs::exists(filterDir / "uses_std.c"));
 }
 
 TEST_F(FiltererStageTest, AcceptsNonStdHeader) {
@@ -155,7 +131,7 @@ TEST_F(FiltererStageTest, AcceptsNonStdHeader) {
   Filterer f(configPath.string());
   f.run();
 
-  EXPECT_TRUE(fs::exists(filterDir / "uses_local__f.c"));
+  EXPECT_TRUE(fs::exists(filterDir / "uses_local.c"));
 }
 
 TEST_F(FiltererStageTest, HeaderSplicedSignatureDoesNotCrash) {
@@ -182,10 +158,7 @@ TEST_F(FiltererStageTest, HeaderSplicedSignatureDoesNotCrash) {
   Filterer f(configPath.string());
   f.run();
 
-  // foo's name token resolves into the header, so SplitConsumer's own
-  // isInMainFile gate (mirroring CountingVisitor's) never treats it as a
-  // survivor; only main is split out.
-  EXPECT_TRUE(fs::exists(filterDir / "spliced__main.c"));
+  EXPECT_TRUE(fs::exists(filterDir / "spliced.c"));
 }
 
 TEST_F(FiltererStageTest, StripsFunctionFailingComplexityThreshold) {
@@ -202,11 +175,8 @@ TEST_F(FiltererStageTest, StripsFunctionFailingComplexityThreshold) {
   Filterer f(configPath.string());
   f.run();
 
-  // plain fails the threshold outright, so it never becomes a split target.
-  EXPECT_FALSE(fs::exists(filterDir / "mixed__plain.c"));
-
-  ASSERT_TRUE(fs::exists(filterDir / "mixed__loopy.c"));
-  std::string out = readFile(filterDir / "mixed__loopy.c");
+  ASSERT_TRUE(fs::exists(filterDir / "mixed.c"));
+  std::string out = readFile(filterDir / "mixed.c");
   EXPECT_NE(out.find("for (int i = 0; i < n; i++)"), std::string::npos) << out;
   EXPECT_NE(out.find("int plain(int x) ;"), std::string::npos) << out;
   EXPECT_EQ(out.find("return x + 1;"), std::string::npos) << out;

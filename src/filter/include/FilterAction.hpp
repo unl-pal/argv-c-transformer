@@ -5,14 +5,16 @@
 #pragma once
 
 #include "ConfigParser.hpp"
+#include "CountingVisitor.hpp"
 #include "HeaderClosure.hpp"
-#include "SplitConsumer.hpp"
 
 #include <clang/AST/ASTConsumer.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
+#include <clang/Rewrite/Core/Rewriter.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/ADT/StringRef.h>
+#include <llvm/Support/raw_ostream.h>
 #include <map>
 #include <memory>
 #include <string>
@@ -21,10 +23,9 @@
 /**
  * @brief ASTFrontendAction that runs the full filter consumer chain.
  *
- * Wires together the consumer chain (count → filter → split-and-emit) over a
- * single parsed AST. Unlike the other pipeline stages, this action owns no
- * shared Rewriter: SplitConsumer builds one fresh per surviving function and
- * writes each result through {@code writeOutput} as soon as it's rendered.
+ * Wires together the three consumers (count → filter → strip bodies) over a
+ * single parsed AST. A shared {@code Rewriter} accumulates all edits; the
+ * final buffer is flushed to the output file in {@code EndSourceFileAction}.
  */
 class FilterAction : public clang::ASTFrontendAction {
 public:
@@ -34,16 +35,13 @@ public:
    * @param complexityConfig  Per-metric [min, max] ranges owned by {@code Filterer}.
    * @param featureConfig     Per-feature require/forbid/ignore gates owned by
    *                          {@code Filterer}.
-   * @param writeOutput       Called once per surviving function with its name
-   *                          and final source text; {@code Filterer} writes
-   *                          each to its own file.
+   * @param output            Destination file stream for the filtered output.
    */
   FilterAction(std::map<std::string, std::pair<int, int>> *complexityConfig,
-               std::map<std::string, FeatureGate> *featureConfig, SplitOutputWriter writeOutput);
+               std::map<std::string, FeatureGate> *featureConfig, llvm::raw_fd_ostream &output);
 
   /**
-   * @brief Builds a {@code MultiplexConsumer} containing the count → filter →
-   * split chain.
+   * @brief Builds a {@code MultiplexConsumer} containing all three filter passes.
    *
    * Creates the shared state ({@code toFilter}, {@code toRemove}) as
    * {@code shared_ptr}s and hands them to the consumers in pipeline order;
@@ -57,22 +55,33 @@ public:
                                                         llvm::StringRef filename) override;
 
   /**
-   * @brief Registers the header-closure preprocessor callback.
+   * @brief Attaches the {@code Rewriter} to the compiler before AST actions run.
    *
-   * Must run before any directive or macro is lexed, so it's wired here
-   * rather than in {@code CreateASTConsumer}.
+   * Must be called before any consumer can make edits, because the Rewriter
+   * needs the {@code SourceManager} and {@code LangOptions} that only exist
+   * once the compiler instance is fully set up.
    *
    * @param compiler  The active compiler instance.
    * @return Result of the parent implementation.
    */
   bool BeginSourceFileAction(clang::CompilerInstance &compiler) override;
 
+  /**
+   * @brief Flushes the Rewriter's edited buffer to the output file.
+   *
+   * Called after all consumers have finished. Writes the modified source
+   * text, with the bodies of filtered-out functions stripped, to the
+   * destination stream.
+   */
+  void EndSourceFileAction() override;
+
 private:
   std::map<std::string, std::pair<int, int>> *_ComplexityConfig;
   std::map<std::string, FeatureGate> *_FeatureConfig;
-  SplitOutputWriter _WriteOutput;
+  clang::Rewriter _Rewriter;
+  llvm::raw_fd_ostream &_Output;
   /// Shared between LocalHeaderPP (fills it during preprocessing) and
-  /// SplitConsumer (reads it once the AST is complete, once per target).
+  /// HeaderClosureConsumer (reads it once the AST is complete).
   std::shared_ptr<HeaderClosureState> _ClosureState;
 };
 
@@ -81,7 +90,7 @@ private:
  *
  * {@code ClangTool::run()} only calls {@code create()} on a
  * {@code FrontendActionFactory}, so this subclass stores the config maps and
- * output writer needed to construct each {@code FilterAction}.
+ * output stream needed to construct each {@code FilterAction}.
  */
 class FrontendFactoryWithArgs : public clang::tooling::FrontendActionFactory {
 public:
@@ -90,16 +99,16 @@ public:
    *
    * @param complexityConfig  Pointer to the per-metric [min, max] map owned by {@code Filterer}.
    * @param featureConfig     Pointer to the per-feature gate map owned by {@code Filterer}.
-   * @param writeOutput       Sink for each surviving function's split output.
+   * @param output            Reference to the output stream for the filtered file.
    */
   FrontendFactoryWithArgs(std::map<std::string, std::pair<int, int>> *complexityConfig,
                           std::map<std::string, FeatureGate> *featureConfig,
-                          SplitOutputWriter writeOutput);
+                          llvm::raw_fd_ostream &output);
 
   /**
    * @brief Called by {@code ClangTool} once per source file to create the action.
    *
-   * Returns a new {@code FilterAction} loaded with the config and output writer.
+   * Returns a new {@code FilterAction} loaded with the config and output stream.
    *
    * @return Owning pointer to the created action.
    */
@@ -108,5 +117,5 @@ public:
 private:
   std::map<std::string, std::pair<int, int>> *_ComplexityConfig;
   std::map<std::string, FeatureGate> *_FeatureConfig;
-  SplitOutputWriter _WriteOutput;
+  llvm::raw_fd_ostream &_Output;
 };

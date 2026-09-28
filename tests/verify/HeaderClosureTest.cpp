@@ -6,6 +6,7 @@
 #include "include/Transformer.hpp"
 #include "include/Verifier.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -72,8 +73,8 @@ protected:
     return buf.str();
   }
 
-  /** @brief Runs the full pipeline and returns the filter stage's output for
-   *  `functionName`, the sole surviving function split out of `name`. */
+  /** @brief Runs the full pipeline and returns the benchmark harnessing `functionName`
+   *  out of `name`; the filter stage's output is kept in filtered(). */
   std::string runPipeline(const std::string &name, const std::string &functionName) {
     Filterer f(configPath.string());
     f.run();
@@ -82,11 +83,10 @@ protected:
     t.run();
     Verifier v(configPath.string());
     _benchmarks = v.run();
-    fs::path splitName = fs::path(name).parent_path() /
-                         (fs::path(name).stem().string() + "__" + functionName +
-                          fs::path(name).extension().string());
-    _filtered = readFile(filterDir / splitName);
-    return readFile(benchmarkDir / splitName);
+    _filtered = readFile(filterDir / name);
+    std::string flat = fs::path(name).replace_extension().string();
+    std::replace(flat.begin(), flat.end(), '/', '_');
+    return readFile(benchmarkDir / (flat + "__" + functionName + ".c"));
   }
 
   int benchmarks() const { return _benchmarks; }
@@ -236,7 +236,7 @@ TEST_F(HeaderClosureTest, AlreadyPresentSystemHeaderIsNotDuplicatedByCanonicalFa
                          "int use(struct Box *b) { return (int)b->ts.tv_sec; }\n");
 
   Filterer(configPath.string()).run();
-  std::string out = readFile(filterDir / "use__use.c");
+  std::string out = readFile(filterDir / "use.c");
 
   EXPECT_NE(out.find("#include <linux/time.h>"), std::string::npos) << out;
   EXPECT_EQ(out.find("#include <time.h>"), std::string::npos)

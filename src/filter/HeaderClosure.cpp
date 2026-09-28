@@ -381,8 +381,8 @@ void collectIdentifiers(llvm::StringRef text, std::vector<std::string> &out) {
 // ---------------------------------------------------------------------------
 
 LocalHeaderPP::LocalHeaderPP(clang::SourceManager &SM, const clang::LangOptions &langOpts,
-                             std::shared_ptr<HeaderClosureState> state)
-    : _Mgr(SM), _LangOpts(langOpts), _State(state) {}
+                             clang::Rewriter &rewriter, std::shared_ptr<HeaderClosureState> state)
+    : _Mgr(SM), _LangOpts(langOpts), _Rewriter(rewriter), _State(state) {}
 
 void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &,
                                        llvm::StringRef FileName, bool IsAngled,
@@ -412,8 +412,7 @@ void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clan
     }
     debugLog(3, "[filter] inlining project-local include: " + FileName.str());
     _State->strippedLocalInclude = true;
-    _State->localIncludeRanges.push_back(
-        clang::CharSourceRange::getCharRange(HashLoc, FilenameRange.getEnd()));
+    _Rewriter.RemoveText(clang::CharSourceRange::getCharRange(HashLoc, FilenameRange.getEnd()));
     return;
   }
 

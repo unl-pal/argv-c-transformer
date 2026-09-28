@@ -79,47 +79,58 @@ bool Transformer::transformFile(std::filesystem::path path) {
     return false;
   }
 
-  std::filesystem::path srcPath = flattenedOutputPath(path);
-
-  std::error_code ec;
-  std::filesystem::create_directories(srcPath.parent_path());
-  llvm::raw_fd_ostream output(llvm::StringRef(srcPath.string()), ec);
-  if (ec) {
-    debugLog(0, "Cannot open output file " + srcPath.string() + ": " + ec.message());
-    return false;
-  }
-
   // Quoted #includes resolve against the source repo, not the filtered tree,
   // which mirrors only .c files. An unset databaseDir leaves this empty.
   std::vector<std::string> includeDirs =
       headerIndex ? collectLocalIncludeDirs(path, *headerIndex) : std::vector<std::string>{};
 
-  ArgsFrontendFactory factory(output, configuration.havoc);
-  bool ran = runToolOnFile(path.string(), factory, includeDirs);
-  output.close();
-  if (!ran) {
+  TransformOutput result;
+  ArgsFrontendFactory factory(result, configuration.havoc);
+  if (!runToolOnFile(path.string(), factory, includeDirs)) {
     debugLog(1, "[transform] clang tool failed on: " + path.string());
-    // The stream above already created/truncated srcPath.
-    cleanupPartialOutput(path);
+    return false;
+  }
+  if (result.entries.empty()) {
+    debugLog(1, "[transform] discarded (nothing harnessed): " + path.string());
     return false;
   }
 
-  if (harnessIsEmpty(srcPath)) {
-    debugLog(1, "[transform] discarded (harness empty, nothing havocked/harnessed): " +
-                    srcPath.string());
-    cleanupPartialOutput(path);
-    return false;
+  std::filesystem::path basePath = flattenedOutputPath(path);
+  std::filesystem::create_directories(basePath.parent_path());
+  for (const HarnessEntry &entry : result.entries) {
+    std::filesystem::path splitOutput = splitPath(basePath, entry.target);
+    std::error_code ec;
+    llvm::raw_fd_ostream out(llvm::StringRef(splitOutput.string()), ec);
+    if (ec) {
+      debugLog(0, "Cannot open output file " + splitOutput.string() + ": " + ec.message());
+      cleanupPartialOutput(path);
+      return false;
+    }
+    out << result.shared << renderHarnessMain(entry.body);
   }
   return true;
 }
 
+std::filesystem::path Transformer::splitPath(const std::filesystem::path &basePath,
+                                             const std::string &functionName) {
+  return basePath.parent_path() /
+         (basePath.stem().string() + "__" + functionName + basePath.extension().string());
+}
+
 void Transformer::cleanupPartialOutput(std::filesystem::path path) {
-  std::filesystem::path outPath = flattenedOutputPath(path);
-  // A top-level file flattens to its own name, so filterDir == transformDir
-  // makes the "partial output" the input itself.
-  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath)) return;
+  std::filesystem::path basePath = flattenedOutputPath(path);
+  std::string prefix = basePath.stem().string() + "__";
+  std::string ext = basePath.extension().string();
+  std::filesystem::path input = std::filesystem::weakly_canonical(path);
   std::error_code ec;
-  std::filesystem::remove(outPath, ec);
+  for (const std::filesystem::directory_entry &entry :
+       std::filesystem::directory_iterator(basePath.parent_path(), ec)) {
+    if (ec) break;
+    const std::filesystem::path &candidate = entry.path();
+    if (candidate.extension() != ext || !candidate.stem().string().starts_with(prefix)) continue;
+    if (std::filesystem::weakly_canonical(candidate) == input) continue; // filterDir == transformDir
+    std::filesystem::remove(candidate, ec);
+  }
 }
 
 void Transformer::collectCFiles(std::filesystem::path path,

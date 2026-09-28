@@ -89,9 +89,9 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  EXPECT_TRUE(fs::exists(benchmarkDir / "simple.c"));
-  EXPECT_TRUE(fs::exists(benchmarkDir / "simple.i"));
-  EXPECT_TRUE(fs::exists(benchmarkDir / "simple.yml"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "simple__add.c"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "simple__add.i"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "simple__add.yml"));
 
   // Verifier::writeHarnessHeader copies the shared harness header into
   // benchmarkDir once per run, and the #include for it must not survive into
@@ -102,10 +102,10 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   // arguments - that's fine, it's just a diagnostic string, not a real
   // dependency.
   EXPECT_TRUE(fs::exists(benchmarkDir / "argv_c_harness.h"));
-  EXPECT_EQ(readFile(benchmarkDir / "simple.i").find("#include"), std::string::npos);
+  EXPECT_EQ(readFile(benchmarkDir / "simple__add.i").find("#include"), std::string::npos);
 
-  std::string yml = readFile(benchmarkDir / "simple.yml");
-  EXPECT_NE(yml.find("input_files: 'simple.i'"), std::string::npos);
+  std::string yml = readFile(benchmarkDir / "simple__add.yml");
+  EXPECT_NE(yml.find("input_files: 'simple__add.i'"), std::string::npos);
   EXPECT_NE(yml.find("format_version: '2.0'"), std::string::npos);
   EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
   EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
@@ -127,8 +127,8 @@ TEST_F(VerifyStageTest, HeaderDefinedStructIsOpaqueAndStillCompiles) {
   int count = transformAndVerify();
 
   ASSERT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "area.c"));
-  std::string out = readFile(benchmarkDir / "area.c");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "area__tag.c"));
+  std::string out = readFile(benchmarkDir / "area__tag.c");
 
   // The include is gone, so the definition is gone with it.
   EXPECT_EQ(out.find("#include \"shapes.h\""), std::string::npos);
@@ -137,7 +137,7 @@ TEST_F(VerifyStageTest, HeaderDefinedStructIsOpaqueAndStillCompiles) {
   EXPECT_EQ(out.find("sizeof(struct Rect)"), std::string::npos);
   EXPECT_NE(out.find("__HAVOC_BLOCK_MAX"), std::string::npos);
   // A produced benchmark means checkCompilable passed under keepCompilesOnly.
-  EXPECT_TRUE(fs::exists(benchmarkDir / "area.i"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "area__tag.i"));
 }
 
 TEST_F(VerifyStageTest, HeaderTypedefStructIsForwardDeclaredAndStillCompiles) {
@@ -153,8 +153,8 @@ TEST_F(VerifyStageTest, HeaderTypedefStructIsForwardDeclaredAndStillCompiles) {
   int count = transformAndVerify();
 
   ASSERT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "span.c"));
-  std::string out = readFile(benchmarkDir / "span.c");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "span__nonEmpty.c"));
+  std::string out = readFile(benchmarkDir / "span__nonEmpty.c");
 
   EXPECT_EQ(out.find("#include \"types.h\""), std::string::npos);
   // The typedef name is re-declared, so the cast below has something to name.
@@ -168,7 +168,7 @@ TEST_F(VerifyStageTest, HeaderTypedefStructIsForwardDeclaredAndStillCompiles) {
   EXPECT_EQ(out.find("sizeof(Range)"), std::string::npos);
   // A produced benchmark means checkCompilable passed under keepCompilesOnly:
   // without the typedef the cast is an unknown type name and this file is gone.
-  EXPECT_TRUE(fs::exists(benchmarkDir / "span.i"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "span__nonEmpty.i"));
 }
 
 TEST_F(VerifyStageTest, HeaderEnumPointerIsForwardDeclaredAndStillCompiles) {
@@ -183,8 +183,8 @@ TEST_F(VerifyStageTest, HeaderEnumPointerIsForwardDeclaredAndStillCompiles) {
   int count = transformAndVerify();
 
   ASSERT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "pick.c"));
-  std::string out = readFile(benchmarkDir / "pick.c");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "pick__is_set.c"));
+  std::string out = readFile(benchmarkDir / "pick__is_set.c");
 
   EXPECT_EQ(out.find("#include \"palette.h\""), std::string::npos);
   // The enum tag is hoisted, so the opaque cast to enum Color* has something to
@@ -194,7 +194,7 @@ TEST_F(VerifyStageTest, HeaderEnumPointerIsForwardDeclaredAndStillCompiles) {
   EXPECT_NE(out.find("(enum Color *)__h"), std::string::npos);
   EXPECT_NE(out.find("unsigned char __h"), std::string::npos);
   // A produced benchmark means checkCompilable passed under keepCompilesOnly.
-  EXPECT_TRUE(fs::exists(benchmarkDir / "pick.i"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "pick__is_set.i"));
 }
 
 TEST_F(VerifyStageTest, MainFileTypedefIsNotRedeclared) {
@@ -208,7 +208,7 @@ TEST_F(VerifyStageTest, MainFileTypedefIsNotRedeclared) {
   int count = transformAndVerify();
 
   ASSERT_GE(count, 1);
-  std::string out = readFile(benchmarkDir / "local.c");
+  std::string out = readFile(benchmarkDir / "local__nonEmpty.c");
 
   EXPECT_EQ(out.find("__havoc_Range"), std::string::npos)
       << "synthesized tag leaked for a main-file typedef; output was:\n"
@@ -219,7 +219,7 @@ TEST_F(VerifyStageTest, MainFileTypedefIsNotRedeclared) {
   // so its presence is not the signal — the buffer declaration is.)
   EXPECT_NE(out.find("Range __h"), std::string::npos);
   EXPECT_EQ(out.find("unsigned char __h"), std::string::npos);
-  EXPECT_TRUE(fs::exists(benchmarkDir / "local.i"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "local__nonEmpty.i"));
 }
 
 TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
@@ -234,8 +234,8 @@ TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
   int count = transformAndVerify();
 
   ASSERT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "prints.i"));
-  std::string i = readFile(benchmarkDir / "prints.i");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "prints__identity.i"));
+  std::string i = readFile(benchmarkDir / "prints__identity.i");
   EXPECT_EQ(i.find("_Float"), std::string::npos);
 }
 
@@ -253,8 +253,8 @@ TEST_F(VerifyStageTest, PreprocessDedupesExactDuplicateTypedefLines) {
   int count = transformAndVerify();
 
   ASSERT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "dup.i"));
-  std::string i = readFile(benchmarkDir / "dup.i");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "dup__identity.i"));
+  std::string i = readFile(benchmarkDir / "dup__identity.i");
   int occurrences = 0;
   for (size_t pos = 0; (pos = i.find("typedef unsigned int myuint;", pos)) != std::string::npos;
        pos += 1)
@@ -275,7 +275,7 @@ TEST_F(VerifyStageTest, PreprocessKeepsDifferingTypedefsOfSameName) {
 
   // The second, conflicting redeclaration makes this fail to compile, so
   // under keepCompilesOnly (the default) it is never finalized to a .i.
-  EXPECT_FALSE(fs::exists(benchmarkDir / "conflict.i"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "conflict__identity.i"));
 }
 
 // ---------------------------------------------------------------------------
@@ -297,8 +297,8 @@ TEST_F(VerifyStageTest, LoopOnlySourceGetsTerminationNotOverflow) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "loopy.yml"));
-  std::string yml = readFile(benchmarkDir / "loopy.yml");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "loopy__spin.yml"));
+  std::string yml = readFile(benchmarkDir / "loopy__spin.yml");
   EXPECT_NE(yml.find("termination.prp"), std::string::npos);
   EXPECT_EQ(yml.find("no-overflow.prp"), std::string::npos);
 }
@@ -310,8 +310,8 @@ TEST_F(VerifyStageTest, ArithmeticOnlySourceGetsOverflowNotTermination) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "mul.yml"));
-  std::string yml = readFile(benchmarkDir / "mul.yml");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "mul__scale.yml"));
+  std::string yml = readFile(benchmarkDir / "mul__scale.yml");
   EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
   EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
 }
@@ -324,8 +324,8 @@ TEST_F(VerifyStageTest, PlainSourceGetsNoProperties) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "flat.yml"));
-  std::string yml = readFile(benchmarkDir / "flat.yml");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "flat__identity.yml"));
+  std::string yml = readFile(benchmarkDir / "flat__identity.yml");
   EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
   EXPECT_EQ(yml.find("no-overflow.prp"), std::string::npos);
   EXPECT_NE(yml.find("properties: []\n"), std::string::npos);
@@ -348,8 +348,8 @@ TEST_F(VerifyStageTest, LoopAndArithmeticAcrossFunctionsGetsBoth) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "both.yml"));
-  std::string yml = readFile(benchmarkDir / "both.yml");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "both__spin.yml"));
+  std::string yml = readFile(benchmarkDir / "both__spin.yml");
   EXPECT_NE(yml.find("termination.prp"), std::string::npos);
   EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
 }
@@ -369,8 +369,8 @@ TEST_F(VerifyStageTest, PointerDerefSourceGetsMemsafetyProperty) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "deref.yml"));
-  std::string yml = readFile(benchmarkDir / "deref.yml");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "deref__access.yml"));
+  std::string yml = readFile(benchmarkDir / "deref__access.yml");
   EXPECT_NE(yml.find("valid-memsafety.prp"), std::string::npos);
 }
 
@@ -386,8 +386,8 @@ TEST_F(VerifyStageTest, MallocFreeSourceGetsMemsafetyProperty) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "alloc.yml"));
-  std::string yml = readFile(benchmarkDir / "alloc.yml");
+  ASSERT_TRUE(fs::exists(benchmarkDir / "alloc__make_and_drop.yml"));
+  std::string yml = readFile(benchmarkDir / "alloc__make_and_drop.yml");
   EXPECT_NE(yml.find("valid-memsafety.prp"), std::string::npos);
 }
 
@@ -395,8 +395,8 @@ TEST_F(VerifyStageTest, DegradedFunctionIsStrippedAndUnharnessed) {
   // worker's only loop exists to drive the void call to helper; havocking
   // drops that call and prunes the emptied loop, so worker falls below a
   // ForLoops >= 1 threshold it met before the transform. helper keeps its
-  // loop. The verify stage must strip worker, drop its call from the
-  // generated main, and still produce a benchmark around helper.
+  // loop. The verify stage must strip worker everywhere, discard worker's own
+  // benchmark (its harness empties), and still produce helper's.
   writeConfig("[Complexity Requirements]\nForLoops = 1,9999\n");
   writeFile(filterDir / "degraded.c", "void helper(int x) {\n"
                                       "  for (int i = 0; i < x; i++) x += i;\n"
@@ -409,10 +409,11 @@ TEST_F(VerifyStageTest, DegradedFunctionIsStrippedAndUnharnessed) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "degraded.c"));
+  ASSERT_TRUE(fs::exists(benchmarkDir / "degraded__helper.c"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "degraded__worker.c"));
 
-  std::string src = readFile(benchmarkDir / "degraded.c");
-  // helper is still harnessed; worker's harness call and body are gone.
+  std::string src = readFile(benchmarkDir / "degraded__helper.c");
+  // helper is still harnessed; worker's body is stripped in its sibling's benchmark too.
   EXPECT_NE(src.find("helper(__VERIFIER_nondet_int());"), std::string::npos);
   EXPECT_EQ(src.find("worker(__VERIFIER_nondet_int());"), std::string::npos);
   EXPECT_EQ(src.find("return n;"), std::string::npos);
@@ -434,8 +435,10 @@ TEST_F(VerifyStageTest, HarnessEmptyAfterRepairIsDiscarded) {
   int count = transformAndVerify();
 
   EXPECT_EQ(count, 0);
-  EXPECT_FALSE(fs::exists(benchmarkDir / "degraded.c"));
-  EXPECT_FALSE(fs::exists(benchmarkDir / "degraded.yml"));
+  for (const char *name : {"degraded__helper", "degraded__worker"}) {
+    EXPECT_FALSE(fs::exists(benchmarkDir / (std::string(name) + ".c")));
+    EXPECT_FALSE(fs::exists(benchmarkDir / (std::string(name) + ".yml")));
+  }
 }
 
 TEST_F(VerifyStageTest, KeepCompilesOnlyDiscardsUndefinedTypes) {
@@ -454,8 +457,8 @@ TEST_F(VerifyStageTest, KeepCompilesOnlyDiscardsUndefinedTypes) {
   int count = transformAndVerify();
 
   EXPECT_EQ(count, 0);
-  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.c"));
-  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.yml"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype__process.c"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype__process.yml"));
 }
 
 TEST_F(VerifyStageTest, AssertRewriteAddsUnreachCallProperty) {
@@ -473,17 +476,17 @@ TEST_F(VerifyStageTest, AssertRewriteAddsUnreachCallProperty) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "checked.c"));
-  ASSERT_TRUE(fs::exists(benchmarkDir / "checked.yml"));
+  ASSERT_TRUE(fs::exists(benchmarkDir / "checked__add.c"));
+  ASSERT_TRUE(fs::exists(benchmarkDir / "checked__add.yml"));
 
-  std::string src = readFile(benchmarkDir / "checked.c");
+  std::string src = readFile(benchmarkDir / "checked__add.c");
   // reach_error() is defined unconditionally in argv_c_harness.h now, not
   // per-file; only the rewritten call site and the runtime include remain
   // in the .c itself.
   EXPECT_NE(src.find("if (!(r >= a)) reach_error();"), std::string::npos);
   EXPECT_NE(src.find("#include \"argv_c_harness.h\""), std::string::npos);
 
-  std::string yml = readFile(benchmarkDir / "checked.yml");
+  std::string yml = readFile(benchmarkDir / "checked__add.yml");
   EXPECT_NE(yml.find("unreach-call.prp"), std::string::npos);
 }
 
@@ -498,9 +501,9 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "withmain.c"));
+  ASSERT_TRUE(fs::exists(benchmarkDir / "withmain__main.c"));
 
-  std::string src = readFile(benchmarkDir / "withmain.c");
+  std::string src = readFile(benchmarkDir / "withmain__main.c");
   EXPECT_NE(src.find("original_main(argc, __havoc_argv_fill(argc));"), std::string::npos);
 }
 
@@ -523,7 +526,7 @@ TEST_F(VerifyStageTest, KeepCompilesOnlyFalseKeepsNonCompilingSource) {
   int count = transformAndVerify();
 
   EXPECT_EQ(count, 0);
-  EXPECT_TRUE(fs::exists(benchmarkDir / "badtype.c"));
-  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.yml"));
-  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.i"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "badtype__process.c"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype__process.yml"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype__process.i"));
 }

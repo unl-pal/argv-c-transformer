@@ -59,14 +59,11 @@ struct HeaderClosureState {
   std::vector<std::pair<std::string, clang::SourceLocation>> macroUses;
   /// Every #include seen anywhere in the TU, keyed by the file it pulled in.
   std::unordered_map<const clang::FileEntry *, IncludeInfo> includedFrom;
-  /// Main-file project-local #include directives, recorded (not yet removed)
-  /// so every per-target split output can strip them independently.
-  std::vector<clang::CharSourceRange> localIncludeRanges;
 };
 
 /**
- * @brief PPCallbacks hook feeding the closure: records project-local includes
- * for later removal, system includes reachable through them, and local macros.
+ * @brief PPCallbacks hook feeding the closure: strips local includes, records
+ * system includes reachable through them, and captures local macros.
  */
 class LocalHeaderPP : public clang::PPCallbacks {
 public:
@@ -75,13 +72,14 @@ public:
    *
    * @param SM       Source manager for the translation unit.
    * @param langOpts Language options, needed to re-lex captured spellings.
+   * @param rewriter Shared rewriter the include directives are removed through.
    * @param state    Output state, read later by HeaderClosureConsumer.
    */
   LocalHeaderPP(clang::SourceManager &SM, const clang::LangOptions &langOpts,
-                std::shared_ptr<HeaderClosureState> state);
+                clang::Rewriter &rewriter, std::shared_ptr<HeaderClosureState> state);
 
-  /** @brief Records a main-file project-local include for later removal;
-   *  records angled includes written inside a local header for re-emission. */
+  /** @brief Removes project-local includes from the main file; records angled
+   *  includes written inside a local header for later re-emission. */
   void InclusionDirective(clang::SourceLocation HashLoc, const clang::Token &IncludeTok,
                           llvm::StringRef FileName, bool IsAngled,
                           clang::CharSourceRange FilenameRange, clang::OptionalFileEntryRef File,
@@ -99,6 +97,7 @@ public:
 private:
   clang::SourceManager &_Mgr;
   const clang::LangOptions &_LangOpts;
+  clang::Rewriter &_Rewriter;
   std::shared_ptr<HeaderClosureState> _State;
 };
 

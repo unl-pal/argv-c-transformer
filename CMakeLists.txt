@@ -73,7 +73,6 @@ set(SOURCE_FILTER
   src/filter/HeaderClosure.cpp
   src/filter/RemoveConsumer.cpp
   src/filter/RemoveVisitor.cpp
-  src/filter/SplitConsumer.cpp
 )
 
 set(SOURCE_TRANSFORM

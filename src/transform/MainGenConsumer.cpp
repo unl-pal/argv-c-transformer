@@ -77,11 +77,16 @@ private:
 
 } // namespace
 
+std::string renderHarnessMain(const std::string &body) {
+  return "\nint main(void) {\n" + body + "  return 0;\n}\n";
+}
+
 MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                                  std::shared_ptr<std::set<std::string>> neededFwdDecls,
+                                 std::shared_ptr<std::vector<HarnessEntry>> entries,
                                  clang::Rewriter &rewriter, const HavocBounds &havoc)
-    : _DiscardedFunctions(discardedFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter),
-      _Havoc(havoc) {}
+    : _DiscardedFunctions(discardedFunctions), _NeededFwdDecls(neededFwdDecls),
+      _Entries(entries), _Rewriter(rewriter), _Havoc(havoc) {}
 
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &mgr = Context.getSourceManager();
@@ -110,7 +115,6 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     if (semiLoc.isValid()) _Rewriter.RemoveText(clang::SourceRange(func->getBeginLoc(), semiLoc));
   }
 
-  std::string harness;
   for (const clang::FunctionDecl *func : defined) {
     if (_DiscardedFunctions->count(func->getNameAsString())) {
       //remove functions stripped by havoc stage
@@ -119,7 +123,7 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     }
     if (func->isMain()) {
-      harness += genMainHarness(func);
+      _Entries->push_back({"main", genMainHarness(func)});
       continue;
     }
     if (func->isVariadic()) {
@@ -133,12 +137,9 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
                       " not harnessed");
       continue;
     }
-    harness += call.prologue;
-    harness += "  " + func->getNameAsString() + "(" + call.args + ");\n";
+    std::string name = func->getNameAsString();
+    _Entries->push_back({name, call.prologue + "  " + name + "(" + call.args + ");\n"});
   }
-
-  std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
-  _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainFn);
 
   // emitted here, not the shared header, so bounds survive hand-editing of the .c
   std::string prelude = "#define __HAVOC_ARGC_MIN " + std::to_string(_Havoc.argcMin) + "\n" +

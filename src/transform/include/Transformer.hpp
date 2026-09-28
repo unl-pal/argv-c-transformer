@@ -40,9 +40,10 @@ struct transformConfigs {
  *
  * Reads a config file, walks a directory tree of filtered C source files, and
  * runs the full Clang AST pipeline on each one: replacing dead calls with
- * `__VERIFIER_nondet_*`, injecting verifier declarations, and ensuring a
- * `main()` exists. Transformed output is written to transformDir under a
- * single flattened filename per input (see flattenedOutputPath).
+ * `__VERIFIER_nondet_*`, injecting verifier declarations, and generating a
+ * `main()` harness. Each harnessed function becomes its own output in
+ * transformDir, {@code <flattened stem>__<function>.c} (see splitPath); the
+ * outputs differ only in which function their `main` calls.
  *
  * Transform is purely source→source; benchmark finalization (metric
  * re-check, compile check, .yml task files, preprocessing) happens in the
@@ -65,26 +66,36 @@ public:
    * @brief Runs the full Clang AST pipeline on a single C file.
    *
    * Builds a ClangTool invocation, runs the TransformAction consumer chain,
-   * and writes the rewritten source to transformDir. A file whose generated
-   * main harnesses nothing is discarded immediately (see harnessIsEmpty).
+   * and writes one output per harnessed function to transformDir. A file
+   * that harnesses nothing produces no output.
    *
    * @param path Path to the filtered C source file to transform.
-   * @return true if a transformed .c was produced.
+   * @return true if at least one transformed .c was produced.
    */
   bool transformFile(std::filesystem::path path);
 
   /**
-   * @brief Computes the flattened transformDir output path for a filtered file.
+   * @brief Computes the flattened transformDir base path for a filtered file.
+   *
+   * Not written to directly; each output derives from it via {@code splitPath}.
    *
    * @param path Path to the filtered C source file.
-   * @return The {@code transformDir/<flattened>.c} path the transform writes to.
+   * @return {@code transformDir/<flattened>.c}.
    */
   std::filesystem::path flattenedOutputPath(std::filesystem::path path);
 
   /**
-   * @brief Removes any .c a crashed or timed-out child left behind.
+   * @brief Derives one harnessed function's output path from a base path.
    *
-   * @param path Path to the filtered C source file whose output to clean up.
+   * @return {@code <basePath's dir>/<stem>__<functionName><ext>}.
+   */
+  static std::filesystem::path splitPath(const std::filesystem::path &basePath,
+                                         const std::string &functionName);
+
+  /**
+   * @brief Removes every output a crashed or timed-out child left behind for one input.
+   *
+   * @param path Path to the filtered C source file whose outputs to clean up.
    */
   void cleanupPartialOutput(std::filesystem::path path);
 
