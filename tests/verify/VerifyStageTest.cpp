@@ -331,12 +331,11 @@ TEST_F(VerifyStageTest, PlainSourceGetsNoProperties) {
   EXPECT_NE(yml.find("properties: []\n"), std::string::npos);
 }
 
-TEST_F(VerifyStageTest, LoopAndArithmeticAcrossFunctionsGetsBoth) {
-  // The two signals live in different functions; selectProperties scans the
-  // whole per-file counts map, so both should be picked up regardless of
-  // which function iteration order visits first. spin's loop must have an
-  // observable side effect (mutating the parameter n, not just a loop-local
-  // var), or HavocCallsVisitor's no-op pruning drops the whole loop/function.
+TEST_F(VerifyStageTest, PropertiesFollowTheHarnessedFunctionOnly) {
+  // Both bodies are in both benchmarks, but only the harnessed one runs, so
+  // spin's loop must not put termination on scale's task. spin's loop must
+  // have an observable side effect (mutating the parameter n), or
+  // HavocCallsVisitor's no-op pruning drops it.
   writeFile(filterDir / "both.c", "int spin(int n) {\n"
                                   "  for (int i = 0; i < n; i++) {\n"
                                   "    n += i;\n"
@@ -347,11 +346,39 @@ TEST_F(VerifyStageTest, LoopAndArithmeticAcrossFunctionsGetsBoth) {
 
   int count = transformAndVerify();
 
-  EXPECT_GE(count, 1);
+  EXPECT_EQ(count, 1); // one input file
   ASSERT_TRUE(fs::exists(benchmarkDir / "both__spin.yml"));
-  std::string yml = readFile(benchmarkDir / "both__spin.yml");
-  EXPECT_NE(yml.find("termination.prp"), std::string::npos);
-  EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "both__scale.yml"));
+  std::string spinYml = readFile(benchmarkDir / "both__spin.yml");
+  std::string scaleYml = readFile(benchmarkDir / "both__scale.yml");
+  EXPECT_NE(spinYml.find("termination.prp"), std::string::npos) << spinYml;
+  EXPECT_NE(scaleYml.find("no-overflow.prp"), std::string::npos) << scaleYml;
+  EXPECT_EQ(scaleYml.find("termination.prp"), std::string::npos) << scaleYml;
+}
+
+TEST_F(VerifyStageTest, EachHarnessedFunctionGetsItsOwnBenchmark) {
+  writeFile(filterDir / "multi.c", "int add(int a, int b) { return a + b; }\n"
+                                   "int sub(int a, int b) { return a - b; }\n");
+
+  transformAndVerify();
+
+  for (const char *name : {"multi__add", "multi__sub"})
+    for (const char *ext : {".c", ".yml", ".i"})
+      EXPECT_TRUE(fs::exists(benchmarkDir / (std::string(name) + ext))) << name << ext;
+  EXPECT_FALSE(fs::exists(benchmarkDir / "multi.c")); // combined file is only for the compile check
+
+  std::string addOut = readFile(benchmarkDir / "multi__add.c");
+  std::string subOut = readFile(benchmarkDir / "multi__sub.c");
+  std::string addMain = addOut.substr(addOut.find("int main(void)"));
+  std::string subMain = subOut.substr(subOut.find("int main(void)"));
+  EXPECT_NE(addMain.find("add("), std::string::npos) << addOut;
+  EXPECT_EQ(addMain.find("sub("), std::string::npos) << addOut;
+  EXPECT_NE(subMain.find("sub("), std::string::npos) << subOut;
+  EXPECT_EQ(subMain.find("add("), std::string::npos) << subOut;
+
+  // Siblings' bodies are kept: the benchmarks differ only in main.
+  EXPECT_EQ(addOut.substr(0, addOut.find("int main(void)")),
+            subOut.substr(0, subOut.find("int main(void)")));
 }
 
 TEST_F(VerifyStageTest, PointerDerefSourceGetsMemsafetyProperty) {
@@ -457,6 +484,7 @@ TEST_F(VerifyStageTest, KeepCompilesOnlyDiscardsUndefinedTypes) {
   int count = transformAndVerify();
 
   EXPECT_EQ(count, 0);
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.c"));
   EXPECT_FALSE(fs::exists(benchmarkDir / "badtype__process.c"));
   EXPECT_FALSE(fs::exists(benchmarkDir / "badtype__process.yml"));
 }
@@ -501,9 +529,9 @@ TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
   int count = transformAndVerify();
 
   EXPECT_GE(count, 1);
-  ASSERT_TRUE(fs::exists(benchmarkDir / "withmain__main.c"));
+  ASSERT_TRUE(fs::exists(benchmarkDir / "withmain__original_main.c"));
 
-  std::string src = readFile(benchmarkDir / "withmain__main.c");
+  std::string src = readFile(benchmarkDir / "withmain__original_main.c");
   EXPECT_NE(src.find("original_main(argc, __havoc_argv_fill(argc));"), std::string::npos);
 }
 
@@ -526,7 +554,9 @@ TEST_F(VerifyStageTest, KeepCompilesOnlyFalseKeepsNonCompilingSource) {
   int count = transformAndVerify();
 
   EXPECT_EQ(count, 0);
-  EXPECT_TRUE(fs::exists(benchmarkDir / "badtype__process.c"));
-  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype__process.yml"));
-  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype__process.i"));
+  // Kept whole, unsplit: the compile check runs before the split.
+  EXPECT_TRUE(fs::exists(benchmarkDir / "badtype.c"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.yml"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype.i"));
+  EXPECT_FALSE(fs::exists(benchmarkDir / "badtype__process.c"));
 }

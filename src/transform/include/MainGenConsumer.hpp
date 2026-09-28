@@ -13,16 +13,6 @@
 #include <memory>
 #include <set>
 #include <string>
-#include <vector>
-
-/** @brief One harnessed function: its name and the {@code main} body statements that call it. */
-struct HarnessEntry {
-  std::string target;
-  std::string body;
-};
-
-/** @brief Wraps harness statements in the generated {@code int main(void)} appended at end of file. */
-std::string renderHarnessMain(const std::string &body);
 
 /**
  * @brief ASTConsumer that generates the benchmark entry point.
@@ -31,10 +21,10 @@ std::string renderHarnessMain(const std::string &body);
  * {@code #include "argv_c_harness.h"} prelude every transformed file needs
  *
  * Any pre-existing {@code main} (including its forward declarations) is renamed
- * to {@code original_main}. Every function defined in the file is then
- * recorded as a {@code HarnessEntry} calling it with {@code __VERIFIER_nondet_*}
- * arguments; the {@code main} itself is not written into the buffer, so each
- * entry can become its own benchmark. Functions with a parameter type that has no nondet equivalent
+ * to {@code original_main}, then a fresh {@code int main(void)} is appended that
+ * calls every function defined in the file with {@code __VERIFIER_nondet_*}
+ * arguments, each call and its setup in its own top-level block: the verify
+ * stage splits the file into one benchmark per block. Functions with a parameter type that has no nondet equivalent
  * (pointers, structs, ...), variadic functions, and functions
  * {@code HavocCallsConsumer} discarded (a no-op body, or an unhavockable
  * call) are skipped. For {@code original_main(int, char**)}, a synthesized
@@ -52,18 +42,16 @@ public:
    *        harnessed pointer parameter's prototype-scope struct tag needs,
    *        shared with {@code HavocCallsVisitor}. Emitted into the same
    *        prelude as the __HAVOC_* macros.
-   * @param entries        Output; one entry per harnessed function, in source order.
    * @param rewriter       Shared rewriter for modifying the source buffer.
    * @param havoc          Bounds emitted as the __HAVOC_* macro definitions
    *                       ahead of the argv_c_harness.h #include.
    */
   MainGenConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
-                  std::shared_ptr<std::set<std::string>> neededFwdDecls,
-                  std::shared_ptr<std::vector<HarnessEntry>> entries, clang::Rewriter &rewriter,
+                  std::shared_ptr<std::set<std::string>> neededFwdDecls, clang::Rewriter &rewriter,
                   const HavocBounds &havoc = {});
 
   /**
-   * @brief Renames an existing {@code main} and records a harness entry per function.
+   * @brief Renames an existing {@code main} and appends the generated harness main.
    *
    * Iterates all declarations in the translation unit, collecting functions with
    * definitions. Each is harnessed according to its signature: primitive-param
@@ -122,9 +110,7 @@ private:
 
   std::shared_ptr<std::set<std::string>> _DiscardedFunctions;
   std::shared_ptr<std::set<std::string>> _NeededFwdDecls;
-  std::shared_ptr<std::vector<HarnessEntry>> _Entries;
   clang::Rewriter &_Rewriter;
-  unsigned _LocalCounter = 0; // unique across entries, so any set of them can share one main
-
+  unsigned _LocalCounter = 0;
   HavocBounds _Havoc;
 };

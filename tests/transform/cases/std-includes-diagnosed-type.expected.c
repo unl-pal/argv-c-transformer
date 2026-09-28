@@ -12,6 +12,8 @@ void set_mode(void) {
 }
 
 int main(void) {
-  set_mode();
+  {
+    set_mode();
+  }
   return 0;
 }

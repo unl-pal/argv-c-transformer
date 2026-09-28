@@ -101,17 +101,12 @@ TEST_P(TransformGolden, MatchesExpected) {
 
   // The input's real path is used as the tool's file name so that quoted
   // includes resolve against the cases directory.
-  TransformOutput result;
+  std::string out;
+  llvm::raw_string_ostream os(out);
   bool ok = clang::tooling::runToolOnCodeWithArgs(
-      std::make_unique<TransformAction>(result), code, args, testCase.input.string(),
-      "transform-test", std::make_shared<clang::PCHContainerOperations>());
+      std::make_unique<TransformAction>(os), code, args, testCase.input.string(), "transform-test",
+      std::make_shared<clang::PCHContainerOperations>());
   ASSERT_TRUE(ok) << "transform tool failed for " << testCase.input;
-
-  // Every harness in one main, so a golden shows all of a case's entries at once.
-  std::string allBodies;
-  for (const HarnessEntry &entry : result.entries)
-    allBodies += entry.body;
-  std::string out = result.shared + renderHarnessMain(allBodies);
 
   if (std::getenv("UPDATE_GOLDENS")) {
     std::ofstream(testCase.expected) << out;

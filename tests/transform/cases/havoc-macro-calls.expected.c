@@ -35,11 +35,23 @@ CALLER(in_body)
 
 
 int main(void) {
-  helper(__VERIFIER_nondet_int());
-  validate(__VERIFIER_nondet_int());
-  log_it(__VERIFIER_nondet_int());
-  in_arg(__VERIFIER_nondet_int());
-  whole_use(__VERIFIER_nondet_int());
-  in_body(__VERIFIER_nondet_int());
+  {
+    helper(__VERIFIER_nondet_int());
+  }
+  {
+    validate(__VERIFIER_nondet_int());
+  }
+  {
+    log_it(__VERIFIER_nondet_int());
+  }
+  {
+    in_arg(__VERIFIER_nondet_int());
+  }
+  {
+    whole_use(__VERIFIER_nondet_int());
+  }
+  {
+    in_body(__VERIFIER_nondet_int());
+  }
   return 0;
 }

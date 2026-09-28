@@ -5,7 +5,6 @@
 #pragma once
 
 #include "HavocBounds.hpp"
-#include "MainGenConsumer.hpp"
 
 #include <clang/AST/ASTConsumer.h>
 #include <clang/Basic/LangOptions.h>
@@ -22,34 +21,25 @@
 #include <memory>
 #include <set>
 #include <string>
-#include <vector>
-
-/**
- * @brief A transformed file before it is split into benchmarks: the edited
- * source every benchmark shares, plus one harness per function. A benchmark
- * is {@code shared + renderHarnessMain(entry.body)}.
- */
-struct TransformOutput {
-  std::string shared;
-  std::vector<HarnessEntry> entries;
-};
 
 /**
  * @brief ASTFrontendAction that drives the transform consumer pipeline.
  *
  * Owns the Rewriter shared by all consumers, registers the preprocessor
- * callbacks, and fills a {@code TransformOutput} once all consumers have run.
+ * callbacks, and writes the rewritten source to output once all consumers
+ * have run.
  */
 class TransformAction : public clang::ASTFrontendAction {
 public:
   /**
-   * @brief Constructs the action, binding the output.
+   * @brief Constructs the action, binding the output stream.
    *
-   * @param output Filled with the shared source and the harness entries.
+   * @param output Stream the transformed source is written to (a file in
+   *               production, a string stream in tests).
    * @param havoc  Bounds MainGenConsumer emits as __HAVOC_* macros; defaults
    *               match a bare (config-free) transform run.
    */
-  TransformAction(TransformOutput &output, const HavocBounds &havoc = {});
+  TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc = {});
 
   /**
    * @brief Builds the multiplexed consumer chain for the transform pipeline.
@@ -76,34 +66,34 @@ public:
   bool BeginSourceFileAction(clang::CompilerInstance &compiler) override;
 
   /**
-   * @brief Writes the Rewriter's edited buffer to {@code output.shared} after all consumers have run.
+   * @brief Writes the Rewriter's edited buffer to output after all consumers have run.
    */
   void EndSourceFileAction() override;
 
 private:
-  TransformOutput &_Output;
-  std::shared_ptr<std::vector<HarnessEntry>> _Entries;
+  llvm::raw_ostream &_Output;
   clang::Rewriter _Rewriter;
   std::shared_ptr<std::set<std::string>> _UnresolvedTypeNames;
   HavocBounds _Havoc;
 };
 
 /**
- * @brief Carries the output into Clang's tool runner.
+ * @brief Carries the output stream into Clang's tool runner.
  *
  * Clang's {@code ClangTool::run()} only knows how to call {@code create()} on
- * a {@code FrontendActionFactory}. This subclass stores the output so that
- * each {@code TransformAction} it creates can fill it without it being a global.
+ * a {@code FrontendActionFactory}. This subclass stores the output stream so
+ * that each {@code TransformAction} it creates can write the rewritten source
+ * without that stream being a global.
  */
 class ArgsFrontendFactory : public clang::tooling::FrontendActionFactory {
 public:
   /**
-   * @brief Constructs the factory, binding the output.
+   * @brief Constructs the factory, binding the output stream.
    *
-   * @param output Filled by the TransformAction this factory creates.
+   * @param output Reference to the output stream for the transformed file.
    * @param havoc  Bounds forwarded to each TransformAction this factory creates.
    */
-  ArgsFrontendFactory(TransformOutput &output, const HavocBounds &havoc = {});
+  ArgsFrontendFactory(llvm::raw_ostream &output, const HavocBounds &havoc = {});
 
   /**
    * @brief Called by {@code ClangTool} once per source file to create the action.
@@ -113,7 +103,7 @@ public:
   std::unique_ptr<clang::FrontendAction> create() override;
 
 private:
-  TransformOutput &_Output;
+  llvm::raw_ostream &_Output;
   HavocBounds _Havoc;
 };
 

@@ -32,7 +32,11 @@ int outer_counter(int n) {
 
 
 int main(void) {
-  busy(__VERIFIER_nondet_int());
-  outer_counter(__VERIFIER_nondet_int());
+  {
+    busy(__VERIFIER_nondet_int());
+  }
+  {
+    outer_counter(__VERIFIER_nondet_int());
+  }
   return 0;
 }

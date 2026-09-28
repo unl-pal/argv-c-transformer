@@ -61,75 +61,112 @@ bool Verifier::verifyFile(std::filesystem::path path) {
     return false;
   }
 
-  // Transform output is already flat, so the benchmark keeps the filename.
-  std::filesystem::path outPath =
-      std::filesystem::path(configuration.benchmarkDir) / path.filename();
-
-  std::error_code ec;
-  std::filesystem::create_directories(outPath.parent_path());
-  llvm::raw_fd_ostream output(llvm::StringRef(outPath.string()), ec);
-  if (ec) {
-    debugLog(0, "Cannot open output file " + outPath.string() + ": " + ec.message());
-    return false;
-  }
-
   // Shared state the driver reads back after the tool run: fresh counts (for
   // property selection) and the rejected names.
   auto counts = std::make_shared<std::unordered_map<std::string, CountingVisitor::attributes>>();
   auto toRemove = std::make_shared<std::vector<std::string>>();
+  HarnessSplit split;
 
-  output << provenanceComment("//"); // VerifyAction appends the rewritten source after this
-  VerifyActionFactory factory(&config.complexity, &config.features, counts, toRemove, output);
-  bool ran = runToolOnFile(path.string(), factory);
-  output.close();
-  if (!ran) {
+  VerifyActionFactory factory(&config.complexity, &config.features, counts, toRemove, split);
+  if (!runToolOnFile(path.string(), factory)) {
     debugLog(1, "[verify] clang tool failed on: " + path.string());
-    cleanupPartialOutput(path);
+    return false;
+  }
+  if (split.entries.empty()) {
+    debugLog(1, "[verify] discarded (harness empty after re-check): " + path.string());
     return false;
   }
 
-  if (harnessIsEmpty(outPath)) {
-    debugLog(1, "[verify] discarded (harness empty after re-check): " + outPath.string());
-    cleanupPartialOutput(path);
-    return false;
-  }
+  // Transform output is already flat, so the combined file keeps the filename.
+  std::filesystem::path combinedPath =
+      std::filesystem::path(configuration.benchmarkDir) / path.filename();
+  std::filesystem::create_directories(combinedPath.parent_path());
+  std::string header = provenanceComment("//");
+  std::string allBlocks;
+  for (const HarnessEntry &entry : split.entries)
+    allBlocks += entry.block;
+  if (!writeText(combinedPath, header + split.head + allBlocks + split.tail)) return false;
 
-  // Drop the output if it doesn't compile and we're keeping compiles only
-  if (!checkCompilable(outPath)) {
+  // One check covers every benchmark: each is the combined file minus whole blocks.
+  if (!checkCompilable(combinedPath)) {
     if (configuration.keepCompilesOnly) {
-      debugLog(1, "[verify] discarded (fails compile check): " + outPath.string());
+      debugLog(1, "[verify] discarded (fails compile check): " + combinedPath.string());
       cleanupPartialOutput(path);
       return false;
     }
     // Kept for inspection, but not a benchmark: no task file, no .i. Left on
     // disk deliberately, so no cleanup here - and none from the pool either,
     // which never touches a child that exited under its own control.
-    debugLog(1, "[verify] kept but not a benchmark (fails compile check): " + outPath.string());
+    debugLog(1,
+             "[verify] kept but not a benchmark (fails compile check): " + combinedPath.string());
     return false;
   }
+  std::error_code ec;
+  std::filesystem::remove(combinedPath, ec);
 
-  writeBenchmarkTask(outPath, *counts);
-  if (!preprocess(outPath)) {
-    debugLog(0, "Preprocessing failed, discarding: " + outPath.string());
-    cleanupPartialOutput(path);
-    return false;
+  bool produced = false;
+  for (const HarnessEntry &entry : split.entries) {
+    std::filesystem::path outPath = splitPath(combinedPath, entry.target);
+    if (!writeText(outPath, header + split.head + entry.block + split.tail)) continue;
+    writeBenchmarkTask(outPath, targetCounts(*counts, entry.target));
+    if (!preprocess(outPath)) {
+      debugLog(0, "Preprocessing failed, discarding: " + outPath.string());
+      removeBenchmark(outPath);
+      continue;
+    }
+    produced = true;
   }
-  return true;
+  return produced;
+}
+
+std::filesystem::path Verifier::splitPath(const std::filesystem::path &basePath,
+                                          const std::string &target) {
+  return basePath.parent_path() /
+         (basePath.stem().string() + "__" + target + basePath.extension().string());
+}
+
+bool Verifier::writeText(const std::filesystem::path &path, const std::string &text) {
+  std::ofstream out(path);
+  out << text;
+  if (out) return true;
+  debugLog(0, "Cannot write output file " + path.string());
+  return false;
+}
+
+std::unordered_map<std::string, CountingVisitor::attributes>
+Verifier::targetCounts(const std::unordered_map<std::string, CountingVisitor::attributes> &counts,
+                       const std::string &target) {
+  std::unordered_map<std::string, CountingVisitor::attributes> result;
+  // reach_error is recorded file-wide, not per function; an assert in an
+  // unharnessed sibling only adds unreach-call with a verdict that still holds.
+  for (const std::string &name : {target, std::string("reach_error")})
+    if (auto it = counts.find(name); it != counts.end()) result.insert(*it);
+  return result;
+}
+
+void Verifier::removeBenchmark(const std::filesystem::path &cPath) {
+  std::error_code ec;
+  for (const char *ext : {".c", ".yml", ".i"}) {
+    std::filesystem::path p = cPath;
+    std::filesystem::remove(p.replace_extension(ext), ec);
+  }
 }
 
 void Verifier::cleanupPartialOutput(std::filesystem::path path) {
-  std::filesystem::path outPath =
+  std::filesystem::path combinedPath =
       std::filesystem::path(configuration.benchmarkDir) / path.filename();
-  // transformDir == benchmarkDir makes the "partial output" the input itself.
-  if (std::filesystem::weakly_canonical(path) == std::filesystem::weakly_canonical(outPath)) return;
+  std::filesystem::path input = std::filesystem::weakly_canonical(path);
+  std::string prefix = combinedPath.stem().string() + "__";
   std::error_code ec;
-  std::filesystem::remove(outPath, ec);
-  std::filesystem::path ymlPath = outPath;
-  ymlPath.replace_extension(".yml");
-  std::filesystem::remove(ymlPath, ec);
-  std::filesystem::path iPath = outPath;
-  iPath.replace_extension(".i");
-  std::filesystem::remove(iPath, ec);
+  // transformDir == benchmarkDir makes the combined file the input itself.
+  if (std::filesystem::weakly_canonical(combinedPath) != input) removeBenchmark(combinedPath);
+  for (const std::filesystem::directory_entry &entry :
+       std::filesystem::directory_iterator(combinedPath.parent_path(), ec)) {
+    if (ec) break;
+    const std::filesystem::path &candidate = entry.path();
+    if (candidate.extension() != ".c" || !candidate.stem().string().starts_with(prefix)) continue;
+    if (std::filesystem::weakly_canonical(candidate) != input) removeBenchmark(candidate);
+  }
 }
 
 void Verifier::collectCFiles(std::filesystem::path path,

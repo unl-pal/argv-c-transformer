@@ -32,7 +32,7 @@
  *   MainGenConsumer, and {@code original_main}'s argv is handled specially.
  *
  * Rejected names go into {@code toRemove} for RemoveConsumer (body → ;) and
- * HarnessRepairConsumer (drop the call from the generated main).
+ * HarnessSplitConsumer (drop its harness block from the benchmarks).
  */
 class VerifyFunctionsConsumer : public clang::ASTConsumer {
 public:

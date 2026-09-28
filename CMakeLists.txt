@@ -86,7 +86,7 @@ set(SOURCE_TRANSFORM
 )
 
 set(SOURCE_VERIFY
-  src/verify/HarnessRepairConsumer.cpp
+  src/verify/HarnessSplitConsumer.cpp
   src/verify/Verifier.cpp
   src/verify/VerifyAction.cpp
   src/verify/VerifyFunctionsConsumer.cpp

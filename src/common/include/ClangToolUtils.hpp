@@ -288,8 +288,7 @@ inline bool runFrontendActionCheckingErrors(const std::string &filePath,
  * @brief Detects a trivial benchmark whose generated main calls nothing.
  *
  * Matches the exact main body MainGenConsumer emits when it harnesses
- * nothing, and that HarnessRepairConsumer's line-erasure collapses to when
- * every harness call is later repaired away. Coupled to both format strings.
+ * nothing. Coupled to that format string.
  *
  * @param path Path to the generated C file to inspect.
  * @return true if the generated main contains no calls.

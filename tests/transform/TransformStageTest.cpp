@@ -86,36 +86,11 @@ TEST_F(TransformStageTest, FlatFileProducesTransformedSource) {
   int count = t.run();
 
   EXPECT_GE(count, 1);
-  EXPECT_TRUE(fs::exists(transformDir / "simple__add.c"));
+  EXPECT_TRUE(fs::exists(transformDir / "simple.c"));
 
-  std::string src = readFile(transformDir / "simple__add.c");
+  std::string src = readFile(transformDir / "simple.c");
   EXPECT_NE(src.find("int main(void)"), std::string::npos);
   EXPECT_NE(src.find("add(__VERIFIER_nondet_int(), __VERIFIER_nondet_int());"), std::string::npos);
-}
-
-TEST_F(TransformStageTest, EachHarnessedFunctionGetsItsOwnOutput) {
-  writeFile(filterDir / "multi.c", "int add(int a, int b) { return a + b; }\n"
-                                   "int sub(int a, int b) { return a - b; }\n");
-
-  Transformer t(configPath.string());
-  ASSERT_GE(t.run(), 1);
-
-  ASSERT_TRUE(fs::exists(transformDir / "multi__add.c"));
-  ASSERT_TRUE(fs::exists(transformDir / "multi__sub.c"));
-  EXPECT_FALSE(fs::exists(transformDir / "multi.c"));
-
-  std::string addOut = readFile(transformDir / "multi__add.c");
-  std::string subOut = readFile(transformDir / "multi__sub.c");
-  std::string addMain = addOut.substr(addOut.find("int main(void)"));
-  std::string subMain = subOut.substr(subOut.find("int main(void)"));
-  EXPECT_NE(addMain.find("add("), std::string::npos) << addOut;
-  EXPECT_EQ(addMain.find("sub("), std::string::npos) << addOut;
-  EXPECT_NE(subMain.find("sub("), std::string::npos) << subOut;
-  EXPECT_EQ(subMain.find("add("), std::string::npos) << subOut;
-
-  // Siblings' bodies are kept: the outputs differ only in main.
-  EXPECT_EQ(addOut.substr(0, addOut.find("int main(void)")),
-            subOut.substr(0, subOut.find("int main(void)")));
 }
 
 TEST_F(TransformStageTest, BodylessSiblingReferencedAsFunctionPointerIsNotDropped) {
@@ -137,7 +112,7 @@ TEST_F(TransformStageTest, BodylessSiblingReferencedAsFunctionPointerIsNotDroppe
   int count = t.run();
 
   EXPECT_GE(count, 1);
-  std::string src = readFile(transformDir / "ptr__caller.c");
+  std::string src = readFile(transformDir / "ptr.c");
   EXPECT_NE(src.find("int helper(int x) ;"), std::string::npos) << src;
 }
 
@@ -148,7 +123,7 @@ TEST_F(TransformStageTest, NestedPathFlattensWithUnderscores) {
   Transformer t(configPath.string());
   t.run();
 
-  EXPECT_TRUE(fs::exists(transformDir / "owner_repo_src_util__square.c"));
+  EXPECT_TRUE(fs::exists(transformDir / "owner_repo_src_util.c"));
 }
 
 TEST_F(TransformStageTest, PathComponentsWithUnsafeCharactersAreSanitized) {
@@ -163,8 +138,8 @@ TEST_F(TransformStageTest, PathComponentsWithUnsafeCharactersAreSanitized) {
   int count = t.run();
 
   EXPECT_GE(count, 1);
-  EXPECT_TRUE(fs::exists(transformDir / "weird_dir_name_file__identity.c"));
-  EXPECT_FALSE(fs::exists(transformDir / "weird dir:name_file__identity.c"));
+  EXPECT_TRUE(fs::exists(transformDir / "weird_dir_name_file.c"));
+  EXPECT_FALSE(fs::exists(transformDir / "weird dir:name_file.c"));
 }
 
 TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
@@ -180,7 +155,7 @@ TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
   int count = t.run();
 
   EXPECT_EQ(count, 0);
-  EXPECT_FALSE(fs::exists(transformDir / "aggregates_only__total.c"));
+  EXPECT_FALSE(fs::exists(transformDir / "aggregates_only.c"));
 }
 
 // Regression: Transformer::parseConfig used to drop the config's databaseDir,
@@ -203,7 +178,7 @@ TEST_F(TransformStageTest, ConfigDatabaseDirResolvesLocalHeaders) {
   Transformer t(dbConfigPath.string());
   ASSERT_GE(t.run(), 1);
 
-  std::string out = readFile(transformDir / "src_work__span.c");
+  std::string out = readFile(transformDir / "src_work.c");
 
   // `Range` resolved to a real RecordDecl whose definition is NOT in the main
   // file (the #include is stripped textually), so planPointer returns Opaque.
@@ -230,9 +205,9 @@ TEST_F(TransformStageTest, ArgcArgvMainProducesTransformedSource) {
   int count = t.run();
 
   EXPECT_GE(count, 1);
-  EXPECT_TRUE(fs::exists(transformDir / "withmain__main.c"));
+  EXPECT_TRUE(fs::exists(transformDir / "withmain.c"));
 
-  std::string src = readFile(transformDir / "withmain__main.c");
+  std::string src = readFile(transformDir / "withmain.c");
   EXPECT_NE(src.find("original_main"), std::string::npos);
   EXPECT_NE(src.find("#include \"argv_c_harness.h\""), std::string::npos);
   EXPECT_NE(src.find("__HAVOC_ARGC"), std::string::npos);

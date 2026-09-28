@@ -16,7 +16,11 @@ int original_main() {
 }
 
 int main(void) {
-  helper();
-  original_main();
+  {
+    helper();
+  }
+  {
+    original_main();
+  }
   return 0;
 }

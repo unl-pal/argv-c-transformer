@@ -75,18 +75,26 @@ private:
   bool _InDiscardedBody = false;
 };
 
-} // namespace
-
-std::string renderHarnessMain(const std::string &body) {
-  return "\nint main(void) {\n" + body + "  return 0;\n}\n";
+/// One harness entry as its own block, so verify can split main on top-level statements.
+std::string harnessBlock(const std::string &statements) {
+  std::string block = "  {\n";
+  size_t start = 0;
+  while (start < statements.size()) {
+    size_t end = statements.find('\n', start);
+    if (end == std::string::npos) end = statements.size() - 1;
+    block += "  " + statements.substr(start, end - start + 1);
+    start = end + 1;
+  }
+  return block + "  }\n";
 }
+
+} // namespace
 
 MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                                  std::shared_ptr<std::set<std::string>> neededFwdDecls,
-                                 std::shared_ptr<std::vector<HarnessEntry>> entries,
                                  clang::Rewriter &rewriter, const HavocBounds &havoc)
-    : _DiscardedFunctions(discardedFunctions), _NeededFwdDecls(neededFwdDecls),
-      _Entries(entries), _Rewriter(rewriter), _Havoc(havoc) {}
+    : _DiscardedFunctions(discardedFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter),
+      _Havoc(havoc) {}
 
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &mgr = Context.getSourceManager();
@@ -115,6 +123,7 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
     if (semiLoc.isValid()) _Rewriter.RemoveText(clang::SourceRange(func->getBeginLoc(), semiLoc));
   }
 
+  std::string harness;
   for (const clang::FunctionDecl *func : defined) {
     if (_DiscardedFunctions->count(func->getNameAsString())) {
       //remove functions stripped by havoc stage
@@ -123,7 +132,7 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       continue;
     }
     if (func->isMain()) {
-      _Entries->push_back({"main", genMainHarness(func)});
+      harness += harnessBlock(genMainHarness(func));
       continue;
     }
     if (func->isVariadic()) {
@@ -137,9 +146,11 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
                       " not harnessed");
       continue;
     }
-    std::string name = func->getNameAsString();
-    _Entries->push_back({name, call.prologue + "  " + name + "(" + call.args + ");\n"});
+    harness += harnessBlock(call.prologue + "  " + func->getNameAsString() + "(" + call.args + ");\n");
   }
+
+  std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
+  _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainFn);
 
   // emitted here, not the shared header, so bounds survive hand-editing of the .c
   std::string prelude = "#define __HAVOC_ARGC_MIN " + std::to_string(_Havoc.argcMin) + "\n" +
