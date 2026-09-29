@@ -142,7 +142,7 @@ more info.
 
 - `[Complexity Requirements]` - per-function `min,max` thresholds: `ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`, `Operations`
 - `[Feature Requirements]` - per-function gates: `require` | `forbid` | `ignore` (default): `Concurrency`, `FloatingPoint`, `PointerOrArray`, `PointerDeref`, `MemAlloc`, `MemFree`
-- `[File Settings]` - `FileLoC`, `fileTimeoutSecs`, `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores; higher values are capped at the core count), `keepCompilesOnly`, `debugLevel` (0–3)
+- `[File Settings]` - `FileLoC`, `fileTimeoutSecs`, `fileMemoryMB` (per-file memory cap in MB; 0 = auto, three quarters of RAM split across workers, at least 1024), `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores; higher values are capped at the core count), `keepCompilesOnly`, `debugLevel` (0–3)
 - `[Havoc Settings]` - bounds emitted as `__HAVOC_*` macros into each benchmark: `havocArgcMin`, `havocArgcMax`, `havocStrMax`, `havocBlockMax`, `havocArrayElems`
 - `[Stage Directories]` - `databaseDir`, `filterDir`, `transformDir`, `benchmarkDir`
 

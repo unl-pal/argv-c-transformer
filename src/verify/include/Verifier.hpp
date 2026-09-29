@@ -30,6 +30,7 @@ struct verifyConfigs {
   std::string transformDir; ///< Input directory of transformed C files to verify.
   std::string benchmarkDir; ///< Output directory for finalized benchmarks.
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated verify child.
+  int fileMemoryMB = 0;     ///< Per-child memory limit; 0 = auto.
   int nproc;                ///< Worker pool size (0 = auto, three quarters of detected cores).
   bool cleanOutput;         ///< If true, wipe a pre-populated benchmarkDir instead of erroring.
 };

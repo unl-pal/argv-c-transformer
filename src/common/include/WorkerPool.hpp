@@ -14,8 +14,10 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <new>
 #include <sstream>
 #include <string>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
@@ -40,6 +42,19 @@ inline int resolveWorkerCount(int configuredNproc) {
   return static_cast<int>(std::max(1u, hw * 3 / 4));
 }
 
+/**
+ * @brief Resolves the {@code fileMemoryMB} config setting to a per-child
+ * limit in MB: the configured value if positive, else three quarters of
+ * physical memory split across {@code workers} (floored at 1024).
+ */
+inline long resolveMemoryLimitMB(int configuredMB, int workers) {
+  if (configuredMB > 0) return configuredMB;
+  long pages = sysconf(_SC_PHYS_PAGES), pageSize = sysconf(_SC_PAGE_SIZE);
+  if (pages <= 0 || pageSize <= 0) return 0; // unknown: no limit
+  long totalMB = pages / 1024 * pageSize / 1024;
+  return std::max(1024L, totalMB * 3 / 4 / std::max(1, workers));
+}
+
 /** Child exit code for "produced an output file". */
 inline constexpr int kProducedExit = 0;
 
@@ -49,11 +64,14 @@ inline constexpr int kProducedExit = 0;
  */
 inline constexpr int kDeclinedExit = 2;
 
+/** Child exit code for "hit its memory limit". */
+inline constexpr int kMemoryExit = 3;
+
 /** Per-outcome file **counts** (not return codes) for one {@code runWorkerPool} call. */
 struct WorkerPoolResult {
   int produced = 0; ///< Children that exited {@code kProducedExit}.
   int declined = 0; ///< Children that exited {@code kDeclinedExit}.
-  int failed = 0;   ///< Crashed, timed out, or exited any other code.
+  int failed = 0;   ///< Crashed, timed out, hit the memory limit, or exited any other code.
 };
 
 /**
@@ -122,12 +140,15 @@ inline void flushChildLog(const WorkerPoolJob &job) {
  * in its own forked child running up to {@code workers} children concurrently.
  *
  * Each file gets its own wall-clock budget of {@code timeoutSecs} starting
- * from when its child is forked.
+ * from when its child is forked, and a data-segment limit of
+ * {@code memoryLimitMB} (0 = unlimited) so one runaway file fails alone
+ * rather than exhausting the machine.
  *
  * @return per-outcome counts; see {@code WorkerPoolResult}.
  */
 inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &files, int workers,
-                                      int timeoutSecs, const IsolatedWork &work) {
+                                      int timeoutSecs, const IsolatedWork &work,
+                                      long memoryLimitMB = 0) {
   std::error_code ec;
   std::filesystem::path logDir =
       std::filesystem::temp_directory_path(ec) / ("argv-c-pool-" + std::to_string(getpid()));
@@ -180,6 +201,17 @@ inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &
           dup2(fd, STDERR_FILENO);
           close(fd);
         }
+        if (memoryLimitMB > 0) {
+          // RLIMIT_DATA, not RLIMIT_AS: shared libraries and reserved address space don't count
+          rlim_t bytes = static_cast<rlim_t>(memoryLimitMB) * 1024 * 1024;
+          rlimit limit{bytes, bytes};
+          setrlimit(RLIMIT_DATA, &limit);
+          std::set_new_handler([] {
+            const char msg[] = "memory limit exceeded\n";
+            (void)!write(STDERR_FILENO, msg, sizeof(msg) - 1); // no allocation past this point
+            _exit(kMemoryExit);
+          });
+        }
         work.child(file);
         _exit(1); // safety net; work.child is expected to _exit itself
       }
@@ -198,6 +230,11 @@ inline WorkerPoolResult runWorkerPool(const std::vector<std::filesystem::path> &
           // No cleanup: the child exited under its own control
           result.declined++;
           work.debugLog(1, "no output: " + it->file.string());
+        } else if (WIFEXITED(status) && WEXITSTATUS(status) == kMemoryExit) {
+          result.failed++;
+          work.debugLog(0, "memory limit (" + std::to_string(memoryLimitMB) +
+                               " MB) exceeded, skipping: " + it->file.string());
+          work.cleanupPartial(it->file);
         } else if (WIFEXITED(status)) {
           result.failed++;
           work.debugLog(0, "failed (exit " + std::to_string(WEXITSTATUS(status)) +

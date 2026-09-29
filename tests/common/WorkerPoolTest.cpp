@@ -6,6 +6,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <functional>
 #include <gtest/gtest.h>
@@ -29,6 +30,7 @@ namespace {
 /** Collects the pool's parent-side callbacks for assertions. */
 struct Recorder {
   std::vector<std::string> cleaned;
+  std::vector<std::string> logged;
 
   IsolatedWork work(std::function<void(const fs::path &)> child,
                     std::function<bool(const fs::path &)> inProcess = nullptr) {
@@ -36,7 +38,7 @@ struct Recorder {
     w.child = std::move(child);
     w.runInProcess = inProcess ? std::move(inProcess) : [](const fs::path &) { return false; };
     w.cleanupPartial = [this](const fs::path &p) { cleaned.push_back(p.filename().string()); };
-    w.debugLog = [](int, const std::string &) {};
+    w.debugLog = [this](int, const std::string &msg) { logged.push_back(msg); };
     w.label = "test";
     return w;
   }
@@ -92,6 +94,49 @@ TEST(ResolveWorkerCount, ZeroAutoSizesBelowCoreCountButAtLeastOne) {
   EXPECT_GE(workers, 1);
   unsigned hw = std::thread::hardware_concurrency();
   if (hw > 0) EXPECT_LE(workers, static_cast<int>(hw));
+}
+
+TEST(ResolveMemoryLimitMB, PositiveConfigValueIsUsedVerbatim) {
+  EXPECT_EQ(resolveMemoryLimitMB(512, 8), 512);
+}
+
+TEST(ResolveMemoryLimitMB, AutoSplitsRamAcrossWorkersWithAFloor) {
+  long one = resolveMemoryLimitMB(0, 1);
+  if (one == 0) GTEST_SKIP() << "no detectable physical memory";
+  EXPECT_GE(resolveMemoryLimitMB(0, 4), 1024);
+  EXPECT_LE(resolveMemoryLimitMB(0, 4), one);
+  EXPECT_EQ(resolveMemoryLimitMB(0, 100000), 1024);
+}
+
+TEST(WorkerPool, RunawayChildHitsTheMemoryLimitAlone) {
+  Recorder rec;
+  IsolatedWork work = rec.work([](const fs::path &) {
+    for (;;) { // touched so the allocation can't be elided
+      char *block = new char[64 << 20];
+      std::memset(block, 1, 64 << 20);
+    }
+  });
+
+  WorkerPoolResult result = runWorkerPool(paths({"a.c"}), 1, 30, work, /*memoryLimitMB=*/256);
+
+  EXPECT_EQ(result.failed, 1);
+  EXPECT_EQ(rec.cleaned, std::vector<std::string>{"a.c"});
+  ASSERT_FALSE(rec.logged.empty());
+  EXPECT_NE(rec.logged.back().find("memory limit (256 MB)"), std::string::npos)
+      << rec.logged.back();
+}
+
+TEST(WorkerPool, ChildWithinTheMemoryLimitIsUnaffected) {
+  Recorder rec;
+  IsolatedWork work = rec.work([](const fs::path &) {
+    char *block = new char[32 << 20];
+    std::memset(block, 1, 32 << 20);
+    _exit(block[100] == 1 ? kProducedExit : 1);
+  });
+
+  WorkerPoolResult result = runWorkerPool(paths({"a.c"}), 1, 30, work, /*memoryLimitMB=*/256);
+
+  EXPECT_EQ(result.produced, 1);
 }
 
 TEST(WorkerPool, ProducedFilesAreCountedAndLeftAlone) {
