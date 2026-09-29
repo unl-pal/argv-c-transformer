@@ -19,4 +19,6 @@ struct HavocBounds {
   int blockMax = 128;
   /** Element count for a havocked pointer to a sized type with no declared bound. */
   int arrayElems = 8;
+  /** Pointer levels given typed storage; 0 havocs every pointer as opaque bytes. */
+  unsigned pointerDepth = 1;
 };

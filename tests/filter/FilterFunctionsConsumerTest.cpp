@@ -173,7 +173,7 @@ TEST(FilterFunctionsConsumer, OrdinaryFunctionRemovedForUnsupportedParam) {
   // real contrast rather than a check that never removes anything.
   auto r = runFilter(R"(
     int main(void) { return 0; }
-    void helper(char **argv) {}
+    void helper(int (*cb)(int)) {}
   )",
                      permissiveComplexityConfig(), permissiveFeatureConfig());
   EXPECT_TRUE(contains(*r.toRemove, "helper"));
@@ -217,18 +217,26 @@ TEST(FilterFunctionsConsumer, RecordPointerParamSurvivesWhenPointerFree) {
 }
 
 TEST(FilterFunctionsConsumer, NonViablePointerParamStillRemoved) {
-  // Each of these is a shape planPointer refuses: a struct carrying a pointer
-  // field, and a function pointer. Havocking either would hand the callee a
-  // raw nondet pointer value it may not dereference (or call).
+  // No value can be synthesized for a function pointer at any depth.
+  auto r = runFilter(R"(
+    int main(void) { return 0; }
+    int apply(int (*cb)(int)) { return cb(1); }
+  )",
+                     permissiveComplexityConfig(), permissiveFeatureConfig());
+  EXPECT_TRUE(contains(*r.toRemove, "apply"));
+}
+
+TEST(FilterFunctionsConsumer, PointerFieldRecordSurvivesTheGate) {
+  // Its pointer fields are initialized (or set to 0 past the depth bound).
   auto r = runFilter(R"(
     int main(void) { return 0; }
     struct Node { int v; struct Node *next; };
     int walk(struct Node *n) { return n->v; }
-    int apply(int (*cb)(int)) { return cb(1); }
+    int count(char **argv) { return argv[0] != 0; }
   )",
                      permissiveComplexityConfig(), permissiveFeatureConfig());
-  EXPECT_TRUE(contains(*r.toRemove, "walk"));
-  EXPECT_TRUE(contains(*r.toRemove, "apply"));
+  EXPECT_FALSE(contains(*r.toRemove, "walk"));
+  EXPECT_FALSE(contains(*r.toRemove, "count"));
 }
 
 // ---------------------------------------------------------------------------

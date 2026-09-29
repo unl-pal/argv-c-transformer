@@ -191,6 +191,7 @@ void Transformer::parseConfig(std::string configFile) {
   configuration.havoc.strMax = config.havoc.at("havocStrMax");
   configuration.havoc.blockMax = config.havoc.at("havocBlockMax");
   configuration.havoc.arrayElems = config.havoc.at("havocArrayElems");
+  configuration.havoc.pointerDepth = config.havoc.at("havocPointerDepth");
 }
 
 int Transformer::run() {

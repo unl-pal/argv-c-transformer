@@ -53,12 +53,12 @@ struct PipelineConfig {
   };
 
   /**
-   * Bounds the transform stage emits as __HAVOC_* macros into each
-   * transformed file (see HavocBounds.hpp).
+   * Havoc settings (see HavocBounds.hpp): bounds the transform stage emits
+   * as __HAVOC_* macros, plus havocPointerDepth, which the filter also reads.
    */
   std::map<std::string, int> havoc = {
       {"havocArgcMin", 1},    {"havocArgcMax", 4},    {"havocStrMax", 16},
-      {"havocBlockMax", 128}, {"havocArrayElems", 8},
+      {"havocBlockMax", 128}, {"havocArrayElems", 8}, {"havocPointerDepth", 1},
   };
 
   std::string databaseDir;  ///< Input tree for the filter stage ("" = unset).

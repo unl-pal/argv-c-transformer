@@ -11,6 +11,7 @@
 #include <clang/Serialization/PCHContainerOperations.h>
 #include <clang/Tooling/Tooling.h>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -31,6 +32,8 @@ namespace fs = std::filesystem;
 //                        (include stripping -> call havocking -> main
 //                        generation -> verifier extern injection)
 //   <name>.expected.c  - the exact output the pipeline must produce
+//
+// A name ending in -depth<N> runs with havocPointerDepth N (default 1).
 //
 // Support headers (plain .h files) live alongside the cases and resolve
 // through the real filesystem, so #include "..." behaves as in the real
@@ -101,10 +104,15 @@ TEST_P(TransformGolden, MatchesExpected) {
 
   // The input's real path is used as the tool's file name so that quoted
   // includes resolve against the cases directory.
+  HavocBounds havoc;
+  size_t depthAt = testCase.name.rfind("-depth");
+  if (depthAt != std::string::npos)
+    havoc.pointerDepth = std::stoul(testCase.name.substr(depthAt + std::strlen("-depth")));
+
   std::string out;
   llvm::raw_string_ostream os(out);
   bool ok = clang::tooling::runToolOnCodeWithArgs(
-      std::make_unique<TransformAction>(os), code, args, testCase.input.string(), "transform-test",
+      std::make_unique<TransformAction>(os, havoc), code, args, testCase.input.string(), "transform-test",
       std::make_shared<clang::PCHContainerOperations>());
   ASSERT_TRUE(ok) << "transform tool failed for " << testCase.input;
 
