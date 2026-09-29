@@ -202,6 +202,24 @@ TEST(PlanPointer, UnionPointerMembersAreLeftAlone) {
   EXPECT_TRUE(p.plan.slots.empty());
 }
 
+TEST(PlanPointer, SelfContainingRecordFromErrorRecoveryTerminates) {
+  // Typo correction resolves the undeclared GtkWindow to YuiWindow, so the record contains
+  // itself by value.
+  auto ast = clang::tooling::buildASTFromCodeWithArgs(
+      "typedef struct _YuiWindow YuiWindow;\n"
+      "struct _YuiWindow { GtkWindow hbox; char *name; };\n"
+      "void f(YuiWindow *w) {}",
+      {"-xc", "-Wno-everything"}, "test.c");
+  ASSERT_NE(ast, nullptr);
+  for (clang::Decl *decl : ast->getASTContext().getTranslationUnitDecl()->decls()) {
+    auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
+    if (!fn || fn->getNameAsString() != "f") continue;
+    planPointer(fn->getParamDecl(0)->getOriginalType(), ast->getASTContext().getSourceManager(), 2);
+    return; // reaching here at all is the assertion
+  }
+  ADD_FAILURE() << "no f";
+}
+
 TEST(PlanPointer, ConstPointerFieldIsNotViable) {
   // Can't be assigned after the fill, so it would stay a raw nondet pointer.
   auto p = planFirstParam("struct R { char *const name; };\n"

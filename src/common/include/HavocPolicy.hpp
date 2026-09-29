@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <clang/AST/Decl.h>
 #include <clang/AST/PrettyPrinter.h>
 #include <clang/AST/Type.h>
@@ -141,15 +142,21 @@ inline std::shared_ptr<PointerPlan> planSlotTarget(clang::QualType type,
  * @brief Appends a slot for every pointer reachable by value inside @p record.
  *
  * @param readOnly The record is reached through a const member.
+ * @param enclosing Records being walked above this one.
  * @return False if a pointer can't be assigned (a const member).
  */
 inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std::string> &path,
                          const std::vector<uint64_t> &dims, bool readOnly,
                          const clang::SourceManager &mgr, unsigned depth,
-                         std::vector<PointerSlot> &slots) {
+                         std::vector<PointerSlot> &slots,
+                         std::vector<const clang::RecordDecl *> enclosing = {}) {
   const clang::RecordDecl *def = record->getDefinition();
   if (!def || def->isUnion()) return true; // assigning one member would clobber its siblings
+  // Error recovery can leave a record containing itself by value.
+  if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) return true;
+  enclosing.push_back(def);
   for (const clang::FieldDecl *field : def->fields()) {
+    if (field->isInvalidDecl()) continue;
     std::vector<std::string> fieldPath = path;
     std::vector<uint64_t> fieldDims = dims;
     if (!field->isAnonymousStructOrUnion()) fieldPath.push_back("." + field->getName().str());
@@ -171,7 +178,7 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
       if (fieldReadOnly) return false;
       slots.push_back({fieldPath, fieldDims, type, planSlotTarget(type, mgr, depth - 1)});
     } else if (const clang::RecordDecl *nested = type->getAsRecordDecl()) {
-      if (!collectSlots(nested, fieldPath, fieldDims, fieldReadOnly, mgr, depth, slots))
+      if (!collectSlots(nested, fieldPath, fieldDims, fieldReadOnly, mgr, depth, slots, enclosing))
         return false;
     }
   }
