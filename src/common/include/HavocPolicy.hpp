@@ -125,12 +125,12 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
 
 /**
  * @brief Plans the storage a pointer slot points to, or null to set it to 0:
- * past the depth bound, a function pointer, or an unspellable pointee.
+ * past the depth bound, or an unspellable pointee.
  */
 inline std::shared_ptr<PointerPlan> planSlotTarget(clang::QualType type,
                                                    const clang::SourceManager &mgr,
                                                    unsigned depth) {
-  if (depth == 0 || type->getPointeeType()->isFunctionType() || !isSpellable(type)) return nullptr;
+  if (depth == 0 || !isSpellable(type)) return nullptr;
   auto plan = std::make_shared<PointerPlan>();
   plan->shape = PointerShape::Block;
   if (!classifyPointee(type->getPointeeType(), mgr, depth, *plan)) return nullptr;
@@ -143,7 +143,7 @@ inline std::shared_ptr<PointerPlan> planSlotTarget(clang::QualType type,
  *
  * @param readOnly The record is reached through a const member.
  * @param enclosing Records being walked above this one.
- * @return False if a pointer can't be assigned (a const member).
+ * @return False if a pointer can't be assigned (a const member) or is a function pointer.
  */
 inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std::string> &path,
                          const std::vector<uint64_t> &dims, bool readOnly,
@@ -175,7 +175,7 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
     if (flexible) continue; // outside sizeof, so outside the storage
     bool fieldReadOnly = readOnly || type.isConstQualified();
     if (type->isAnyPointerType()) {
-      if (fieldReadOnly) return false;
+      if (fieldReadOnly || type->isFunctionPointerType()) return false;
       slots.push_back({fieldPath, fieldDims, type, planSlotTarget(type, mgr, depth - 1)});
     } else if (const clang::RecordDecl *nested = type->getAsRecordDecl()) {
       if (!collectSlots(nested, fieldPath, fieldDims, fieldReadOnly, mgr, depth, slots, enclosing))
@@ -199,6 +199,7 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
     return true;
   }
   if (pointee->isAnyPointerType()) { // storage is unqualified, so a const element still assigns
+    if (pointee->isFunctionPointerType()) return false;
     plan.slots.push_back({{}, {}, pointee, planSlotTarget(pointee, mgr, depth - 1)});
     return true;
   }

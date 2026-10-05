@@ -184,13 +184,17 @@ TEST(PlanPointer, PointerArrayFieldCarriesItsBound) {
   EXPECT_EQ(p.plan.slots[0].dims, std::vector<uint64_t>{4});
 }
 
-TEST(PlanPointer, FunctionPointerFieldIsAlwaysNull) {
+TEST(PlanPointer, FunctionPointerFieldIsNotViable) {
+  // Nothing callable can be synthesized for it (see docs/FunctionPointerHavocking.md).
   auto p = planFirstParam("struct Ops { int (*cb)(int); };\n"
                           "void f(struct Ops *o) {}",
                           3);
-  EXPECT_TRUE(p.plan.viable);
-  ASSERT_EQ(p.plan.slots.size(), 1u);
-  EXPECT_EQ(p.plan.slots[0].child, nullptr);
+  EXPECT_FALSE(p.plan.viable);
+}
+
+TEST(PlanPointer, ArrayOfFunctionPointersIsNotViable) {
+  auto p = planFirstParam("void f(int (*fs[2])(int)) {}", 2);
+  EXPECT_FALSE(p.plan.viable);
 }
 
 TEST(PlanPointer, UnionPointerMembersAreLeftAlone) {
