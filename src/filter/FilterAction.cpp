@@ -22,9 +22,9 @@
 
 FilterAction::FilterAction(std::map<std::string, std::pair<int, int>> *complexityConfig,
                            std::map<std::string, FeatureGate> *featureConfig,
-                           llvm::raw_fd_ostream &output, unsigned pointerDepth)
+                           llvm::raw_fd_ostream &output, PointerModel pointers)
     : _ComplexityConfig(complexityConfig), _FeatureConfig(featureConfig), _Rewriter(),
-      _Output(output), _PointerDepth(pointerDepth), _ClosureState(std::make_shared<HeaderClosureState>()) {}
+      _Output(output), _Pointers(pointers), _ClosureState(std::make_shared<HeaderClosureState>()) {}
 
 std::unique_ptr<clang::ASTConsumer>
 FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringRef /*filename*/) {
@@ -38,7 +38,7 @@ FilterAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringR
   std::vector<std::unique_ptr<clang::ASTConsumer>> consumers;
   consumers.emplace_back(std::make_unique<CountingConsumer>(toFilter));
   consumers.emplace_back(std::make_unique<FilterFunctionsConsumer>(
-      toFilter, toRemove, _ComplexityConfig, _FeatureConfig, _PointerDepth));
+      toFilter, toRemove, _ComplexityConfig, _FeatureConfig, _Pointers));
   consumers.emplace_back(std::make_unique<RemoveConsumer>(_Rewriter, toRemove));
   // Last: the closure's roots are the *surviving* bodies, so it needs the
   // reject list FilterFunctionsConsumer produces.
@@ -65,10 +65,10 @@ void FilterAction::EndSourceFileAction() {
 FrontendFactoryWithArgs::FrontendFactoryWithArgs(
     std::map<std::string, std::pair<int, int>> *complexityConfig,
     std::map<std::string, FeatureGate> *featureConfig, llvm::raw_fd_ostream &output,
-    unsigned pointerDepth)
+    PointerModel pointers)
     : _ComplexityConfig(complexityConfig), _FeatureConfig(featureConfig), _Output(output),
-      _PointerDepth(pointerDepth) {}
+      _Pointers(pointers) {}
 
 std::unique_ptr<clang::FrontendAction> FrontendFactoryWithArgs::create() {
-  return std::make_unique<FilterAction>(_ComplexityConfig, _FeatureConfig, _Output, _PointerDepth);
+  return std::make_unique<FilterAction>(_ComplexityConfig, _FeatureConfig, _Output, _Pointers);
 }

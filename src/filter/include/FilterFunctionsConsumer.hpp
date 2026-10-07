@@ -6,6 +6,7 @@
 
 #include "ConfigParser.hpp"
 #include "CountingVisitor.hpp"
+#include "HavocBounds.hpp"
 
 #include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
@@ -40,13 +41,13 @@ public:
    * @param complexityConfig  Per-metric [min, max] ranges, owned by {@code Filterer}.
    * @param featureConfig     Per-feature require/forbid/ignore gates, owned by
    *                          {@code Filterer}.
-   * @param pointerDepth      Passed to {@code planPointer}, matching the transform's.
+   * @param pointers          Passed to {@code planPointer}, matching the transform's.
    */
   FilterFunctionsConsumer(
       std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,
       std::shared_ptr<std::vector<std::string>> toRemove,
       std::map<std::string, std::pair<int, int>> *complexityConfig,
-      std::map<std::string, FeatureGate> *featureConfig, unsigned pointerDepth = 1);
+      std::map<std::string, FeatureGate> *featureConfig, PointerModel pointers = {});
 
   void HandleTranslationUnit(clang::ASTContext &context) override;
 
@@ -69,5 +70,5 @@ private:
   std::shared_ptr<std::vector<std::string>> _ToRemove;
   std::map<std::string, std::pair<int, int>> *_ComplexityConfig;
   std::map<std::string, FeatureGate> *_FeatureConfig;
-  unsigned _PointerDepth;
+  PointerModel _Pointers;
 };

@@ -180,7 +180,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
   for (const clang::ParmVarDecl *parm : func->parameters()) {
     PointerPlan plan;
     if (!verifierSuffixForType(parm->getOriginalType())) {
-      plan = planPointer(parm->getOriginalType(), mgr, _Havoc.pointerDepth);
+      plan = planPointer(parm->getOriginalType(), mgr, _Havoc.pointers);
       if (!plan.viable) return call;
       anyPointer = true;
     }
@@ -228,6 +228,13 @@ std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   if (numParams == 0) return "  original_main();\n";
 
   std::string body;
+  if (_Havoc.pointers.generic) { // argc unbounded and unrelated to the block, like any other params
+    std::string argv = "__h" + std::to_string(_LocalCounter++);
+    body += "  unsigned char " + argv + "[__HAVOC_BLOCK_MAX];\n";
+    body += "  __VERIFIER_nondet_memory(" + argv + ", sizeof(" + argv + "));\n";
+    body += "  original_main(__VERIFIER_nondet_int(), (char **)" + argv + ");\n";
+    return body;
+  }
   body += "  int argc = __HAVOC_ARGC();\n";
   body += "  original_main(argc, __havoc_argv_fill(argc));\n";
   return body;

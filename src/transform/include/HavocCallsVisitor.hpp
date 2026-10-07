@@ -35,10 +35,10 @@ public:
    * @param neededFwdDecls  Output set; file-scope forward declarations (e.g. "struct Rect")
    *                        needed by a prototype-scope struct tag a havocked pointer casts to.
    * @param rewriter        Shared rewriter for modifying the source buffer.
-   * @param pointerDepth    Passed to {@code planPointer} for pointer-returning calls.
+   * @param pointers        Passed to {@code planPointer} for pointer-returning calls.
    */
   HavocCallsVisitor(clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededFwdDecls,
-                    clang::Rewriter &rewriter, unsigned pointerDepth = 1);
+                    clang::Rewriter &rewriter, PointerModel pointers = {});
 
   /**
    * @brief Havocs a call if it should be (in-file, non-library, non-verifier). A call inside a
@@ -214,7 +214,7 @@ private:
   clang::ASTContext *_C;
   std::shared_ptr<std::set<std::string>> _NeededFwdDecls;
   clang::Rewriter &_Rewriter;
-  unsigned _PointerDepth;
+  PointerModel _Pointers;
   /** Memoized computeNoOp results; mutable so the const isNoOp can fill it. */
   mutable std::map<const clang::Stmt *, bool> _NoOpMemo;
   /** Statements already removed from the buffer, so eraseStmt stays idempotent. */

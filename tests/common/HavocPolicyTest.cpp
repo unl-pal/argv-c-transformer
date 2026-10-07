@@ -32,7 +32,7 @@ struct Parsed {
 // classifies its declared (pre-decay) type. The ASTUnit is returned alongside
 // the plan because the plan's strings outlive nothing but the AST must stay
 // alive for the duration of the parse itself.
-Parsed planFirstParam(const std::string &code, unsigned depth = 1,
+Parsed planFirstParam(const std::string &code, PointerModel model = {},
                       const std::string &func = "f") {
   Parsed p;
   p.ast = clang::tooling::buildASTFromCodeWithArgs(code, {"-xc"}, "test.c");
@@ -44,7 +44,7 @@ Parsed planFirstParam(const std::string &code, unsigned depth = 1,
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!fn || fn->getNameAsString() != func || fn->param_empty()) continue;
     p.declared = fn->getParamDecl(0)->getOriginalType();
-    p.plan = planPointer(p.declared, ctx.getSourceManager(), depth);
+    p.plan = planPointer(p.declared, ctx.getSourceManager(), model);
     return p;
   }
   ADD_FAILURE() << "no function named " << func << " with a parameter";
@@ -132,7 +132,7 @@ TEST(PlanPointer, PointerToPointerNullsElementsAtDepthOne) {
 }
 
 TEST(PlanPointer, PointerToPointerGetsStringsAtDepthTwo) {
-  auto p = planFirstParam("void f(char **argv) {}", 2);
+  auto p = planFirstParam("void f(char **argv) {}", {2});
   EXPECT_TRUE(p.plan.viable);
   ASSERT_EQ(p.plan.slots.size(), 1u);
   ASSERT_NE(p.plan.slots[0].child, nullptr);
@@ -153,7 +153,7 @@ TEST(PlanPointer, SelfReferenceIsBoundedByDepth) {
   // A linked list comes out exactly `depth` nodes deep, then 0.
   auto p = planFirstParam("struct Node { int v; struct Node *next; };\n"
                           "void f(struct Node *n) {}",
-                          3);
+                          {3});
   const PointerPlan *level = &p.plan;
   for (int i = 0; i < 2; ++i) {
     ASSERT_EQ(level->slots.size(), 1u);
@@ -168,7 +168,7 @@ TEST(PlanPointer, NestedRecordFieldPathsThroughTheMember) {
   auto p = planFirstParam("struct Inner { char *name; };\n"
                           "struct Outer { int id; struct Inner inner; };\n"
                           "void f(struct Outer *o) {}",
-                          2);
+                          {2});
   EXPECT_TRUE(p.plan.viable);
   ASSERT_EQ(p.plan.slots.size(), 1u);
   EXPECT_EQ(p.plan.slots[0].path, (std::vector<std::string>{".inner", ".name"}));
@@ -188,12 +188,12 @@ TEST(PlanPointer, FunctionPointerFieldIsNotViable) {
   // Nothing callable can be synthesized for it (see docs/FunctionPointerHavocking.md).
   auto p = planFirstParam("struct Ops { int (*cb)(int); };\n"
                           "void f(struct Ops *o) {}",
-                          3);
+                          {3});
   EXPECT_FALSE(p.plan.viable);
 }
 
 TEST(PlanPointer, ArrayOfFunctionPointersIsNotViable) {
-  auto p = planFirstParam("void f(int (*fs[2])(int)) {}", 2);
+  auto p = planFirstParam("void f(int (*fs[2])(int)) {}", {2});
   EXPECT_FALSE(p.plan.viable);
 }
 
@@ -201,7 +201,7 @@ TEST(PlanPointer, UnionPointerMembersAreLeftAlone) {
   // Assigning one member would clobber the bytes of the others.
   auto p = planFirstParam("union U { int i; char *s; };\n"
                           "void f(union U *u) {}",
-                          2);
+                          {2});
   EXPECT_TRUE(p.plan.viable);
   EXPECT_TRUE(p.plan.slots.empty());
 }
@@ -218,7 +218,8 @@ TEST(PlanPointer, SelfContainingRecordFromErrorRecoveryTerminates) {
   for (clang::Decl *decl : ast->getASTContext().getTranslationUnitDecl()->decls()) {
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!fn || fn->getNameAsString() != "f") continue;
-    planPointer(fn->getParamDecl(0)->getOriginalType(), ast->getASTContext().getSourceManager(), 2);
+    planPointer(fn->getParamDecl(0)->getOriginalType(), ast->getASTContext().getSourceManager(),
+                PointerModel{2});
     return; // reaching here at all is the assertion
   }
   ADD_FAILURE() << "no f";
@@ -236,7 +237,7 @@ TEST(PlanPointer, ConstPointerFieldIsNotViable) {
 // ---------------------------------------------------------------------------
 
 TEST(PlanPointerDepthZero, CharPointerStaysCString) {
-  auto p = planFirstParam("void f(char *s) {}", 0);
+  auto p = planFirstParam("void f(char *s) {}", {0});
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::CString);
 }
@@ -244,7 +245,7 @@ TEST(PlanPointerDepthZero, CharPointerStaysCString) {
 TEST(PlanPointerDepthZero, RecordWithPointersIsOpaqueFlooredBySizeof) {
   auto p = planFirstParam("struct Node { int v; struct Node *next; };\n"
                           "void f(struct Node *n) {}",
-                          0);
+                          {0});
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
   EXPECT_EQ(p.plan.opaqueSizeof, "struct Node");
@@ -252,13 +253,13 @@ TEST(PlanPointerDepthZero, RecordWithPointersIsOpaqueFlooredBySizeof) {
 }
 
 TEST(PlanPointerDepthZero, PointerToPointerIsOpaque) {
-  auto p = planFirstParam("void f(char **argv) {}", 0);
+  auto p = planFirstParam("void f(char **argv) {}", {0});
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
 }
 
 TEST(PlanPointerDepthZero, ArrayParamFlooredByWholeArray) {
-  auto p = planFirstParam("void f(int a[3]) {}", 0);
+  auto p = planFirstParam("void f(int a[3]) {}", {0});
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
   EXPECT_EQ(p.plan.opaqueSizeof, "int[3]");
@@ -266,23 +267,23 @@ TEST(PlanPointerDepthZero, ArrayParamFlooredByWholeArray) {
 
 TEST(PlanPointerDepthZero, ArrayOfFunctionPointersSpellsItsSizeof) {
   // The bound nests inside the declarator; appending it would name a function returning an array.
-  auto p = planFirstParam("void f(int (*fs[2])(int)) {}", 0);
+  auto p = planFirstParam("void f(int (*fs[2])(int)) {}", {0});
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.opaqueSizeof, "int (*[2])(int)");
 }
 
 TEST(PlanPointerDepthZero, MultiDimArrayKeepsBoundOrder) {
-  auto p = planFirstParam("void f(int g[3][4]) {}", 0);
+  auto p = planFirstParam("void f(int g[3][4]) {}", {0});
   EXPECT_EQ(p.plan.opaqueSizeof, "int[3][4]");
 }
 
 TEST(PlanPointerDepthZero, CStringHasNoSizeofFloor) {
-  auto p = planFirstParam("void f(char *s) {}", 0);
+  auto p = planFirstParam("void f(char *s) {}", {0});
   EXPECT_EQ(p.plan.opaqueSizeof, "");
 }
 
 TEST(PlanPointerDepthZero, IncompleteRecordHasNoSizeofFloor) {
-  auto p = planFirstParam("struct Hidden; void f(struct Hidden *p) {}", 0);
+  auto p = planFirstParam("struct Hidden; void f(struct Hidden *p) {}", {0});
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
   EXPECT_EQ(p.plan.opaqueSizeof, "");
@@ -290,14 +291,61 @@ TEST(PlanPointerDepthZero, IncompleteRecordHasNoSizeofFloor) {
 }
 
 TEST(PlanPointerDepthZero, FunctionPointerIsStillNotViable) {
-  auto p = planFirstParam("void f(int (*cb)(int)) {}", 0);
+  auto p = planFirstParam("void f(int (*cb)(int)) {}", {0});
   EXPECT_FALSE(p.plan.viable);
+}
+
+// ---------------------------------------------------------------------------
+// Generic: every pointer is an opaque __HAVOC_BLOCK_MAX block, strings included.
+// ---------------------------------------------------------------------------
+
+namespace {
+constexpr PointerModel kGeneric{1, true};
+}
+
+TEST(PlanPointerGeneric, EveryViableShapeIsUnflooredOpaque) {
+  for (const char *code : {"void f(const char *s) {}", "void f(char **argv) {}",
+                           "void f(int g[3][4]) {}", "void f(void *p) {}",
+                           "struct Node { int v; struct Node *next; };\n"
+                           "void f(struct Node *n) {}"}) {
+    auto p = planFirstParam(code, kGeneric);
+    EXPECT_TRUE(p.plan.viable) << code;
+    EXPECT_EQ(p.plan.shape, PointerShape::Opaque) << code;
+    EXPECT_EQ(p.plan.opaqueSizeof, "") << code;
+    EXPECT_TRUE(p.plan.slots.empty()) << code;
+  }
+}
+
+TEST(PlanPointerGeneric, RecordPointeeGetsFwdDecl) {
+  auto p = planFirstParam("struct Hidden; void f(struct Hidden *p) {}", kGeneric);
+  EXPECT_EQ(p.plan.fwdDecl, "struct Hidden");
+}
+
+TEST(PlanPointerGeneric, ConstPointerFieldIsViable) {
+  // Nothing inside the block is assigned, so a const member is no obstacle.
+  auto p = planFirstParam("struct R { char *const name; };\n"
+                          "void f(struct R *r) {}",
+                          kGeneric);
+  EXPECT_TRUE(p.plan.viable);
+}
+
+TEST(PlanPointerGeneric, FunctionPointerIsStillNotViable) {
+  auto p = planFirstParam("void f(int (*cb)(int)) {}", kGeneric);
+  EXPECT_FALSE(p.plan.viable);
+}
+
+TEST(RenderPointerStorageGeneric, CharPointerIsCastBlockWithoutTerminator) {
+  auto p = planFirstParam("void f(char *s) {}", kGeneric);
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "char *");
+  EXPECT_EQ(s.decls, "  unsigned char __h0[__HAVOC_BLOCK_MAX];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+  EXPECT_EQ(s.arg, "(char *)__h0");
 }
 
 TEST(PlanPointer, AnonymousRecordPointerIsNotViable) {
   // No spelling for the storage declaration or the harness cast, at any depth.
   for (unsigned depth : {0u, 1u, 2u}) {
-    auto p = planFirstParam("void f(struct { int x; } *p) {}", depth);
+    auto p = planFirstParam("void f(struct { int x; } *p) {}", {depth});
     EXPECT_FALSE(p.plan.viable) << "depth " << depth;
   }
 }
@@ -373,7 +421,7 @@ TEST(RenderPointerStorage, PointerToPointerNullsEachElementAtDepthOne) {
 TEST(RenderPointerStorage, LinkedListGetsARowPerElement) {
   auto p = planFirstParam("struct Node { int v; struct Node *next; };\n"
                           "void f(struct Node *n) {}",
-                          2);
+                          {2});
   PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "struct Node *");
   EXPECT_EQ(s.decls, "  struct Node __h0[__HAVOC_ARRAY_ELEMS];\n"
                      "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n"
@@ -389,7 +437,7 @@ TEST(RenderPointerStorage, LinkedListGetsARowPerElement) {
 TEST(RenderPointerStorage, NestedStringFieldIsFilledPerRow) {
   auto p = planFirstParam("struct Names { char *names[4]; };\n"
                           "void f(struct Names *n) {}",
-                          2);
+                          {2});
   PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "struct Names *");
   EXPECT_EQ(s.decls,
             "  struct Names __h0[__HAVOC_ARRAY_ELEMS];\n"

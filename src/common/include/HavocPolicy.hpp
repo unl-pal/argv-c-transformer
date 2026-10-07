@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "HavocBounds.hpp"
+
 #include <algorithm>
 #include <clang/AST/Decl.h>
 #include <clang/AST/PrettyPrinter.h>
@@ -28,7 +30,9 @@
  * The pointer depth selects how much structure is modelled. Depth 0 havocs
  * every pointer as an opaque byte block (char pointers stay strings). Depth
  * k >= 1 builds typed storage and initializes the pointers inside it k levels
- * deep; every pointer past the bound is set to 0.
+ * deep; every pointer past the bound is set to 0. A generic model havocs every
+ * pointer, char pointers included, as an opaque block of exactly
+ * @c __HAVOC_BLOCK_MAX bytes.
  */
 
 /**
@@ -218,12 +222,11 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
 /**
  * @brief Classifies a pointer (or array) type into a havoc plan.
  *
- * @param QT    Pass @c ParmVarDecl::getOriginalType(), not @c getType(), to avoid array decay.
- * @param depth Pointer levels given typed storage; 0 havocs everything as opaque bytes.
+ * @param QT Pass @c ParmVarDecl::getOriginalType(), not @c getType(), to avoid array decay.
  * @return The plan; check @c viable before using it.
  */
 inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr,
-                               unsigned depth = 1) {
+                               PointerModel model = {}) {
   PointerPlan plan;
   if (QT.isNull() || QT.getTypePtrOrNull() == nullptr) return plan;
 
@@ -246,7 +249,14 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
   }
   if (!isSpellable(QT)) return plan; // no name for the storage or the cast
 
-  if (depth == 0) {
+  if (model.generic) {
+    plan.shape = PointerShape::Opaque;
+    plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
+    plan.viable = true;
+    return plan;
+  }
+
+  if (model.depth == 0) {
     if (pointee->isAnyCharacterType()) {
       plan.shape = PointerShape::CString;
     } else {
@@ -259,7 +269,7 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
     return plan;
   }
 
-  plan.viable = classifyPointee(pointee, mgr, depth, plan);
+  plan.viable = classifyPointee(pointee, mgr, model.depth, plan);
   return plan;
 }
 

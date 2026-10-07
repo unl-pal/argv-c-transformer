@@ -89,7 +89,7 @@ std::optional<clang::CharSourceRange> rewritableSpelling(const clang::CallExpr *
 // rather than emitting a real call into an unsound benchmark. Stateless, so
 // callable repeatedly for the same call.
 std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTContext &C,
-                                        unsigned pointerDepth) {
+                                        PointerModel pointers) {
   clang::SourceManager &mgr = C.getSourceManager();
   if (!mgr.isInMainFile(E->getExprLoc())) return std::nullopt;
 
@@ -113,7 +113,7 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
     action.mode = HavocAction::Mode::Inline;
     action.replacement = "__VERIFIER_nondet_" + *suffix + "()";
   } else if (returnType->isAnyPointerType()) {
-    PointerPlan plan = planPointer(returnType, mgr, pointerDepth); // storage/placement are the caller's job
+    PointerPlan plan = planPointer(returnType, mgr, pointers); // storage/placement are the caller's job
     if (plan.viable) {
       action.mode = HavocAction::Mode::Pointer;
       action.plan = plan;
@@ -190,7 +190,7 @@ bool HavocCallsVisitor::isSideEffectFree(
     return true;
   case clang::Stmt::CallExprClass: {
     const auto *CE = clang::cast<clang::CallExpr>(E);
-    std::optional<HavocAction> action = classifyCall(CE, *_C, _PointerDepth);
+    std::optional<HavocAction> action = classifyCall(CE, *_C, _Pointers);
     if (!action || action->mode == HavocAction::Mode::Reject)
       return false; // a rejected call is a real, unreplaced call: not pure
     if (action->mode == HavocAction::Mode::Pointer) {
@@ -235,7 +235,7 @@ bool HavocCallsVisitor::isSideEffectFree(
 bool HavocCallsVisitor::containsHavocedCall(const clang::Stmt *S) const {
   if (!S) return false;
   if (const auto *CE = clang::dyn_cast<clang::CallExpr>(S)) {
-    std::optional<HavocAction> action = classifyCall(CE, *_C, _PointerDepth);
+    std::optional<HavocAction> action = classifyCall(CE, *_C, _Pointers);
     if (action && action->mode != HavocAction::Mode::Reject) return true;
   }
   for (const clang::Stmt *child : S->children()) {
@@ -257,18 +257,18 @@ bool HavocCallsVisitor::isInitSideEffectFree(
 
 HavocCallsVisitor::HavocCallsVisitor(clang::ASTContext *C,
                                      std::shared_ptr<std::set<std::string>> neededFwdDecls,
-                                     clang::Rewriter &rewriter, unsigned pointerDepth)
-    : _C(C), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter), _PointerDepth(pointerDepth) {};
+                                     clang::Rewriter &rewriter, PointerModel pointers)
+    : _C(C), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter), _Pointers(pointers) {};
 
 bool HavocCallsVisitor::TraverseCallExpr(clang::CallExpr *E) {
-  std::optional<HavocAction> action = classifyCall(E, *_C, _PointerDepth);
+  std::optional<HavocAction> action = classifyCall(E, *_C, _Pointers);
   if (action && action->mode != HavocAction::Mode::Reject)
     return VisitCallExpr(E); // rewrites E outright; its arguments' text goes with it
   return RecursiveASTVisitor<HavocCallsVisitor>::TraverseCallExpr(E);
 }
 
 bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
-  std::optional<HavocAction> action = classifyCall(E, *_C, _PointerDepth);
+  std::optional<HavocAction> action = classifyCall(E, *_C, _Pointers);
   if (!action) return true;
 
   std::string where = locString(_C->getSourceManager(), E->getExprLoc());
