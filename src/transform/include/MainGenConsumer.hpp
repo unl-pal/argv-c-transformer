@@ -84,7 +84,7 @@ private:
    * {@code __VERIFIER_nondet_memory}. When a pointer is present, integer
    * parameters are emitted as locals clamped to {@code __HAVOC_ARRAY_ELEMS}
    * instead, so that any index derived from them stays inside the block handed
-   * to the callee.
+   * to the callee; generic pointers leave them unclamped.
    *
    * @param func    The function to synthesize a call for.
    * @param Context The AST context, for the SourceManager (telling types that

@@ -57,6 +57,13 @@ int name_head(void) {
 
 int original_main(int argc, char **argv) { return argc > 1 ? argv[1][0] : 0; }
 
+// Integers beside a pointer are not clamped.
+int sum(int *a, int n) {
+  int s = 0;
+  for (int i = 0; i < n; i++) s += a[i];
+  return s;
+}
+
 int main(void) {
   {
     unsigned char __h0[__HAVOC_BLOCK_MAX];
@@ -93,6 +100,11 @@ int main(void) {
     unsigned char __h5[__HAVOC_BLOCK_MAX];
     __VERIFIER_nondet_memory(__h5, sizeof(__h5));
     original_main(__VERIFIER_nondet_int(), (char **)__h5);
+  }
+  {
+    unsigned char __h6[__HAVOC_BLOCK_MAX];
+    __VERIFIER_nondet_memory(__h6, sizeof(__h6));
+    sum((int *)__h6, __VERIFIER_nondet_int());
   }
   return 0;
 }
