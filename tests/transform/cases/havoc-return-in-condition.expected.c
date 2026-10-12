@@ -11,7 +11,8 @@
 // the whole `if`, and the call is replaced in place.
 int cond_if(void) {
   int __hret0[__HAVOC_ARRAY_ELEMS];
-  __VERIFIER_nondet_memory(__hret0, sizeof(__hret0));
+  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+    __hret0[__i0] = __VERIFIER_nondet_int();
   if (__hret0[0])
     return 1;
   return 0;
@@ -20,7 +21,8 @@ int cond_if(void) {
 // Same for a while condition, a distinct anchor.
 int cond_while(void) {
   int __hret1[__HAVOC_ARRAY_ELEMS];
-  __VERIFIER_nondet_memory(__hret1, sizeof(__hret1));
+  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+    __hret1[__i0] = __VERIFIER_nondet_int();
   while (__hret1[0])
     return 2;
   return 0;

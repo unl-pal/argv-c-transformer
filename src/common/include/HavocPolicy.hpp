@@ -5,6 +5,7 @@
 #pragma once
 
 #include "HavocBounds.hpp"
+#include "VerifierNames.hpp"
 
 #include <algorithm>
 #include <clang/AST/Decl.h>
@@ -14,6 +15,7 @@
 #include <cstdint>
 #include <llvm/Support/Casting.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -61,6 +63,16 @@ struct PointerSlot {
 };
 
 /**
+ * @brief A scalar inside each element of a record plan's storage, assigned a
+ * @c __VERIFIER_nondet_<suffix>() value.
+ */
+struct ScalarField {
+  std::vector<std::string> path; ///< As in @ref PointerSlot.
+  std::vector<uint64_t> dims;
+  std::string suffix;
+};
+
+/**
  * @brief A decision about one pointer type: what shape, and any declaration its
  * spelling needs.
  */
@@ -71,6 +83,8 @@ struct PointerPlan {
   unsigned elems = 0;       ///< Constant array size.
   std::string opaqueSizeof; ///< Type whose sizeof floors an opaque block; "" for none.
   std::vector<PointerSlot> slots;
+  std::vector<ScalarField> scalars;
+  bool fieldwise = false; ///< @c scalars and @c slots cover every field, so no bulk fill is needed.
 };
 
 /**
@@ -143,7 +157,20 @@ inline std::shared_ptr<PointerPlan> planSlotTarget(clang::QualType type,
 }
 
 /**
- * @brief Appends a slot for every pointer reachable by value inside @p record.
+ * @brief The nondet suffix a storage element or record field of @p type is
+ * assigned from, or nullopt if it has none and the storage must be bulk-filled instead.
+ */
+inline std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool readOnly) {
+  if (readOnly) return std::nullopt; // only nondet_memory can write a const member
+  if (const auto *enumType = type->getAs<clang::EnumType>())
+    return verifierSuffixForType(enumType->getDecl()->getIntegerType());
+  return verifierSuffixForType(type);
+}
+
+/**
+ * @brief Appends a slot for every pointer and a scalar field for every
+ * nondet-assignable scalar reachable by value inside @p record, clearing
+ * @c plan.fieldwise if some field is neither.
  *
  * @param readOnly The record is reached through a const member.
  * @param enclosing Records being walked above this one.
@@ -151,13 +178,18 @@ inline std::shared_ptr<PointerPlan> planSlotTarget(clang::QualType type,
  */
 inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std::string> &path,
                          const std::vector<uint64_t> &dims, bool readOnly,
-                         const clang::SourceManager &mgr, unsigned depth,
-                         std::vector<PointerSlot> &slots,
+                         const clang::SourceManager &mgr, unsigned depth, PointerPlan &plan,
                          std::vector<const clang::RecordDecl *> enclosing = {}) {
   const clang::RecordDecl *def = record->getDefinition();
-  if (!def || def->isUnion()) return true; // assigning one member would clobber its siblings
+  if (!def || def->isUnion()) { // assigning one member would clobber its siblings
+    plan.fieldwise = false;
+    return true;
+  }
   // Error recovery can leave a record containing itself by value.
-  if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) return true;
+  if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) {
+    plan.fieldwise = false;
+    return true;
+  }
   enclosing.push_back(def);
   for (const clang::FieldDecl *field : def->fields()) {
     if (field->isInvalidDecl()) continue;
@@ -180,10 +212,14 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
     bool fieldReadOnly = readOnly || type.isConstQualified();
     if (type->isAnyPointerType()) {
       if (fieldReadOnly || type->isFunctionPointerType()) return false;
-      slots.push_back({fieldPath, fieldDims, type, planSlotTarget(type, mgr, depth - 1)});
+      plan.slots.push_back({fieldPath, fieldDims, type, planSlotTarget(type, mgr, depth - 1)});
     } else if (const clang::RecordDecl *nested = type->getAsRecordDecl()) {
-      if (!collectSlots(nested, fieldPath, fieldDims, fieldReadOnly, mgr, depth, slots, enclosing))
+      if (!collectSlots(nested, fieldPath, fieldDims, fieldReadOnly, mgr, depth, plan, enclosing))
         return false;
+    } else if (std::optional<std::string> suffix = scalarFieldSuffix(type, fieldReadOnly)) {
+      plan.scalars.push_back({fieldPath, fieldDims, *suffix});
+    } else {
+      plan.fieldwise = false;
     }
   }
   return true;
@@ -205,6 +241,7 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
   if (pointee->isAnyPointerType()) { // storage is unqualified, so a const element still assigns
     if (pointee->isFunctionPointerType()) return false;
     plan.slots.push_back({{}, {}, pointee, planSlotTarget(pointee, mgr, depth - 1)});
+    plan.fieldwise = true;
     return true;
   }
   if (!isSizedPointee(pointee, mgr)) {
@@ -214,7 +251,14 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
   }
   if (const clang::RecordDecl *record = pointee->getAsRecordDecl()) {
     if (plan.shape != PointerShape::Array) plan.shape = PointerShape::Record;
-    return collectSlots(record, {}, {}, false, mgr, depth, plan.slots);
+    plan.fieldwise = true;
+    if (!collectSlots(record, {}, {}, false, mgr, depth, plan)) return false;
+    if (!plan.fieldwise) plan.scalars.clear(); // the bulk fill covers them
+    return true;
+  }
+  if (std::optional<std::string> suffix = scalarFieldSuffix(pointee, false)) {
+    plan.scalars.push_back({{}, {}, *suffix});
+    plan.fieldwise = true;
   }
   return true;
 }
@@ -309,8 +353,52 @@ inline std::string indexed(const std::string &name, size_t count) {
 }
 
 /**
- * @brief Emits @c name[outer...][count] storage for @p plan, fills it, and
- * assigns every slot in every element, recursing into slot targets first.
+ * @brief Emits loops over @p dims then @p fieldDims assigning @p value to
+ * @p path within every element of @p name.
+ *
+ * @param looped Leading entries of @p dims the caller has already opened loops for.
+ */
+inline void assignEach(const std::string &name, const std::vector<std::string> &dims,
+                       const std::vector<std::string> &path, const std::vector<uint64_t> &fieldDims,
+                       const std::string &value, const std::string &indent, std::string &out,
+                       size_t looped = 0) {
+  std::vector<std::string> loopDims = dims;
+  for (uint64_t dim : fieldDims)
+    loopDims.push_back(std::to_string(dim));
+  std::string lhs = indexed(name, dims.size());
+  size_t var = dims.size();
+  for (const std::string &segment : path)
+    lhs += segment == "[]" ? "[" + loopVar(var++) + "]" : segment;
+  for (size_t i = looped; i < loopDims.size(); ++i)
+    out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
+           " < " + loopDims[i] + "; ++" + loopVar(i) + ")\n";
+  out += indent + std::string(2 * loopDims.size(), ' ') + lhs + " = " + value + ";\n";
+}
+
+/**
+ * @brief Assigns every scalar field of every element of @p name a nondet
+ * value, one loop nest over @p dims building each element whole.
+ */
+inline void fillFieldwise(const PointerPlan &plan, const std::string &name,
+                          const std::vector<std::string> &dims, const std::string &indent,
+                          std::string &out) {
+  if (plan.scalars.empty()) return;
+  const char *open = plan.scalars.size() > 1 ? " {\n" : "\n";
+  for (size_t i = 0; i < dims.size(); ++i)
+    out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
+           " < " + dims[i] + "; ++" + loopVar(i) + ")" + open;
+  for (const ScalarField &field : plan.scalars)
+    assignEach(name, dims, field.path, field.dims, "__VERIFIER_nondet_" + field.suffix + "()",
+               indent, out, dims.size());
+  if (plan.scalars.size() == 1) return;
+  for (size_t i = dims.size(); i-- > 0;)
+    out += indent + std::string(2 * i, ' ') + "}\n";
+}
+
+/**
+ * @brief Emits @c name[outer...][count] storage for @p plan, fills it (in bulk,
+ * or field by field when @c plan.fieldwise), and assigns every slot in every
+ * element, recursing into slot targets first.
  */
 inline void renderStorage(const PointerPlan &plan, clang::QualType element, const std::string &name,
                           const std::vector<std::string> &outer, const std::string &indent,
@@ -325,10 +413,13 @@ inline void renderStorage(const PointerPlan &plan, clang::QualType element, cons
     element.getUnqualifiedType().getAsStringInternal(decl, clang::LangOptions());
   out += indent + decl + ";\n";
   if (plan.shape == PointerShape::CString) return; // filled where it is referenced
-  out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
 
   std::vector<std::string> dims = outer;
   dims.push_back(count);
+  if (plan.fieldwise)
+    fillFieldwise(plan, name, dims, indent, out);
+  else
+    out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
   for (size_t s = 0; s < plan.slots.size(); ++s) {
     const PointerSlot &slot = plan.slots[s];
     std::vector<std::string> loopDims = dims;
@@ -347,15 +438,7 @@ inline void renderStorage(const PointerPlan &plan, clang::QualType element, cons
       else
         value = row;
     }
-
-    std::string lhs = indexed(name, dims.size());
-    size_t var = dims.size();
-    for (const std::string &segment : slot.path)
-      lhs += segment == "[]" ? "[" + loopVar(var++) + "]" : segment;
-    for (size_t i = 0; i < loopDims.size(); ++i)
-      out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
-             " < " + loopDims[i] + "; ++" + loopVar(i) + ")\n";
-    out += indent + std::string(2 * loopDims.size(), ' ') + lhs + " = " + value + ";\n";
+    assignEach(name, dims, slot.path, slot.dims, value, indent, out);
   }
 }
 
@@ -363,7 +446,7 @@ inline void renderStorage(const PointerPlan &plan, clang::QualType element, cons
 
 /**
  * @brief Declares stack storage for a viable pointer plan and fills it with
- * @c __VERIFIER_nondet_memory, for use in statement position.
+ * nondet values, for use in statement position.
  *
  * @param declared The parameter's pre-decay type, or a call's return type.
  * @param name     Unique local name for the storage; nested storage appends suffixes to it.

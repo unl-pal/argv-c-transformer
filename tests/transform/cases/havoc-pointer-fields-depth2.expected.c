@@ -34,9 +34,12 @@ int first_arg(char **argv) { return argv[0][0]; }
 
 int via_return(void) {
   struct Node __hret0[__HAVOC_ARRAY_ELEMS];
-  __VERIFIER_nondet_memory(__hret0, sizeof(__hret0));
+  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+    __hret0[__i0].value = __VERIFIER_nondet_int();
   struct Node __hret0_0[__HAVOC_ARRAY_ELEMS][__HAVOC_ARRAY_ELEMS];
-  __VERIFIER_nondet_memory(__hret0_0, sizeof(__hret0_0));
+  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+    for (int __i1 = 0; __i1 < __HAVOC_ARRAY_ELEMS; ++__i1)
+      __hret0_0[__i0][__i1].value = __VERIFIER_nondet_int();
   for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
     for (int __i1 = 0; __i1 < __HAVOC_ARRAY_ELEMS; ++__i1)
       __hret0_0[__i0][__i1].next = 0;
@@ -49,9 +52,12 @@ int via_return(void) {
 int main(void) {
   {
     struct Node __h0[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+      __h0[__i0].value = __VERIFIER_nondet_int();
     struct Node __h0_0[__HAVOC_ARRAY_ELEMS][__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h0_0, sizeof(__h0_0));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+      for (int __i1 = 0; __i1 < __HAVOC_ARRAY_ELEMS; ++__i1)
+        __h0_0[__i0][__i1].value = __VERIFIER_nondet_int();
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       for (int __i1 = 0; __i1 < __HAVOC_ARRAY_ELEMS; ++__i1)
         __h0_0[__i0][__i1].next = 0;
@@ -61,7 +67,8 @@ int main(void) {
   }
   {
     struct Named __h1[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h1, sizeof(__h1));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+      __h1[__i0].id = __VERIFIER_nondet_int();
     char __h1_0[__HAVOC_ARRAY_ELEMS][__HAVOC_STR_MAX];
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h1[__i0].name = __havoc_cstring_fill(__h1_0[__i0], __HAVOC_STR_MAX);
@@ -73,7 +80,6 @@ int main(void) {
   }
   {
     char *__h2[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h2, sizeof(__h2));
     char __h2_0[__HAVOC_ARRAY_ELEMS][__HAVOC_STR_MAX];
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h2[__i0] = __havoc_cstring_fill(__h2_0[__i0], __HAVOC_STR_MAX);

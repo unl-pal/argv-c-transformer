@@ -34,7 +34,8 @@ int first_arg(char **argv) { return argv[0][0]; }
 
 int via_return(void) {
   struct Node __hret0[__HAVOC_ARRAY_ELEMS];
-  __VERIFIER_nondet_memory(__hret0, sizeof(__hret0));
+  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+    __hret0[__i0].value = __VERIFIER_nondet_int();
   for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
     __hret0[__i0].next = 0;
   struct Node *n = __hret0;
@@ -44,14 +45,16 @@ int via_return(void) {
 int main(void) {
   {
     struct Node __h0[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+      __h0[__i0].value = __VERIFIER_nondet_int();
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h0[__i0].next = 0;
     second_value(__h0);
   }
   {
     struct Named __h1[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h1, sizeof(__h1));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+      __h1[__i0].id = __VERIFIER_nondet_int();
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h1[__i0].name = 0;
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
@@ -61,7 +64,6 @@ int main(void) {
   }
   {
     char *__h2[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h2, sizeof(__h2));
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h2[__i0] = 0;
     first_arg(__h2);

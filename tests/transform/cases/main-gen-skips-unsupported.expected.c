@@ -20,7 +20,8 @@ int plain(int a) {
 int main(void) {
   {
     int __h0[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+      __h0[__i0] = __VERIFIER_nondet_int();
     takesPtr(__h0);
   }
   {
