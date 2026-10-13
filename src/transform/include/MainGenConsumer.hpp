@@ -81,9 +81,9 @@ private:
    * Primitive parameters become {@code __VERIFIER_nondet_*()} calls; pointer
    * parameters are classified by {@code planPointer} and rendered by
    * {@code renderPointerStorage} as stack storage filled with
-   * {@code __VERIFIER_nondet_memory}. When a pointer is present, integer
-   * parameters are emitted as locals clamped to {@code __HAVOC_ARRAY_ELEMS}
-   * instead, so that any index derived from them stays inside the block handed
+   * {@code __VERIFIER_nondet_memory}. When a pointer is present and
+   * {@code clampIntegers} is set, integer parameters are emitted as locals
+   * clamped to {@code __HAVOC_ARRAY_ELEMS} instead, so that any index derived from them stays inside the block handed
    * to the callee.
    *
    * @param func    The function to synthesize a call for.
