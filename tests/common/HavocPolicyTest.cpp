@@ -155,7 +155,8 @@ TEST(PlanPointer, FunctionPointerIsNotViable) {
 }
 
 // ---------------------------------------------------------------------------
-// Rendering: stack storage filled with __VERIFIER_nondet_memory, no heap.
+// Rendering: stack storage filled field by field, or with
+// __VERIFIER_nondet_memory when some field has no nondet; no heap.
 // ---------------------------------------------------------------------------
 
 TEST(RenderPointerStorage, BlockDeclaresTypedArrayAndPassesIt) {
@@ -164,14 +165,16 @@ TEST(RenderPointerStorage, BlockDeclaresTypedArrayAndPassesIt) {
   EXPECT_EQ(s.arg, "__h0");
   EXPECT_FALSE(s.cstring);
   EXPECT_EQ(s.decls, "  int __h0[__HAVOC_ARRAY_ELEMS];\n"
-                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    __h0[__i0] = __VERIFIER_nondet_int();\n");
 }
 
 TEST(RenderPointerStorage, ArrayUsesDeclaredBound) {
   auto p = planFirstParam("void f(int a[3]) {}");
   PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *");
   EXPECT_EQ(s.decls, "  int __h0[3];\n"
-                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+                     "  for (int __i0 = 0; __i0 < 3; ++__i0)\n"
+                     "    __h0[__i0] = __VERIFIER_nondet_int();\n");
 }
 
 TEST(RenderPointerStorage, CStringPlantsInBoundsTerminator) {
@@ -197,5 +200,48 @@ TEST(RenderPointerStorage, IndentParameterPrefixesEveryLine) {
   auto p = planFirstParam("void f(int *a) {}");
   PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "int *", "");
   EXPECT_EQ(s.decls, "int __h0[__HAVOC_ARRAY_ELEMS];\n"
-                     "__VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+                     "for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "  __h0[__i0] = __VERIFIER_nondet_int();\n");
+}
+
+TEST(RenderPointerStorage, RecordAssignsEveryFieldIncludingNestedAndArrays) {
+  auto p = planFirstParam("enum E { A, B };\n"
+                          "struct In { short s; };\n"
+                          "struct S { unsigned u; enum E e; struct In in; long a[2]; };\n"
+                          "void f(struct S *p) {}");
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "struct S *");
+  EXPECT_EQ(s.decls, "  struct S __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+                     "    __h0[__i0].u = __VERIFIER_nondet_uint();\n"
+                     "    __h0[__i0].e = __VERIFIER_nondet_uint();\n"
+                     "    __h0[__i0].in.s = __VERIFIER_nondet_short();\n"
+                     "    for (int __i1 = 0; __i1 < 2; ++__i1)\n"
+                     "      __h0[__i0].a[__i1] = __VERIFIER_nondet_long();\n"
+                     "  }\n");
+}
+
+TEST(RenderPointerStorage, RecordSkipsUnnamedBitFields) {
+  auto p = planFirstParam("struct S { unsigned a : 1; unsigned : 3; unsigned b : 4; };\n"
+                          "void f(struct S *p) {}");
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "struct S *");
+  EXPECT_EQ(s.decls, "  struct S __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+                     "    __h0[__i0].a = __VERIFIER_nondet_uint();\n"
+                     "    __h0[__i0].b = __VERIFIER_nondet_uint();\n"
+                     "  }\n");
+}
+
+TEST(RenderPointerStorage, RecordWithUnassignableFieldFallsBackToBulkFill) {
+  for (const char *code : {"struct S { int a; union { int i; float f; } u; };\n"
+                           "void f(struct S *p) {}",
+                           "struct S { int a; const int c; };\n"
+                           "void f(struct S *p) {}"}) {
+    auto p = planFirstParam(code);
+    EXPECT_FALSE(p.plan.fieldwise) << code;
+    EXPECT_TRUE(p.plan.scalars.empty()) << code;
+    PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "struct S *");
+    EXPECT_EQ(s.decls, "  struct S __h0[__HAVOC_ARRAY_ELEMS];\n"
+                       "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n")
+        << code;
+  }
 }

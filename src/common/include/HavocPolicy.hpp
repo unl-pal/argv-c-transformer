@@ -4,12 +4,18 @@
 
 #pragma once
 
+#include "VerifierNames.hpp"
+
+#include <algorithm>
 #include <clang/AST/Decl.h>
 #include <clang/AST/PrettyPrinter.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
+#include <cstdint>
 #include <llvm/Support/Casting.h>
+#include <optional>
 #include <string>
+#include <vector>
 
 /**
  * @file HavocPolicy.hpp
@@ -35,6 +41,16 @@ enum class PointerShape {
 };
 
 /**
+ * @brief A scalar inside each element of a plan's storage, assigned a
+ * @c __VERIFIER_nondet_<suffix>() value.
+ */
+struct ScalarField {
+  std::vector<std::string> path; ///< Member accesses from the element, "[]" for each array level.
+  std::vector<uint64_t> dims;    ///< Bound of each "[]" in @c path.
+  std::string suffix;
+};
+
+/**
  * @brief A decision about one pointer type: what shape, and any declaration its
  * spelling needs.
  */
@@ -43,6 +59,8 @@ struct PointerPlan {
   bool viable = false;
   std::string fwdDecl; ///< For an opaque pointee.
   unsigned elems = 0;  ///< Constant array size.
+  std::vector<ScalarField> scalars;
+  bool fieldwise = false; ///< @c scalars cover every field, so no bulk fill is needed.
 };
 
 /**
@@ -62,6 +80,66 @@ inline bool recordHasPointerFields(const clang::RecordDecl *record, unsigned dep
       if (recordHasPointerFields(nested, depth + 1)) return true;
   }
   return false;
+}
+
+/**
+ * @brief The nondet suffix a storage element or record field of @p type is
+ * assigned from, or nullopt if it has none and the storage must be bulk-filled instead.
+ */
+inline std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool readOnly) {
+  if (readOnly) return std::nullopt; // only nondet_memory can write a const member
+  if (const auto *enumType = type->getAs<clang::EnumType>())
+    return verifierSuffixForType(enumType->getDecl()->getIntegerType());
+  return verifierSuffixForType(type);
+}
+
+/**
+ * @brief Appends a scalar field for every nondet-assignable scalar reachable by
+ * value inside @p record, clearing @c plan.fieldwise if some field is not one.
+ *
+ * @param readOnly The record is reached through a const member.
+ * @param enclosing Records being walked above this one.
+ */
+inline void collectScalars(const clang::RecordDecl *record, const std::vector<std::string> &path,
+                           const std::vector<uint64_t> &dims, bool readOnly, PointerPlan &plan,
+                           std::vector<const clang::RecordDecl *> enclosing = {}) {
+  const clang::RecordDecl *def = record->getDefinition();
+  if (!def || def->isUnion()) { // assigning one member would clobber its siblings
+    plan.fieldwise = false;
+    return;
+  }
+  // Error recovery can leave a record containing itself by value.
+  if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) {
+    plan.fieldwise = false;
+    return;
+  }
+  enclosing.push_back(def);
+  for (const clang::FieldDecl *field : def->fields()) {
+    if (field->isInvalidDecl() || field->isUnnamedBitField()) continue; // padding, not addressable
+    std::vector<std::string> fieldPath = path;
+    std::vector<uint64_t> fieldDims = dims;
+    if (!field->isAnonymousStructOrUnion()) fieldPath.push_back("." + field->getName().str());
+    clang::QualType type = field->getType();
+    bool flexible = false;
+    while (const clang::ArrayType *array = type->getAsArrayTypeUnsafe()) {
+      const auto *constant = llvm::dyn_cast<clang::ConstantArrayType>(array);
+      if (!constant) {
+        flexible = true;
+        break;
+      }
+      fieldDims.push_back(constant->getSize().getZExtValue());
+      fieldPath.push_back("[]");
+      type = constant->getElementType();
+    }
+    if (flexible) continue; // outside sizeof, so outside the storage
+    bool fieldReadOnly = readOnly || type.isConstQualified();
+    if (const clang::RecordDecl *nested = type->getAsRecordDecl())
+      collectScalars(nested, fieldPath, fieldDims, fieldReadOnly, plan, enclosing);
+    else if (std::optional<std::string> suffix = scalarFieldSuffix(type, fieldReadOnly))
+      plan.scalars.push_back({fieldPath, fieldDims, *suffix});
+    else
+      plan.fieldwise = false;
+  }
 }
 
 /**
@@ -144,6 +222,15 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
       return plan;
   }
 
+  if (const clang::RecordDecl *record = pointee->getAsRecordDecl()) {
+    plan.fieldwise = true;
+    collectScalars(record, {}, {}, false, plan);
+    if (!plan.fieldwise) plan.scalars.clear(); // the bulk fill covers them
+  } else if (std::optional<std::string> suffix = scalarFieldSuffix(pointee, false)) {
+    plan.scalars.push_back({{}, {}, *suffix});
+    plan.fieldwise = true;
+  }
+
   plan.viable = true;
   return plan;
 }
@@ -157,9 +244,66 @@ struct PointerStorage {
   bool cstring = false;
 };
 
+namespace havoc_detail {
+
+inline std::string loopVar(size_t i) { return "__i" + std::to_string(i); }
+
+inline std::string indexed(const std::string &name, size_t count) {
+  std::string out = name;
+  for (size_t i = 0; i < count; ++i)
+    out += "[" + loopVar(i) + "]";
+  return out;
+}
+
+/**
+ * @brief Emits loops over @p dims then @p fieldDims assigning @p value to
+ * @p path within every element of @p name.
+ *
+ * @param looped Leading entries of @p dims the caller has already opened loops for.
+ */
+inline void assignEach(const std::string &name, const std::vector<std::string> &dims,
+                       const std::vector<std::string> &path, const std::vector<uint64_t> &fieldDims,
+                       const std::string &value, const std::string &indent, std::string &out,
+                       size_t looped = 0) {
+  std::vector<std::string> loopDims = dims;
+  for (uint64_t dim : fieldDims)
+    loopDims.push_back(std::to_string(dim));
+  std::string lhs = indexed(name, dims.size());
+  size_t var = dims.size();
+  for (const std::string &segment : path)
+    lhs += segment == "[]" ? "[" + loopVar(var++) + "]" : segment;
+  for (size_t i = looped; i < loopDims.size(); ++i)
+    out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
+           " < " + loopDims[i] + "; ++" + loopVar(i) + ")\n";
+  out += indent + std::string(2 * loopDims.size(), ' ') + lhs + " = " + value + ";\n";
+}
+
+/**
+ * @brief Assigns every scalar field of every element of @p name a nondet
+ * value, one loop nest over @p dims building each element whole.
+ */
+inline void fillFieldwise(const PointerPlan &plan, const std::string &name,
+                          const std::vector<std::string> &dims, const std::string &indent,
+                          std::string &out) {
+  if (plan.scalars.empty()) return;
+  const char *open = plan.scalars.size() > 1 ? " {\n" : "\n";
+  for (size_t i = 0; i < dims.size(); ++i)
+    out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
+           " < " + dims[i] + "; ++" + loopVar(i) + ")" + open;
+  for (const ScalarField &field : plan.scalars)
+    assignEach(name, dims, field.path, field.dims, "__VERIFIER_nondet_" + field.suffix + "()",
+               indent, out, dims.size());
+  if (plan.scalars.size() == 1) return;
+  for (size_t i = dims.size(); i-- > 0;)
+    out += indent + std::string(2 * i, ' ') + "}\n";
+}
+
+} // namespace havoc_detail
+
 /**
  * @brief Declares stack storage for a viable pointer plan and fills it with
- * @c __VERIFIER_nondet_memory, for use in statement position.
+ * nondet values (in bulk, or field by field when @c plan.fieldwise), for use
+ * in statement position.
  *
  * @param declared The parameter's pre-decay type, or a call's return type.
  * @param name     Unique local name for the storage variable.
@@ -210,7 +354,10 @@ inline PointerStorage renderPointerStorage(const PointerPlan &plan, clang::QualT
     return out;
   }
 
-  out.decls += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
+  if (plan.fieldwise)
+    havoc_detail::fillFieldwise(plan, name, {count}, indent, out.decls);
+  else
+    out.decls += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
   out.arg = name;
   return out;
 }
