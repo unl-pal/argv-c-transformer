@@ -119,16 +119,12 @@ TEST(PlanPointer, PointerFreeRecordIsSizedByType) {
 
 // ---------------------------------------------------------------------------
 // Recursive initialization: pointers inside the storage become slots, given
-// their own storage while the depth lasts and set to 0 past it.
+// their own storage while the depth lasts; one past it makes the plan non-viable.
 // ---------------------------------------------------------------------------
 
-TEST(PlanPointer, PointerToPointerNullsElementsAtDepthOne) {
+TEST(PlanPointer, PointerToPointerIsDroppedAtDepthOne) {
   auto p = planFirstParam("void f(char **argv) {}");
-  EXPECT_TRUE(p.plan.viable);
-  EXPECT_EQ(p.plan.shape, PointerShape::Block);
-  ASSERT_EQ(p.plan.slots.size(), 1u);
-  EXPECT_TRUE(p.plan.slots[0].path.empty());
-  EXPECT_EQ(p.plan.slots[0].child, nullptr);
+  EXPECT_FALSE(p.plan.viable);
 }
 
 TEST(PlanPointer, PointerToPointerGetsStringsAtDepthTwo) {
@@ -139,29 +135,18 @@ TEST(PlanPointer, PointerToPointerGetsStringsAtDepthTwo) {
   EXPECT_EQ(p.plan.slots[0].child->shape, PointerShape::CString);
 }
 
-TEST(PlanPointer, RecordWithPointerFieldNullsItAtDepthOne) {
-  auto p = planFirstParam("struct Node { int v; struct Node *next; };\n"
-                          "void f(struct Node *n) {}");
-  EXPECT_TRUE(p.plan.viable);
-  EXPECT_EQ(p.plan.shape, PointerShape::Record);
-  ASSERT_EQ(p.plan.slots.size(), 1u);
-  EXPECT_EQ(p.plan.slots[0].path, std::vector<std::string>{".next"});
-  EXPECT_EQ(p.plan.slots[0].child, nullptr);
+TEST(PlanPointer, RecordWithPointerFieldIsDroppedAtDepthOne) {
+  auto p = planFirstParam("struct Box { int v; int *data; };\n"
+                          "void f(struct Box *b) {}");
+  EXPECT_FALSE(p.plan.viable);
 }
 
-TEST(PlanPointer, SelfReferenceIsBoundedByDepth) {
-  // A linked list comes out exactly `depth` nodes deep, then 0.
+TEST(PlanPointer, SelfReferenceIsNeverViable) {
+  // A recursive type always reaches a pointer past any finite bound.
   auto p = planFirstParam("struct Node { int v; struct Node *next; };\n"
                           "void f(struct Node *n) {}",
                           {3});
-  const PointerPlan *level = &p.plan;
-  for (int i = 0; i < 2; ++i) {
-    ASSERT_EQ(level->slots.size(), 1u);
-    ASSERT_NE(level->slots[0].child, nullptr) << "level " << i;
-    level = level->slots[0].child.get();
-  }
-  ASSERT_EQ(level->slots.size(), 1u);
-  EXPECT_EQ(level->slots[0].child, nullptr);
+  EXPECT_FALSE(p.plan.viable);
 }
 
 TEST(PlanPointer, NestedRecordFieldPathsThroughTheMember) {
@@ -178,7 +163,8 @@ TEST(PlanPointer, NestedRecordFieldPathsThroughTheMember) {
 
 TEST(PlanPointer, PointerArrayFieldCarriesItsBound) {
   auto p = planFirstParam("struct Names { char *names[4]; };\n"
-                          "void f(struct Names *n) {}");
+                          "void f(struct Names *n) {}",
+                          {2});
   ASSERT_EQ(p.plan.slots.size(), 1u);
   EXPECT_EQ(p.plan.slots[0].path, (std::vector<std::string>{".names", "[]"}));
   EXPECT_EQ(p.plan.slots[0].dims, std::vector<uint64_t>{4});
@@ -430,30 +416,26 @@ TEST(RenderPointerStorage, IndentParameterPrefixesEveryLine) {
                      "  __h0[__i0] = __VERIFIER_nondet_int();\n");
 }
 
-TEST(RenderPointerStorage, PointerToPointerNullsEachElementAtDepthOne) {
+TEST(RenderPointerStorage, PointerPastTheBoundRendersNothing) {
   auto p = planFirstParam("void f(char **argv) {}");
   PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "char **");
-  EXPECT_EQ(s.arg, "__h0");
-  EXPECT_EQ(s.decls, "  char *__h0[__HAVOC_ARRAY_ELEMS];\n"
-                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
-                     "    __h0[__i0] = 0;\n");
+  EXPECT_TRUE(s.decls.empty());
+  EXPECT_TRUE(s.arg.empty());
 }
 
-TEST(RenderPointerStorage, LinkedListGetsARowPerElement) {
-  auto p = planFirstParam("struct Node { int v; struct Node *next; };\n"
+TEST(RenderPointerStorage, NestedRecordGetsARowPerElement) {
+  auto p = planFirstParam("struct Leaf { int v; };\n"
+                          "struct Node { int v; struct Leaf *next; };\n"
                           "void f(struct Node *n) {}",
                           {2});
   PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "struct Node *");
   EXPECT_EQ(s.decls, "  struct Node __h0[__HAVOC_ARRAY_ELEMS];\n"
                      "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
                      "    __h0[__i0].v = __VERIFIER_nondet_int();\n"
-                     "  struct Node __h0_0[__HAVOC_ARRAY_ELEMS][__HAVOC_ARRAY_ELEMS];\n"
+                     "  struct Leaf __h0_0[__HAVOC_ARRAY_ELEMS][__HAVOC_ARRAY_ELEMS];\n"
                      "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
                      "    for (int __i1 = 0; __i1 < __HAVOC_ARRAY_ELEMS; ++__i1)\n"
                      "      __h0_0[__i0][__i1].v = __VERIFIER_nondet_int();\n"
-                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
-                     "    for (int __i1 = 0; __i1 < __HAVOC_ARRAY_ELEMS; ++__i1)\n"
-                     "      __h0_0[__i0][__i1].next = 0;\n"
                      "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
                      "    __h0[__i0].next = __h0_0[__i0];\n");
 }
