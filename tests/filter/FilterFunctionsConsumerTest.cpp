@@ -226,8 +226,8 @@ TEST(FilterFunctionsConsumer, NonViablePointerParamStillRemoved) {
   EXPECT_TRUE(contains(*r.toRemove, "apply"));
 }
 
-TEST(FilterFunctionsConsumer, PointerFieldRecordSurvivesTheGate) {
-  // Its pointer fields are initialized (or set to 0 past the depth bound).
+TEST(FilterFunctionsConsumer, PointerPastTheDepthBoundIsStripped) {
+  // At the default depth of 1, no pointer inside the storage can be initialized.
   auto r = runFilter(R"(
     int main(void) { return 0; }
     struct Node { int v; struct Node *next; };
@@ -235,8 +235,8 @@ TEST(FilterFunctionsConsumer, PointerFieldRecordSurvivesTheGate) {
     int count(char **argv) { return argv[0] != 0; }
   )",
                      permissiveComplexityConfig(), permissiveFeatureConfig());
-  EXPECT_FALSE(contains(*r.toRemove, "walk"));
-  EXPECT_FALSE(contains(*r.toRemove, "count"));
+  EXPECT_TRUE(contains(*r.toRemove, "walk"));
+  EXPECT_TRUE(contains(*r.toRemove, "count"));
 }
 
 // ---------------------------------------------------------------------------

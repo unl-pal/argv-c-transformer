@@ -32,7 +32,8 @@
  * The pointer depth selects how much structure is modelled. Depth 0 havocs
  * every pointer as an opaque byte block (char pointers stay strings). Depth
  * k >= 1 builds typed storage and initializes the pointers inside it k levels
- * deep; every pointer past the bound is set to 0. A generic model havocs every
+ * deep; a pointer past the bound makes the plan non-viable, so its function is
+ * dropped. A generic model havocs every
  * pointer, char pointers included, as an opaque block of exactly
  * @c __HAVOC_BLOCK_MAX bytes.
  */
@@ -59,7 +60,7 @@ struct PointerSlot {
   std::vector<std::string> path; ///< From an element: ".member" segments, "[]" per entry of @c dims.
   std::vector<uint64_t> dims;
   clang::QualType type;
-  std::shared_ptr<PointerPlan> child; ///< Null: the slot is set to 0.
+  std::shared_ptr<PointerPlan> child; ///< Null: the slot is set to 0 (unspellable target).
 };
 
 /**
@@ -142,16 +143,18 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
                             unsigned depth, PointerPlan &plan);
 
 /**
- * @brief Plans the storage a pointer slot points to, or null to set it to 0:
- * past the depth bound, or an unspellable pointee.
+ * @brief Plans the storage a pointer slot points to: null to set it to 0 (an
+ * unspellable pointee), or nullopt if no storage can be built, which makes the
+ * enclosing plan non-viable.
+ *
+ * @param depth Levels remaining for the target; at least 1.
  */
-inline std::shared_ptr<PointerPlan> planSlotTarget(clang::QualType type,
-                                                   const clang::SourceManager &mgr,
-                                                   unsigned depth) {
-  if (depth == 0 || !isSpellable(type)) return nullptr;
+inline std::optional<std::shared_ptr<PointerPlan>>
+planSlotTarget(clang::QualType type, const clang::SourceManager &mgr, unsigned depth) {
+  if (!isSpellable(type)) return nullptr;
   auto plan = std::make_shared<PointerPlan>();
   plan->shape = PointerShape::Block;
-  if (!classifyPointee(type->getPointeeType(), mgr, depth, *plan)) return nullptr;
+  if (!classifyPointee(type->getPointeeType(), mgr, depth, *plan)) return std::nullopt;
   plan->viable = true;
   return plan;
 }
@@ -174,7 +177,8 @@ inline std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool r
  *
  * @param readOnly The record is reached through a const member.
  * @param enclosing Records being walked above this one.
- * @return False if a pointer can't be assigned (a const member) or is a function pointer.
+ * @return False if a pointer can't be assigned (a const member), is a function
+ * pointer, or its target can't be built (including past the depth bound).
  */
 inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std::string> &path,
                          const std::vector<uint64_t> &dims, bool readOnly,
@@ -211,8 +215,10 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
     if (flexible) continue; // outside sizeof, so outside the storage
     bool fieldReadOnly = readOnly || type.isConstQualified();
     if (type->isAnyPointerType()) {
-      if (fieldReadOnly || type->isFunctionPointerType()) return false;
-      plan.slots.push_back({fieldPath, fieldDims, type, planSlotTarget(type, mgr, depth - 1)});
+      if (fieldReadOnly || type->isFunctionPointerType() || depth == 1) return false;
+      auto target = planSlotTarget(type, mgr, depth - 1);
+      if (!target) return false;
+      plan.slots.push_back({fieldPath, fieldDims, type, *target});
     } else if (const clang::RecordDecl *nested = type->getAsRecordDecl()) {
       if (!collectSlots(nested, fieldPath, fieldDims, fieldReadOnly, mgr, depth, plan, enclosing))
         return false;
@@ -230,7 +236,8 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
  * the pointers inside each element @p depth - 1 levels further.
  *
  * @param depth Levels remaining, including this storage; at least 1.
- * @return False if no storage can be built.
+ * @return False if no storage can be built, including when an element holds a
+ * pointer past the depth bound.
  */
 inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
                             unsigned depth, PointerPlan &plan) {
@@ -239,8 +246,10 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
     return true;
   }
   if (pointee->isAnyPointerType()) { // storage is unqualified, so a const element still assigns
-    if (pointee->isFunctionPointerType()) return false;
-    plan.slots.push_back({{}, {}, pointee, planSlotTarget(pointee, mgr, depth - 1)});
+    if (pointee->isFunctionPointerType() || depth == 1) return false;
+    auto target = planSlotTarget(pointee, mgr, depth - 1);
+    if (!target) return false;
+    plan.slots.push_back({{}, {}, pointee, *target});
     plan.fieldwise = true;
     return true;
   }

@@ -68,33 +68,19 @@ int main(void) {
     pick(__h1);
   }
   {
-    struct Shape __h2[__HAVOC_ARRAY_ELEMS];
-    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {
-      __h2[__i0].color = __VERIFIER_nondet_uint();
-      __h2[__i0].flags = __VERIFIER_nondet_uint();
-      __h2[__i0].box.w = __VERIFIER_nondet_int();
-      __h2[__i0].box.h = __VERIFIER_nondet_int();
-      for (int __i1 = 0; __i1 < 2; ++__i1)
-        __h2[__i0].samples[__i1] = __VERIFIER_nondet_short();
-    }
-    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
-      __h2[__i0].label = 0;
-    shape_w(__h2);
+    struct Tagged __h2[__HAVOC_ARRAY_ELEMS];
+    __VERIFIER_nondet_memory(__h2, sizeof(__h2));
+    tagged(__h2);
   }
   {
-    struct Tagged __h3[__HAVOC_ARRAY_ELEMS];
+    struct Fixed __h3[__HAVOC_ARRAY_ELEMS];
     __VERIFIER_nondet_memory(__h3, sizeof(__h3));
-    tagged(__h3);
+    fixed(__h3);
   }
   {
-    struct Fixed __h4[__HAVOC_ARRAY_ELEMS];
+    struct Wide __h4[__HAVOC_ARRAY_ELEMS];
     __VERIFIER_nondet_memory(__h4, sizeof(__h4));
-    fixed(__h4);
-  }
-  {
-    struct Wide __h5[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h5, sizeof(__h5));
-    wide(__h5);
+    wide(__h4);
   }
   return 0;
 }

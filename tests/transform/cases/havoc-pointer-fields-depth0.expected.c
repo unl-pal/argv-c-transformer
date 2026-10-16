@@ -18,7 +18,7 @@ struct Named {
   char *aliases[2];
 };
 
-// Pointer fields are set to 0 past the depth bound.
+// At depth 0 every pointer is an opaque block, recursive types included.
 int second_value(struct Node *head) {
   if (head->next == 0) return head->value;
   return head->next->value;
