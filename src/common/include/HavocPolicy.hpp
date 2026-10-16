@@ -314,6 +314,10 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
   }
 
   plan.viable = classifyPointee(pointee, mgr, model.depth, plan);
+  if (!model.fieldwise) { // viability is unaffected; only the fill changes
+    plan.fieldwise = false;
+    plan.scalars.clear();
+  }
   return plan;
 }
 

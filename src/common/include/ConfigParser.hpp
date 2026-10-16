@@ -60,7 +60,7 @@ struct PipelineConfig {
   std::map<std::string, int> havoc = {
       {"havocArgcMin", 1},    {"havocArgcMax", 4},    {"havocStrMax", 16},
       {"havocBlockMax", 128}, {"havocArrayElems", 8}, {"havocPointerDepth", 1},
-      {"havocGenericBlocks", 0}, {"clampIntegers", 1},
+      {"havocGenericBlocks", 0}, {"clampIntegers", 1},     {"havocFieldwise", 1},
   };
 
   std::string databaseDir;  ///< Input tree for the filter stage ("" = unset).
