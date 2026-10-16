@@ -160,6 +160,21 @@ planSlotTarget(clang::QualType type, const clang::SourceManager &mgr, unsigned d
 }
 
 /**
+ * @brief True if @p type, or any field reachable by value inside it, is a pointer.
+ */
+inline bool holdsPointer(clang::QualType type, unsigned depth = 0) {
+  while (const clang::ArrayType *array = type->getAsArrayTypeUnsafe())
+    type = array->getElementType();
+  if (type->isAnyPointerType()) return true;
+  const clang::RecordDecl *record = type->getAsRecordDecl();
+  const clang::RecordDecl *def = record ? record->getDefinition() : nullptr;
+  if (!def || depth > 8) return false;
+  for (const clang::FieldDecl *field : def->fields())
+    if (holdsPointer(field->getType(), depth + 1)) return true;
+  return false;
+}
+
+/**
  * @brief The nondet suffix a storage element or record field of @p type is
  * assigned from, or nullopt if it has none and the storage must be bulk-filled instead.
  */
@@ -177,8 +192,9 @@ inline std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool r
  *
  * @param readOnly The record is reached through a const member.
  * @param enclosing Records being walked above this one.
- * @return False if a pointer can't be assigned (a const member), is a function
- * pointer, or its target can't be built (including past the depth bound).
+ * @return False if a pointer can't be assigned (a const member, a union member,
+ * or inside a flexible array member), is a function pointer, or its target
+ * can't be built (including past the depth bound).
  */
 inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std::string> &path,
                          const std::vector<uint64_t> &dims, bool readOnly,
@@ -187,6 +203,9 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
   const clang::RecordDecl *def = record->getDefinition();
   if (!def || def->isUnion()) { // assigning one member would clobber its siblings
     plan.fieldwise = false;
+    if (def)
+      for (const clang::FieldDecl *field : def->fields())
+        if (holdsPointer(field->getType())) return false; // a member pointer is never initialized
     return true;
   }
   // Error recovery can leave a record containing itself by value.
@@ -212,7 +231,10 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
       fieldPath.push_back("[]");
       type = constant->getElementType();
     }
-    if (flexible) continue; // outside sizeof, so outside the storage
+    if (flexible) { // outside sizeof, so outside the storage
+      if (holdsPointer(type)) return false;
+      continue;
+    }
     bool fieldReadOnly = readOnly || type.isConstQualified();
     if (type->isAnyPointerType()) {
       if (fieldReadOnly || type->isFunctionPointerType() || depth == 1) return false;

@@ -183,15 +183,6 @@ TEST(PlanPointer, ArrayOfFunctionPointersIsNotViable) {
   EXPECT_FALSE(p.plan.viable);
 }
 
-TEST(PlanPointer, UnionPointerMembersAreLeftAlone) {
-  // Assigning one member would clobber the bytes of the others.
-  auto p = planFirstParam("union U { int i; char *s; };\n"
-                          "void f(union U *u) {}",
-                          {2});
-  EXPECT_TRUE(p.plan.viable);
-  EXPECT_TRUE(p.plan.slots.empty());
-}
-
 TEST(PlanPointer, SelfContainingRecordFromErrorRecoveryTerminates) {
   // Typo correction resolves the undeclared GtkWindow to YuiWindow, so the record contains
   // itself by value.
@@ -474,4 +465,25 @@ TEST(RenderPointerStorage, OpaqueSizeofFloorsTheBlock) {
   EXPECT_EQ(s.decls, "  unsigned char __h0[sizeof(struct Big) > __HAVOC_BLOCK_MAX ? sizeof(struct Big) "
                      ": __HAVOC_BLOCK_MAX];\n"
                      "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+}
+
+TEST(PlanPointer, UnionWithPointerMemberIsNeverViable) {
+  auto p = planFirstParam("union Cell { int i; char *s; };\n"
+                          "void f(union Cell *c) {}",
+                          {3});
+  EXPECT_FALSE(p.plan.viable);
+}
+
+TEST(PlanPointer, UnionWithoutPointersIsBulkFilled) {
+  auto p = planFirstParam("union Num { int i; float f; };\n"
+                          "void f(union Num *n) {}");
+  EXPECT_TRUE(p.plan.viable);
+  EXPECT_FALSE(p.plan.fieldwise);
+}
+
+TEST(PlanPointer, FlexiblePointerArrayIsNeverViable) {
+  auto p = planFirstParam("struct Vec { int n; char *items[]; };\n"
+                          "void f(struct Vec *v) {}",
+                          {3});
+  EXPECT_FALSE(p.plan.viable);
 }
