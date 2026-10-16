@@ -13,6 +13,7 @@
 #include <clang/AST/Type.h>
 #include <clang/Basic/Specifiers.h>
 #include <clang/Basic/TypeTraits.h>
+#include <optional>
 
 CountingVisitor::CountingVisitor(
     clang::ASTContext *C,
@@ -115,6 +116,14 @@ bool CountingVisitor::VisitForStmt(clang::ForStmt *F) {
 bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
   if (_mgr->isInMainFile(_mgr->getExpansionLoc(W->getWhileLoc())))
     _allFunctions->at(getStmtParentFuncName(*W)).Complexity.WhileLoops++;
+  return true;
+}
+
+bool CountingVisitor::VisitDoStmt(clang::DoStmt *D) {
+  std::optional<llvm::APSInt> cond = D->getCond()->getIntegerConstantExpr(*_C);
+  if (cond && cond->isZero()) return true; // do { } while (0) runs once: a macro wrapper, not a loop
+  if (_mgr->isInMainFile(_mgr->getExpansionLoc(D->getDoLoc())))
+    _allFunctions->at(getStmtParentFuncName(*D)).Complexity.WhileLoops++;
   return true;
 }
 
