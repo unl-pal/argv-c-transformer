@@ -192,7 +192,7 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
   }
   enclosing.push_back(def);
   for (const clang::FieldDecl *field : def->fields()) {
-    if (field->isInvalidDecl()) continue;
+    if (field->isInvalidDecl() || field->isUnnamedBitField()) continue; // padding, not addressable
     std::vector<std::string> fieldPath = path;
     std::vector<uint64_t> fieldDims = dims;
     if (!field->isAnonymousStructOrUnion()) fieldPath.push_back("." + field->getName().str());
