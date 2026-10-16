@@ -34,7 +34,8 @@ namespace fs = std::filesystem;
 //   <name>.expected.c  - the exact output the pipeline must produce
 //
 // A name ending in -depth<N> runs with havocPointerDepth N (default 1); one
-// ending in -generic runs with havocGenericBlocks.
+// ending in -generic runs with havocGenericBlocks; one ending in -bulk runs
+// with havocFieldwise off.
 //
 // Support headers (plain .h files) live alongside the cases and resolve
 // through the real filesystem, so #include "..." behaves as in the real
@@ -110,6 +111,7 @@ TEST_P(TransformGolden, MatchesExpected) {
   if (depthAt != std::string::npos)
     havoc.pointers.depth = std::stoul(testCase.name.substr(depthAt + std::strlen("-depth")));
   havoc.pointers.generic = llvm::StringRef(testCase.name).ends_with("-generic");
+  havoc.pointers.fieldwise = !llvm::StringRef(testCase.name).ends_with("-bulk");
 
   std::string out;
   llvm::raw_string_ostream os(out);

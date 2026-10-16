@@ -195,6 +195,7 @@ void Transformer::parseConfig(std::string configFile) {
   configuration.havoc.arrayElems = config.havoc.at("havocArrayElems");
   configuration.havoc.pointers.depth = config.havoc.at("havocPointerDepth");
   configuration.havoc.pointers.generic = config.havoc.at("havocGenericBlocks") != 0;
+  configuration.havoc.pointers.fieldwise = config.havoc.at("havocFieldwise") != 0;
   configuration.havoc.clampIntegers = config.havoc.at("clampIntegers") != 0;
 }
 
