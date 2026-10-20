@@ -239,6 +239,37 @@ TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
   EXPECT_EQ(i.find("_Float"), std::string::npos);
 }
 
+TEST_F(VerifyStageTest, PreprocessStripsUnusedCfloat128Typedef) {
+  // glibc >= 2.41 emits this typedef for clang from <stdlib.h>; CPAchecker's parser rejects its
+  // __mode__(__TC__) attribute. Spelled out here so the test doesn't depend on the host's glibc.
+  writeFile(filterDir / "cf.c",
+            "typedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));\n"
+            "int identity(int x) { return x; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "cf__identity.i"));
+  std::string i = readFile(benchmarkDir / "cf__identity.i");
+  EXPECT_EQ(i.find("__cfloat128"), std::string::npos) << i;
+}
+
+TEST_F(VerifyStageTest, PreprocessKeepsUsedCfloat128Typedef) {
+  // Negative: once anything else names __cfloat128 (glibc's <complex.h> prototypes do under
+  // _GNU_SOURCE), dropping the typedef would leave the type undeclared.
+  writeFile(filterDir / "cfused.c",
+            "typedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));\n"
+            "typedef __cfloat128 mycomplex;\n"
+            "int identity(int x) { return x; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "cfused__identity.i"));
+  std::string i = readFile(benchmarkDir / "cfused__identity.i");
+  EXPECT_NE(i.find("typedef _Complex float __cfloat128"), std::string::npos) << i;
+}
+
 TEST_F(VerifyStageTest, PreprocessDedupesExactDuplicateTypedefLines) {
   // A duplicate typedef is legal C (redeclaring to the same type is allowed
   // any number of times) and Transform never touches typedefs, so this
