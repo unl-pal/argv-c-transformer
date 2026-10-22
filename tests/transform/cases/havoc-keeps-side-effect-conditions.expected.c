@@ -16,6 +16,8 @@ int drain(int x) {
 }
 
 int main(void) {
-  drain(__VERIFIER_nondet_int());
+  {
+    drain(__VERIFIER_nondet_int());
+  }
   return 0;
 }

@@ -14,8 +14,12 @@ int original_main(int argc, char *argv[]) {
 }
 
 int main(void) {
-  helper(__VERIFIER_nondet_int());
-  int argc = __HAVOC_ARGC();
-  original_main(argc, __havoc_argv_fill(argc));
+  {
+    helper(__VERIFIER_nondet_int());
+  }
+  {
+    int argc = __HAVOC_ARGC();
+    original_main(argc, __havoc_argv_fill(argc));
+  }
   return 0;
 }

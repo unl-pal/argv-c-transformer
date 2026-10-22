@@ -13,6 +13,8 @@ int add(int a, int b) {
 }
 
 int main(void) {
-  add(__VERIFIER_nondet_int(), __VERIFIER_nondet_int());
+  {
+    add(__VERIFIER_nondet_int(), __VERIFIER_nondet_int());
+  }
   return 0;
 }

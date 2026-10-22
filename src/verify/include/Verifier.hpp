@@ -38,12 +38,13 @@ struct verifyConfigs {
  * @brief Top-level orchestrator for the verify step - the third stage of the
  * pipeline (filter → transform → verify).
  *
- * Reparses each transformed file, re-applies the filter's thresholds
- * by stripping the body and unharnessing the call in the generated main.
- * A benchmark whose harness empties out is discarded.
+ * Reparses each transformed file and re-applies the filter's thresholds,
+ * stripping a rejected function's body and dropping its harness block. Each
+ * remaining block becomes its own benchmark; a file with none left is discarded.
  *
- * Verify also owns benchmark finalization: the isolated compile check, the
- * .yml task file, and preprocessing to the .i the task file references.
+ * Verify also owns benchmark finalization: the compile check (once per input
+ * file), and per benchmark the .yml task file and preprocessing to the .i the
+ * task file references.
  */
 class Verifier {
 public:
@@ -60,24 +61,34 @@ public:
   Verifier(std::string configFile, std::string inputPath = "");
 
   /**
-   * @brief Verifies and finalizes a single transformed C file.
+   * @brief Verifies a single transformed C file and splits it into benchmarks.
    *
-   * Runs the VerifyAction re-check/repair pass, writing the
-   * source to benchmarkDir, then discards empty-harness or
-   * non-compiling results and emits the .yml + .i for survivors.
+   * Runs the VerifyAction re-check/repair pass and compile-checks the
+   * combined result once. If it compiles, writes one benchmark per surviving
+   * harness block, {@code <stem>__<function>.c} (see splitPath), each with
+   * its own .yml + .i.
    *
    * @param path Path to the transformed C source file.
-   * @return true if a finalized benchmark (.c + .yml + .i) was produced. A
-   *         false return leaves nothing behind except under
-   *         keepCompilesOnly=false, which keeps the non-compiling .c on purpose.
+   * @return true if at least one finalized benchmark (.c + .yml + .i) was
+   *         produced. A false return leaves nothing behind except under
+   *         keepCompilesOnly=false, which keeps the non-compiling combined
+   *         {@code <stem>.c} on purpose.
    */
   bool verifyFile(std::filesystem::path path);
 
   /**
-   * @brief Removes this file's benchmark outputs. A no-op when benchmarkDir
-   * resolves to the input's own directory.
+   * @brief Derives one harnessed function's benchmark path from the combined file's path.
    *
-   * @param path Path to the transformed C source file whose output to clean up.
+   * @return {@code <basePath's dir>/<stem>__<target><ext>}.
+   */
+  static std::filesystem::path splitPath(const std::filesystem::path &basePath,
+                                         const std::string &target);
+
+  /**
+   * @brief Removes every output of one input file: the combined .c and each
+   * split benchmark's .c/.yml/.i. Never removes the input itself.
+   *
+   * @param path Path to the transformed C source file whose outputs to clean up.
    */
   void cleanupPartialOutput(std::filesystem::path path);
 
@@ -177,6 +188,17 @@ private:
    * @brief Writes the embedded argv_c_harness.h into benchmarkDir.
    */
   void writeHarnessHeader();
+
+  /** @brief Writes text to path, logging on failure. @return false if the write failed. */
+  static bool writeText(const std::filesystem::path &path, const std::string &text);
+
+  /** @brief The subset of counts that describes one benchmark: its target plus file-wide markers. */
+  static std::unordered_map<std::string, CountingVisitor::attributes>
+  targetCounts(const std::unordered_map<std::string, CountingVisitor::attributes> &counts,
+               const std::string &target);
+
+  /** @brief Removes a benchmark's .c, .yml and .i. */
+  static void removeBenchmark(const std::filesystem::path &cPath);
 
   /**
    * Thresholds and feature gates re-applied post-transform - the same

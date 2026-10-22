@@ -12,6 +12,8 @@ bool flag(int n) {
 }
 
 int main(void) {
-  flag(__VERIFIER_nondet_int());
+  {
+    flag(__VERIFIER_nondet_int());
+  }
   return 0;
 }

@@ -23,7 +23,8 @@
  * Any pre-existing {@code main} (including its forward declarations) is renamed
  * to {@code original_main}, then a fresh {@code int main(void)} is appended that
  * calls every function defined in the file with {@code __VERIFIER_nondet_*}
- * arguments. Functions with a parameter type that has no nondet equivalent
+ * arguments, each call and its setup in its own top-level block: the verify
+ * stage splits the file into one benchmark per block. Functions with a parameter type that has no nondet equivalent
  * (pointers, structs, ...), variadic functions, and functions
  * {@code HavocCallsConsumer} discarded (a no-op body, or an unhavockable
  * call) are skipped. For {@code original_main(int, char**)}, a synthesized
@@ -56,7 +57,9 @@ public:
    * definitions. Each is harnessed according to its signature: primitive-param
    * functions get {@code __VERIFIER_nondet_*} arguments, {@code main} is
    * delegated to {@code genMainHarness}, and unsupported/variadic functions are
-   * skipped.
+   * skipped. A bodyless in-file function (the filter stripped it) is dropped
+   * too, unless it's still referenced as a value rather than only as a
+   * havocked call's callee.
    *
    * @param Context The AST context for the translation unit being transformed.
    */
@@ -78,9 +81,9 @@ private:
    * Primitive parameters become {@code __VERIFIER_nondet_*()} calls; pointer
    * parameters are classified by {@code planPointer} and rendered by
    * {@code renderPointerStorage} as stack storage filled with
-   * {@code __VERIFIER_nondet_memory}. When a pointer is present, integer
-   * parameters are emitted as locals clamped to {@code __HAVOC_ARRAY_ELEMS}
-   * instead, so that any index derived from them stays inside the block handed
+   * {@code __VERIFIER_nondet_memory}. When a pointer is present and
+   * {@code clampIntegers} is set, integer parameters are emitted as locals
+   * clamped to {@code __HAVOC_ARRAY_ELEMS} instead, so that any index derived from them stays inside the block handed
    * to the callee.
    *
    * @param func    The function to synthesize a call for.
@@ -108,8 +111,6 @@ private:
   std::shared_ptr<std::set<std::string>> _DiscardedFunctions;
   std::shared_ptr<std::set<std::string>> _NeededFwdDecls;
   clang::Rewriter &_Rewriter;
-  /// Runs across every synthesized call, since all the locals they declare
-  /// share the generated main's single scope and so must not collide.
   unsigned _LocalCounter = 0;
   HavocBounds _Havoc;
 };

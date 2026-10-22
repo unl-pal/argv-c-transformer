@@ -13,7 +13,11 @@ int check(int v) {
 }
 
 int main(void) {
-  helper(__VERIFIER_nondet_int());
-  check(__VERIFIER_nondet_int());
+  {
+    helper(__VERIFIER_nondet_int());
+  }
+  {
+    check(__VERIFIER_nondet_int());
+  }
   return 0;
 }

@@ -24,6 +24,8 @@ int compute(int n) {
 }
 
 int main(void) {
-  compute(__VERIFIER_nondet_int());
+  {
+    compute(__VERIFIER_nondet_int());
+  }
   return 0;
 }

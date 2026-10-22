@@ -30,6 +30,8 @@ void run(void) {
 }
 
 int main(void) {
-  run();
+  {
+    run();
+  }
   return 0;
 }

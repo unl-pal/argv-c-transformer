@@ -18,9 +18,13 @@ int plain(int a) {
 }
 
 int main(void) {
-  int __h0[__HAVOC_ARRAY_ELEMS];
-  __VERIFIER_nondet_memory(__h0, sizeof(__h0));
-  takesPtr(__h0);
-  plain(__VERIFIER_nondet_int());
+  {
+    int __h0[__HAVOC_ARRAY_ELEMS];
+    __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+    takesPtr(__h0);
+  }
+  {
+    plain(__VERIFIER_nondet_int());
+  }
   return 0;
 }
