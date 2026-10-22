@@ -78,16 +78,4 @@ static inline char **__havoc_argv_fill(int argc) {
   return ptrs;
 }
 
-/* Havocked, bounded argv whose rows are opaque blocks: nondet bytes, no terminator */
-static inline char **__havoc_argv_fill_bytes(int argc) {
-  static unsigned char rows[__HAVOC_ARGC_MAX][__HAVOC_BLOCK_MAX];
-  static char *ptrs[__HAVOC_ARGC_MAX + 1];
-  for (int i = 0; i < argc; i++) {
-    __VERIFIER_nondet_memory(rows[i], __HAVOC_BLOCK_MAX);
-    ptrs[i] = (char *)rows[i];
-  }
-  ptrs[argc] = 0;
-  return ptrs;
-}
-
 #endif /* ARGV_C_HARNESS_H */
