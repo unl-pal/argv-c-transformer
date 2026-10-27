@@ -109,6 +109,9 @@ public:
   /** @brief Counts while-loop occurrences per function. */
   bool VisitWhileStmt(clang::WhileStmt *W);
 
+  /** @brief Counts do/while loops per function as WhileLoops, except constant-false ones. */
+  bool VisitDoStmt(clang::DoStmt *D);
+
   /** @brief Counts signed binary operations per function. */
   bool VisitBinaryOperator(clang::BinaryOperator *BO);
 

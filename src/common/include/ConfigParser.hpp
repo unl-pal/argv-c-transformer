@@ -60,7 +60,7 @@ struct PipelineConfig {
   std::map<std::string, int> havoc = {
       {"havocArgcMin", 1},    {"havocArgcMax", 4},    {"havocStrMax", 16},
       {"havocBlockMax", 128}, {"havocArrayElems", 8}, {"havocPointerDepth", 1},
-      {"havocGenericBlocks", 0},
+      {"havocGenericBlocks", 0}, {"clampIntegers", 1},
   };
 
   std::string databaseDir;  ///< Input tree for the filter stage ("" = unset).
@@ -232,6 +232,17 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
                     << value << "'" << std::endl;
           workers = 0;
         }
+      }
+    } else if (key == "clampIntegers") {
+      std::string v = trim(value);
+      std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+      if (v == "true" || v == "1") {
+        config.havoc.at(key) = 1;
+      } else if (v == "false" || v == "0") {
+        config.havoc.at(key) = 0;
+      } else {
+        std::cerr << "Warning: 'clampIntegers' expects true or false - ignoring value '" << value
+                  << "'" << std::endl;
       }
     } else if (config.havoc.count(key)) {
       try {

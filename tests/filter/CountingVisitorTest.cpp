@@ -86,6 +86,27 @@ TEST(CountingVisitor, WhileLoopInFunction) {
   EXPECT_EQ(r.funcs->at("foo").Complexity.WhileLoops, 1);
 }
 
+TEST(CountingVisitor, DoWhileCountsAsWhileLoop) {
+  auto r = runCounter("void foo() { int x=0; do { x++; } while(x<10); }");
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").Complexity.WhileLoops, 1);
+}
+
+TEST(CountingVisitor, DoWhileZeroMacroWrapperNotCounted) {
+  auto r = runCounter(R"(
+    #define SWAP(a, b) do { int t = a; a = b; b = t; } while (0)
+    void foo(int x, int y) { SWAP(x, y); do { x++; } while (0); }
+  )");
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").Complexity.WhileLoops, 0);
+}
+
+TEST(CountingVisitor, DoWhileConstantTrueCounted) {
+  auto r = runCounter("void foo() { do { } while (1); }");
+  ASSERT_TRUE(r.funcs->count("foo"));
+  EXPECT_EQ(r.funcs->at("foo").Complexity.WhileLoops, 1);
+}
+
 // ---------------------------------------------------------------------------
 // If-statement counting
 // ---------------------------------------------------------------------------

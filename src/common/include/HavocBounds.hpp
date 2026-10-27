@@ -31,4 +31,6 @@ struct HavocBounds {
   /** Element count for a havocked pointer to a sized type with no declared bound. */
   int arrayElems = 8;
   PointerModel pointers;
+  /** Bound integer params of a pointer-taking function to [0, arrayElems] via abort(). */
+  bool clampIntegers = true;
 };
