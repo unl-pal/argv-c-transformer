@@ -48,6 +48,7 @@ void Filterer::parseConfigFile(std::string configFile) {
 
   globalDebugLevel() = config.fileSettings.at("debugLevel");
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  configuration.fileMemoryMB = config.fileSettings.at("fileMemoryMB");
   configuration.nproc = config.fileSettings.at("nproc");
   configuration.cleanOutput = config.fileSettings.at("cleanOutput") != 0;
 
@@ -160,7 +161,9 @@ bool Filterer::filterFile(std::filesystem::path oldPath) {
 
   std::vector<std::string> includeDirs = collectLocalIncludeDirs(oldPath, *headerIndex);
 
-  FrontendFactoryWithArgs factory(&config.complexity, &config.features, output);
+  FrontendFactoryWithArgs factory(&config.complexity, &config.features, output,
+                                  PointerModel{static_cast<unsigned>(config.havoc.at("havocPointerDepth")),
+                                               config.havoc.at("havocGenericBlocks") != 0});
   bool ran = runToolOnFile(oldPath.string(), factory, includeDirs);
   output.close();
   if (!ran) {
@@ -223,7 +226,9 @@ int Filterer::run() {
 
   std::cout << "[filter] processing " << toProcess.size() << " file(s) with " << workers
             << " worker(s)" << std::endl;
-  WorkerPoolResult result = runWorkerPool(toProcess, workers, configuration.fileTimeoutSecs, work);
+  WorkerPoolResult result =
+      runWorkerPool(toProcess, workers, configuration.fileTimeoutSecs, work,
+                    resolveMemoryLimitMB(configuration.fileMemoryMB, workers));
 
   std::cout << "\n=== Filter summary ===\n"
             << "  Files found:            " << filesFound << "\n"

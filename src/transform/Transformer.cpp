@@ -168,13 +168,15 @@ WorkerPoolResult Transformer::transformAll(std::filesystem::path path) {
   work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[transform] " + msg); };
   work.label = "transform";
 
-  return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work);
+  return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work,
+                       resolveMemoryLimitMB(configuration.fileMemoryMB, workers));
 }
 
 void Transformer::parseConfig(std::string configFile) {
   PipelineConfig config = parsePipelineConfig(configFile);
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  configuration.fileMemoryMB = config.fileSettings.at("fileMemoryMB");
   configuration.nproc = config.fileSettings.at("nproc");
   configuration.cleanOutput = config.fileSettings.at("cleanOutput") != 0;
   if (!config.transformDir.empty()) {
@@ -191,6 +193,8 @@ void Transformer::parseConfig(std::string configFile) {
   configuration.havoc.strMax = config.havoc.at("havocStrMax");
   configuration.havoc.blockMax = config.havoc.at("havocBlockMax");
   configuration.havoc.arrayElems = config.havoc.at("havocArrayElems");
+  configuration.havoc.pointers.depth = config.havoc.at("havocPointerDepth");
+  configuration.havoc.pointers.generic = config.havoc.at("havocGenericBlocks") != 0;
   configuration.havoc.clampIntegers = config.havoc.at("clampIntegers") != 0;
 }
 

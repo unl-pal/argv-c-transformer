@@ -24,6 +24,7 @@ struct transformConfigs {
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string transformDir; ///< Output directory for transformed files (verify-stage input).
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
+  int fileMemoryMB = 0;     ///< Per-child memory limit; 0 = auto.
   int nproc;                ///< Worker pool size (0 = auto, three quarters of detected cores).
   bool cleanOutput;         ///< If true, wipe a pre-populated transformDir instead of erroring.
   /**

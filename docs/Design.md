@@ -152,6 +152,20 @@ which `__VERIFIER_nondet_*` variant to use.
   as literals, so a generated benchmark can be retuned without rerunning the pipeline;
   the values come from `[Havoc Settings]` in the config, falling back to the constants in
   `src/common/include/HavocPolicy.hpp`.
+- `argc` has its own bound rather than sharing `havocArrayElems`, for the same reason
+  any other integer is clamped to `__HAVOC_ARRAY_ELEMS`: an integer is bounded by the
+  storage it indexes, and argv's rows are sized `__HAVOC_ARGC_MAX × __HAVOC_STR_MAX`, not
+  by the generic block size. The two also scale differently. An extra array element is
+  usually one scalar, but an extra argument is a whole symbolic string, typically fed
+  through `strcmp`/`getopt`/`atoi`. Tying them together would mean growing arrays to
+  explore array-heavy code also grows every `main(argc, argv)` benchmark's argv. Besides,
+  the right `argc` range follows from the program's CLI contract (how many arguments it
+  expects), which has nothing to do with its data structures.
+- Most programs reject unexpected argument counts early (`if (argc != 3) usage();`),
+  so a loose `argcMax` usually costs little, because the extra values die on a short
+  path. That changes for programs that check only a minimum, or that loop over every
+  argument (`for (i = 1; i < argc; i++)` over files or `getopt` options). There, each
+  extra argument is a full symbolic string the verifier has to parse.
 
 ### Pointer Returns in Havocking
 
@@ -380,3 +394,25 @@ flowchart TB
 Verifier nondet naming, suffix→C-type mappings, and the `isVerifierGenerated`
 generated-artifact check live in `src/common/include/VerifierNames.hpp`, shared by all
 stages.
+
+### Clang Version Portability
+
+The pipeline supports Clang 20 through the current release. `CMakeLists.txt` enforces
+only the floor, `scripts/install.sh` installs 20, and development happens on newer
+releases, so the same source has to produce the same benchmarks on every version in
+that range.
+
+The AST is where versions drift, specifically in *sugar*: the wrapper `Type` nodes that
+record how a type was spelled (`TypedefType`, `ParenType`, `AttributedType`, ...) without
+changing what it is. Clang 21 removed `ElaboratedType`, so `struct S` is a bare
+`RecordType` on 21+ but `ElaboratedType → RecordType` on 20. Code that tests the outermost
+node with `dyn_cast<RecordType>` therefore succeeds on one version and silently fails on
+the other — not a compile error, just a struct quietly misclassified.
+
+The rule is to inspect types only through accessors that desugar: `getAs<T>()`,
+`getAsTagDecl()`, `getAsArrayTypeUnsafe()`, `getPointeeType()`, `getCanonicalType()`.
+These step past whatever sugar a given version inserts and are stable across the range.
+Casting the *result* of one of them is fine; casting a raw `Type*` or a `TypeLoc` (whose
+`getAs<T>()`, unlike `Type`'s, does not desugar) is not. Version-specific classes such as
+`ElaboratedType` are not named at all; one that is genuinely unavoidable is fenced with
+`#if CLANG_VERSION_MAJOR`.

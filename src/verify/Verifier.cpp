@@ -43,6 +43,7 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
   configuration.debugLevel = config.fileSettings.at("debugLevel");
   configuration.keepCompilesOnly = config.fileSettings.at("keepCompilesOnly") != 0;
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  configuration.fileMemoryMB = config.fileSettings.at("fileMemoryMB");
   configuration.nproc = config.fileSettings.at("nproc");
   configuration.cleanOutput = config.fileSettings.at("cleanOutput") != 0;
   configuration.transformDir =
@@ -215,7 +216,8 @@ WorkerPoolResult Verifier::verifyAll(std::filesystem::path path) {
   work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[verify] " + msg); };
   work.label = "verify";
 
-  return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work);
+  return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work,
+                       resolveMemoryLimitMB(configuration.fileMemoryMB, workers));
 }
 
 namespace {

@@ -83,8 +83,9 @@ private:
    * {@code renderPointerStorage} as stack storage filled with
    * {@code __VERIFIER_nondet_memory}. When a pointer is present and
    * {@code clampIntegers} is set, integer parameters are emitted as locals
-   * clamped to {@code __HAVOC_ARRAY_ELEMS} instead, so that any index derived from them stays inside the block handed
-   * to the callee.
+   * clamped to {@code __HAVOC_ARRAY_ELEMS} instead, so that any index derived
+   * from them stays inside the block handed to the callee; generic pointers
+   * leave them unclamped.
    *
    * @param func    The function to synthesize a call for.
    * @param Context The AST context, for the SourceManager (telling types that
@@ -99,7 +100,8 @@ private:
    *
    * Synthesizes a nondet, bounded {@code argc} from {@code __HAVOC_ARGC()} and
    * a matching havocked {@code argv} from {@code __havoc_argv_fill()}, both
-   * helpers defined in argv_c_harness.h.
+   * helpers defined in argv_c_harness.h. Under generic pointers, argc is an
+   * unbounded nondet int and argv an opaque block.
    *
    * @param mainFn The original {@code main} FunctionDecl (already renamed in
    *               the rewriter output).

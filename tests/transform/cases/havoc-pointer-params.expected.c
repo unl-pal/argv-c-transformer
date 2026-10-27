@@ -37,14 +37,16 @@ int unbounded(int n) { return n + 1; }
 int main(void) {
   {
     int __h0[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+      __h0[__i0] = __VERIFIER_nondet_int();
     int __h1 = __VERIFIER_nondet_int();
     if (__h1 < 0 || __h1 > __HAVOC_ARRAY_ELEMS) abort();
     sum(__h0, __h1);
   }
   {
     int __h2[3];
-    __VERIFIER_nondet_memory(__h2, sizeof(__h2));
+    for (int __i0 = 0; __i0 < 3; ++__i0)
+      __h2[__i0] = __VERIFIER_nondet_int();
     third(__h2);
   }
   {
@@ -58,7 +60,10 @@ int main(void) {
   }
   {
     struct Point __h5[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h5, sizeof(__h5));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {
+      __h5[__i0].x = __VERIFIER_nondet_int();
+      __h5[__i0].y = __VERIFIER_nondet_int();
+    }
     point_x(__h5);
   }
   {

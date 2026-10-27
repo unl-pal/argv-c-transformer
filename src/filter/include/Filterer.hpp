@@ -23,6 +23,7 @@ struct filterConfigs {
   std::string databaseDir; ///< Directory containing the source repos to filter
   std::string filterDir;   ///< Output directory for files that pass the filter
   int fileTimeoutSecs;     ///< Wall-clock budget per file for the isolated filter child.
+  int fileMemoryMB = 0;    ///< Per-child memory limit; 0 = auto.
   int nproc;               ///< Worker pool size (0 = auto, three quarters of detected cores).
   bool cleanOutput;        ///< If true, wipe a pre-populated filterDir instead of erroring.
 };
