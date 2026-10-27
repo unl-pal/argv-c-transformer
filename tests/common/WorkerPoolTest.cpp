@@ -109,6 +109,9 @@ TEST(ResolveMemoryLimitMB, AutoSplitsRamAcrossWorkersWithAFloor) {
 }
 
 TEST(WorkerPool, RunawayChildHitsTheMemoryLimitAlone) {
+#ifndef __linux__
+  GTEST_SKIP() << "RLIMIT_DATA is enforced only on Linux";
+#endif
   Recorder rec;
   IsolatedWork work = rec.work([](const fs::path &) {
     for (;;) { // touched so the allocation can't be elided

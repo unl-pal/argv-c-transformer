@@ -142,7 +142,8 @@ inline void flushChildLog(const WorkerPoolJob &job) {
  * Each file gets its own wall-clock budget of {@code timeoutSecs} starting
  * from when its child is forked, and a data-segment limit of
  * {@code memoryLimitMB} (0 = unlimited) so one runaway file fails alone
- * rather than exhausting the machine.
+ * rather than exhausting the machine. The limit is enforced only on Linux;
+ * macOS accepts but ignores it.
  *
  * @return per-outcome counts; see {@code WorkerPoolResult}.
  */
