@@ -240,6 +240,9 @@ TEST_F(VerifyStageTest, PreprocessStripsFloatNNTypedefs) {
 }
 
 TEST_F(VerifyStageTest, PreprocessStripsUnusedCfloat128Typedef) {
+#ifndef __linux__
+  GTEST_SKIP() << "__mode__(__TC__) is unsupported on Darwin targets";
+#endif
   // glibc >= 2.41 emits this typedef for clang from <stdlib.h>; CPAchecker's parser rejects its
   // __mode__(__TC__) attribute. Spelled out here so the test doesn't depend on the host's glibc.
   writeFile(filterDir / "cf.c",
@@ -255,6 +258,9 @@ TEST_F(VerifyStageTest, PreprocessStripsUnusedCfloat128Typedef) {
 }
 
 TEST_F(VerifyStageTest, PreprocessKeepsUsedCfloat128Typedef) {
+#ifndef __linux__
+  GTEST_SKIP() << "__mode__(__TC__) is unsupported on Darwin targets";
+#endif
   // Negative: once anything else names __cfloat128 (glibc's <complex.h> prototypes do under
   // _GNU_SOURCE), dropping the typedef would leave the type undeclared.
   writeFile(filterDir / "cfused.c",
