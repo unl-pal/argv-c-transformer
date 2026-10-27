@@ -9,7 +9,7 @@ struct Named {
   char *aliases[2];
 };
 
-// Pointer fields are set to 0 past the depth bound.
+// A recursive type reaches a pointer past any depth bound: never harnessed.
 int second_value(struct Node *head) {
   if (head->next == 0) return head->value;
   return head->next->value;

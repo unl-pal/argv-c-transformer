@@ -332,13 +332,24 @@ const std::vector<std::regex> &knownNoiseTypedefs() {
   return patterns;
 }
 
-// Strips knownNoiseTypedefs() lines from an already-preprocessed .i file.
+// glibc >= 2.41's <bits/floatn.h> typedef for clang, whose __mode__(__TC__) attribute CPAchecker's
+// parser rejects. Only noise while nothing else names __cfloat128 (<complex.h> prototypes do under
+// _GNU_SOURCE); dropping it then would leave the type undeclared for every frontend.
+const std::regex &cfloat128Typedef() {
+  static const std::regex pattern(R"(^\s*typedef\s+_Complex\s+float\s+__cfloat128\s+__attribute__.*;\s*$)");
+  return pattern;
+}
+
+// Strips knownNoiseTypedefs() lines, and cfloat128Typedef() lines if unused, from an
+// already-preprocessed .i file.
 void stripNoiseTypedefs(const std::filesystem::path &iPath) {
   std::ifstream in(iPath);
   if (!in) return;
   std::vector<std::string> kept;
   std::string line;
   bool changed = false;
+  bool hasCfloat128Typedef = false;
+  bool usesCfloat128 = false;
   while (std::getline(in, line)) {
     bool isNoise = false;
     for (const std::regex &pattern : knownNoiseTypedefs()) {
@@ -351,9 +362,19 @@ void stripNoiseTypedefs(const std::filesystem::path &iPath) {
       changed = true;
       continue;
     }
+    if (line.find("__cfloat128") != std::string::npos) {
+      if (std::regex_match(line, cfloat128Typedef()))
+        hasCfloat128Typedef = true;
+      else
+        usesCfloat128 = true;
+    }
     kept.push_back(std::move(line));
   }
   in.close();
+  if (hasCfloat128Typedef && !usesCfloat128) {
+    std::erase_if(kept, [](const std::string &l) { return std::regex_match(l, cfloat128Typedef()); });
+    changed = true;
+  }
   if (!changed) return;
   std::ofstream out(iPath, std::ios::trunc);
   for (const std::string &l : kept)
