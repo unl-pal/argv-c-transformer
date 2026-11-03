@@ -10,6 +10,9 @@
 #include <functional>
 #include <gtest/gtest.h>
 #include <string>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -122,7 +125,12 @@ TEST(WorkerPool, DeclineDoesNotTriggerCleanup) {
 
 TEST(WorkerPool, CrashedChildIsFailedAndCleanedUp) {
   Recorder rec;
-  IsolatedWork work = rec.work([](const fs::path &) { abort(); });
+  IsolatedWork work = rec.work([](const fs::path &) {
+#ifdef __linux__
+    prctl(PR_SET_DUMPABLE, 0); // intentional crash; skip systemd-coredump
+#endif
+    abort();
+  });
 
   WorkerPoolResult result = runWorkerPool(paths({"a.c"}), 2, 30, work);
 

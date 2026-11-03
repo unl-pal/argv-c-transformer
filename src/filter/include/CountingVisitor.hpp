@@ -51,6 +51,7 @@ public:
     bool PointerDeref = false;   // valid-deref signal: array subscript, *p, p->field
     bool MemAlloc = false;       // valid-memtrack signal: malloc/calloc/realloc/strdup
     bool MemFree = false;        // valid-free signal: free, munmap
+    bool ReachError = false;     // unreach-call signal: calls reach_error (a rewritten assert)
   };
 
   /** @brief Per-function AST property counts, split across the two axes. */
@@ -108,6 +109,9 @@ public:
 
   /** @brief Counts while-loop occurrences per function. */
   bool VisitWhileStmt(clang::WhileStmt *W);
+
+  /** @brief Counts do/while loops per function as WhileLoops, except constant-false ones. */
+  bool VisitDoStmt(clang::DoStmt *D);
 
   /** @brief Counts signed binary operations per function. */
   bool VisitBinaryOperator(clang::BinaryOperator *BO);

@@ -22,7 +22,11 @@ int untouched(void) {
 }
 
 int main(void) {
-  make_point();
-  untouched();
+  {
+    make_point();
+  }
+  {
+    untouched();
+  }
   return 0;
 }

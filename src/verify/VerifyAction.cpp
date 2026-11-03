@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "include/VerifyAction.hpp"
-#include "include/HarnessRepairConsumer.hpp"
+#include "include/HarnessSplitConsumer.hpp"
 #include "include/VerifyFunctionsConsumer.hpp"
 
 #include "CountingConsumer.hpp"
@@ -18,7 +18,7 @@ VerifyAction::VerifyAction(
     std::map<std::string, std::pair<int, int>> *complexityConfig,
     std::map<std::string, FeatureGate> *featureConfig,
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> counts,
-    std::shared_ptr<std::vector<std::string>> toRemove, llvm::raw_fd_ostream &output)
+    std::shared_ptr<std::vector<std::string>> toRemove, HarnessSplit &output)
     : _ComplexityConfig(complexityConfig), _FeatureConfig(featureConfig), _Counts(counts),
       _ToRemove(toRemove), _Rewriter(), _Output(output) {}
 
@@ -31,7 +31,7 @@ VerifyAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::StringR
   consumers.emplace_back(std::make_unique<VerifyFunctionsConsumer>(
       _Counts, _ToRemove, _ComplexityConfig, _FeatureConfig));
   consumers.emplace_back(std::make_unique<RemoveConsumer>(_Rewriter, _ToRemove));
-  consumers.emplace_back(std::make_unique<HarnessRepairConsumer>(_Rewriter, _ToRemove));
+  consumers.emplace_back(std::make_unique<HarnessSplitConsumer>(_Rewriter, _ToRemove, _Output));
 
   return std::make_unique<clang::MultiplexConsumer>(std::move(consumers));
 }
@@ -41,15 +41,11 @@ bool VerifyAction::BeginSourceFileAction(clang::CompilerInstance &compiler) {
   return clang::ASTFrontendAction::BeginSourceFileAction(compiler);
 }
 
-void VerifyAction::EndSourceFileAction() {
-  _Rewriter.getEditBuffer(getCompilerInstance().getSourceManager().getMainFileID()).write(_Output);
-}
-
 VerifyActionFactory::VerifyActionFactory(
     std::map<std::string, std::pair<int, int>> *complexityConfig,
     std::map<std::string, FeatureGate> *featureConfig,
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> counts,
-    std::shared_ptr<std::vector<std::string>> toRemove, llvm::raw_fd_ostream &output)
+    std::shared_ptr<std::vector<std::string>> toRemove, HarnessSplit &output)
     : _ComplexityConfig(complexityConfig), _FeatureConfig(featureConfig), _Counts(counts),
       _ToRemove(toRemove), _Output(output) {}
 

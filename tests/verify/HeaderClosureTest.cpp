@@ -6,6 +6,7 @@
 #include "include/Transformer.hpp"
 #include "include/Verifier.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -72,8 +73,9 @@ protected:
     return buf.str();
   }
 
-  /** @brief Runs the full pipeline and returns the filter stage's output for `name`. */
-  std::string runPipeline(const std::string &name) {
+  /** @brief Runs the full pipeline and returns the benchmark harnessing `functionName`
+   *  out of `name`; the filter stage's output is kept in filtered(). */
+  std::string runPipeline(const std::string &name, const std::string &functionName) {
     Filterer f(configPath.string());
     f.run();
     Transformer t(configPath.string());
@@ -82,7 +84,9 @@ protected:
     Verifier v(configPath.string());
     _benchmarks = v.run();
     _filtered = readFile(filterDir / name);
-    return readFile(benchmarkDir / name);
+    std::string flat = fs::path(name).replace_extension().string();
+    std::replace(flat.begin(), flat.end(), '/', '_');
+    return readFile(benchmarkDir / (flat + "__" + functionName + ".c"));
   }
 
   int benchmarks() const { return _benchmarks; }
@@ -107,7 +111,7 @@ TEST_F(HeaderClosureTest, ObjectLikeMacroInArrayBoundIsReEmitted) {
                          "  return buf[0];\n"
                          "}\n");
 
-  std::string out = runPipeline("buf.c");
+  std::string out = runPipeline("buf.c", "first");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_NE(out.find("#define BUFSIZE 64"), std::string::npos) << out;
@@ -124,7 +128,7 @@ TEST_F(HeaderClosureTest, FunctionLikeMacroAndItsNestedMacroAreReEmitted) {
   writeRepoFile("scale.c", "#include \"math.h\"\n"
                            "int thrice(int n) { return TRIPLE(n); }\n");
 
-  std::string out = runPipeline("scale.c");
+  std::string out = runPipeline("scale.c", "thrice");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_NE(out.find("#define TRIPLE(x) ((x) * SCALE)"), std::string::npos) << out;
@@ -140,7 +144,7 @@ TEST_F(HeaderClosureTest, MacroFromSurvivingSystemIncludeIsNotReEmitted) {
                          "#include \"tag.h\"\n"
                          "int at_end(int c) { return c == EOF ? SENTINEL : 0; }\n");
 
-  std::string out = runPipeline("eof.c");
+  std::string out = runPipeline("eof.c", "at_end");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_EQ(out.find("#define EOF"), std::string::npos) << out;
@@ -162,14 +166,14 @@ TEST_F(HeaderClosureTest, HeaderStructIsInlinedAndSizedExactly) {
   writeRepoFile("area.c", "#include \"point.h\"\n"
                           "int area(struct Point *p) { return p->x * p->y; }\n");
 
-  std::string out = runPipeline("area.c");
+  std::string out = runPipeline("area.c", "area");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_NE(out.find("struct Point { int x; int y; };"), std::string::npos) << out;
   EXPECT_NE(out.find("struct Point __h"), std::string::npos) << out;
   EXPECT_EQ(out.find("unsigned char __h"), std::string::npos)
       << "sized Point storage should not fall back to the opaque byte block:\n" << out;
-  EXPECT_TRUE(fs::exists(benchmarkDir / "area.i"));
+  EXPECT_TRUE(fs::exists(benchmarkDir / "area__area.i"));
 }
 
 TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
@@ -181,7 +185,7 @@ TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
   writeRepoFile("count.c", "#include \"types.h\"\n"
                            "int nonempty(Buf *b) { return b->n > 0; }\n");
 
-  std::string out = runPipeline("count.c");
+  std::string out = runPipeline("count.c", "nonempty");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_NE(out.find("#include <stddef.h>"), std::string::npos) << out;
@@ -203,7 +207,7 @@ TEST_F(HeaderClosureTest, ClimbNeverSettlesOnAPrivateSystemHeader) {
   writeRepoFile("use.c", "#include \"local.h\"\n"
                          "int use(FILE *f) { return f != 0; }\n");
 
-  runPipeline("use.c");
+  runPipeline("use.c", "use");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_EQ(filtered().find("bits/"), std::string::npos) << filtered();
@@ -251,7 +255,7 @@ TEST_F(HeaderClosureTest, RejectedMacroDefinedFunctionStillPullsInItsDependencie
                          "GETTER(get)\n"
                          "int keep(int v) { if (v) return 1; return 0; }\n");
 
-  std::string out = runPipeline("get.c");
+  std::string out = runPipeline("get.c", "keep");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_NE(filtered().find("typedef struct { int n; } Box;"), std::string::npos) << filtered();
@@ -267,7 +271,7 @@ TEST_F(HeaderClosureTest, LocalDeclsNamedLikeStdSymbolsAreInlinedNotSwappedForSy
   writeRepoFile("use.c", "#include \"api.h\"\n"
                          "int use(struct clock *c) { return read(c) + c->time; }\n");
 
-  runPipeline("use.c");
+  runPipeline("use.c", "use");
 
   EXPECT_NE(filtered().find("struct clock { int time; }"), std::string::npos) << filtered();
   EXPECT_NE(filtered().find("int read(struct clock *c);"), std::string::npos) << filtered();
@@ -284,7 +288,7 @@ TEST_F(HeaderClosureTest, TypedefShimOfSystemTypeResolvesToTheSystemHeader) {
   writeRepoFile("src/count.c", "#include \"compat.h\"\n"
                                "int count(size_t n) { return (int)n; }\n");
 
-  runPipeline("src/count.c");
+  runPipeline("src/count.c", "count");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_EQ(filtered().find("#include <compat.h>"), std::string::npos) << filtered();
@@ -308,7 +312,7 @@ TEST_F(HeaderClosureTest, HeaderFunctionBodyIsNotInlinedAndPrototypeIsDroppedAft
   writeRepoFile("call.c", "#include \"dbl.h\"\n"
                           "int twice(int n) { return hdr_double(n); }\n");
 
-  std::string out = runPipeline("call.c");
+  std::string out = runPipeline("call.c", "twice");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_EQ(out.find("return x * 2;"), std::string::npos) << "header body was inlined:\n" << out;
@@ -330,7 +334,7 @@ TEST_F(HeaderClosureTest, UnreferencedHeaderDeclarationIsNotInlined) {
   writeRepoFile("narrow.c", "#include \"wide.h\"\n"
                             "int get(struct Used *u) { return u->a; }\n");
 
-  std::string out = runPipeline("narrow.c");
+  std::string out = runPipeline("narrow.c", "get");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   EXPECT_NE(out.find("struct Used { int a; };"), std::string::npos) << out;
@@ -357,7 +361,7 @@ TEST_F(HeaderClosureTest, RejectedFunctionBodyIsNotARoot) {
                 // Has an if: survives, so it keeps the harness alive.
                 "int branchy(struct Kept *k) { if (k->a > 0) return 1; return 0; }\n");
 
-  std::string out = runPipeline("gate.c");
+  std::string out = runPipeline("gate.c", "branchy");
 
   ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
   // Signature type of the rejected function: still inlined.

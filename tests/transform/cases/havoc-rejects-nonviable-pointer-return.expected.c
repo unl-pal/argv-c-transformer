@@ -20,8 +20,14 @@ int untouched(void) {
 }
 
 int main(void) {
-  add_one(__VERIFIER_nondet_int());
-  get_op();
-  untouched();
+  {
+    add_one(__VERIFIER_nondet_int());
+  }
+  {
+    get_op();
+  }
+  {
+    untouched();
+  }
   return 0;
 }

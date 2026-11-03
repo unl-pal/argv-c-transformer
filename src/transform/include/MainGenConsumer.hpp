@@ -23,11 +23,7 @@
  * Any pre-existing {@code main} (including its forward declarations) is renamed
  * to {@code original_main}, then a fresh {@code int main(void)} is appended that
  * calls every function defined in the file with {@code __VERIFIER_nondet_*}
- * arguments. Functions with a parameter type that has no nondet equivalent
- * (pointers, structs, ...), variadic functions, and functions
- * {@code HavocCallsConsumer} discarded (a no-op body, or an unhavockable
- * call) are skipped. For {@code original_main(int, char**)}, a synthesized
- * {@code argc}/{@code argv} harness is generated instead of skipping.
+ * arguments, each call and its setup in its own top-level block.
  */
 class MainGenConsumer : public clang::ASTConsumer {
 public:
@@ -56,7 +52,9 @@ public:
    * definitions. Each is harnessed according to its signature: primitive-param
    * functions get {@code __VERIFIER_nondet_*} arguments, {@code main} is
    * delegated to {@code genMainHarness}, and unsupported/variadic functions are
-   * skipped.
+   * skipped. A bodyless in-file function (the filter stripped it) is dropped
+   * too, unless it's still referenced as a value rather than only as a
+   * havocked call's callee.
    *
    * @param Context The AST context for the translation unit being transformed.
    */
@@ -78,10 +76,10 @@ private:
    * Primitive parameters become {@code __VERIFIER_nondet_*()} calls; pointer
    * parameters are classified by {@code planPointer} and rendered by
    * {@code renderPointerStorage} as stack storage filled with
-   * {@code __VERIFIER_nondet_memory}. When a pointer is present, integer
-   * parameters are emitted as locals clamped to {@code __HAVOC_ARRAY_ELEMS}
-   * instead, so that any index derived from them stays inside the block handed
-   * to the callee.
+   * {@code __VERIFIER_nondet_memory}. When a pointer is present and
+   * {@code clampIntegers} is set, integer parameters are emitted as locals
+   * clamped to {@code __HAVOC_ARRAY_ELEMS} instead, so that any index derived from them stays
+   * inside the block handed to the callee.
    *
    * @param func    The function to synthesize a call for.
    * @param Context The AST context, for the SourceManager (telling types that
@@ -105,11 +103,22 @@ private:
    */
   std::string genMainHarness(const clang::FunctionDecl *mainFn);
 
+  /**
+   * @brief Finds every in-file function named outside a direct in-file call and
+   * outside a discarded body (e.g. as a function pointer), so its declaration must survive.
+   *
+   * @return Decls of those functions.
+   */
+  static std::set<const clang::FunctionDecl *>
+  collectNonCallReferences(clang::ASTContext &Context,
+                           const std::set<std::string> &discardedFunctions);
+
+  /// One harness entry as its own block, so verify can split main on top-level statements.
+  static std::string harnessBlock(const std::string &statements);
+
   std::shared_ptr<std::set<std::string>> _DiscardedFunctions;
   std::shared_ptr<std::set<std::string>> _NeededFwdDecls;
   clang::Rewriter &_Rewriter;
-  /// Runs across every synthesized call, since all the locals they declare
-  /// share the generated main's single scope and so must not collide.
   unsigned _LocalCounter = 0;
   HavocBounds _Havoc;
 };
