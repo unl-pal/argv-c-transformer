@@ -116,6 +116,25 @@ TEST_F(TransformStageTest, BodylessSiblingReferencedAsFunctionPointerIsNotDroppe
   EXPECT_NE(src.find("int helper(int x) ;"), std::string::npos) << src;
 }
 
+TEST_F(TransformStageTest, DiscardedDefinitionReferencedAsFunctionPointerKeepsPrototype) {
+  // `bad` collapses to no-ops and is discarded, but `caller` still names it as a value.
+  writeFile(filterDir / "ptr.c", "void helper(int x) ;\n"
+                                 "void bad(int x) { helper(x); }\n"
+                                 "int caller(int x) {\n"
+                                 "  void (*fp)(int) = bad;\n"
+                                 "  fp(x);\n"
+                                 "  return x;\n"
+                                 "}\n");
+
+  Transformer t(configPath.string());
+  int count = t.run();
+
+  EXPECT_GE(count, 1);
+  std::string src = readFile(transformDir / "ptr.c");
+  EXPECT_NE(src.find("void bad(int x) ;"), std::string::npos) << src;
+  EXPECT_EQ(src.find("bad(__VERIFIER_nondet_int())"), std::string::npos) << src;
+}
+
 TEST_F(TransformStageTest, NestedPathFlattensWithUnderscores) {
   writeFile(filterDir / "owner" / "repo" / "src" / "util.c",
             "int square(int x) { return x * x; }\n");

@@ -21,75 +21,6 @@
 #include <string>
 #include <vector>
 
-namespace {
-
-/**
- * @brief Finds every bodyless in-file function still referenced as a value
- * (e.g. passed as a function pointer) rather than only called directly.
- *
- * A call whose direct callee is an in-file function never counts: whatever
- * it returns, HavocCallsVisitor always either replaces that call's entire
- * text (callee and arguments alike) or discards its enclosing function
- * outright, so nothing inside it — including an argument that happens to
- * name our candidate — survives into the output either way. Skipping the
- * whole subtree there (rather than just the callee) is what a plain
- * "is this DeclRefExpr a callee" check would miss. What's left after that
- * exclusion is genuine: a function pointer value that must keep resolving to
- * a real declaration.
- */
-class LiveValueReferenceCollector : public clang::RecursiveASTVisitor<LiveValueReferenceCollector> {
-public:
-  LiveValueReferenceCollector(clang::SourceManager &mgr,
-                              const std::set<std::string> &discardedFunctions,
-                              std::set<const clang::FunctionDecl *> &liveTargets)
-      : _Mgr(mgr), _Discarded(discardedFunctions), _Live(liveTargets) {}
-
-  bool TraverseFunctionDecl(clang::FunctionDecl *decl) {
-    bool wasDiscarded = _InDiscardedBody;
-    _InDiscardedBody =
-        decl->doesThisDeclarationHaveABody() && _Discarded.count(decl->getNameAsString()) != 0;
-    bool result = RecursiveASTVisitor::TraverseFunctionDecl(decl);
-    _InDiscardedBody = wasDiscarded;
-    return result;
-  }
-
-  bool TraverseCallExpr(clang::CallExpr *call) {
-    const clang::FunctionDecl *callee = call->getDirectCallee();
-    if (callee && _Mgr.isInMainFile(_Mgr.getFileLoc(callee->getLocation())))
-      return true; // whole call is havocked or rejected away; nothing inside it survives
-    return RecursiveASTVisitor::TraverseCallExpr(call);
-  }
-
-  bool VisitDeclRefExpr(clang::DeclRefExpr *ref) {
-    if (_InDiscardedBody)
-      return true;
-    if (const auto *func = llvm::dyn_cast<clang::FunctionDecl>(ref->getDecl()))
-      _Live.insert(func->getCanonicalDecl());
-    return true;
-  }
-
-private:
-  clang::SourceManager &_Mgr;
-  const std::set<std::string> &_Discarded;
-  std::set<const clang::FunctionDecl *> &_Live;
-  bool _InDiscardedBody = false;
-};
-
-/// One harness entry as its own block, so verify can split main on top-level statements.
-std::string harnessBlock(const std::string &statements) {
-  std::string block = "  {\n";
-  size_t start = 0;
-  while (start < statements.size()) {
-    size_t end = statements.find('\n', start);
-    if (end == std::string::npos) end = statements.size() - 1;
-    block += "  " + statements.substr(start, end - start + 1);
-    start = end + 1;
-  }
-  return block + "  }\n";
-}
-
-} // namespace
-
 MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                                  std::shared_ptr<std::set<std::string>> neededFwdDecls,
                                  clang::Rewriter &rewriter, const HavocBounds &havoc)
@@ -99,9 +30,8 @@ MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> discarde
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &mgr = Context.getSourceManager();
 
-  std::set<const clang::FunctionDecl *> liveValueReferences;
-  LiveValueReferenceCollector(mgr, *_DiscardedFunctions, liveValueReferences)
-      .TraverseDecl(Context.getTranslationUnitDecl());
+  std::set<const clang::FunctionDecl *> nonCallRefs =
+      collectNonCallReferences(Context, *_DiscardedFunctions);
 
   std::vector<const clang::FunctionDecl *> defined;
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
@@ -113,11 +43,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       defined.push_back(func);
       continue;
     }
-    // A prototype the filter stripped/left behind: drop it, unless something
-    // still uses it as a value (e.g. a function pointer) rather than a call
-    // callee - a call is either havocked away or its caller discarded, so it
-    // never needs the callee's declaration to survive.
-    if (liveValueReferences.count(func->getCanonicalDecl())) continue;
+    // Direct calls never survive havocking, so only a non-call reference needs the prototype.
+    if (nonCallRefs.count(func->getCanonicalDecl())) continue;
     clang::SourceLocation semiLoc = clang::Lexer::findLocationAfterToken(
         func->getEndLoc(), clang::tok::semi, mgr, Context.getLangOpts(), false);
     if (semiLoc.isValid()) _Rewriter.RemoveText(clang::SourceRange(func->getBeginLoc(), semiLoc));
@@ -126,8 +53,9 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
     if (_DiscardedFunctions->count(func->getNameAsString())) {
-      //remove functions stripped by havoc stage
-      _Rewriter.RemoveText(func->getSourceRange());
+      // body is already `;`; keep that prototype if something still names the function
+      if (!nonCallRefs.count(func->getCanonicalDecl()))
+        _Rewriter.RemoveText(func->getSourceRange());
       debugLog(2, "[transform] " + func->getNameAsString() + " discarded; not harnessed");
       continue;
     }
@@ -146,7 +74,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
                       " not harnessed");
       continue;
     }
-    harness += harnessBlock(call.prologue + "  " + func->getNameAsString() + "(" + call.args + ");\n");
+    harness +=
+        harnessBlock(call.prologue + "  " + func->getNameAsString() + "(" + call.args + ");\n");
   }
 
   std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
@@ -205,7 +134,8 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
     }
 
     // clamp every integer rather than guessing which one is "the length"
-    if (_Havoc.clampIntegers && anyPointer && declared->isIntegerType() && !declared->isBooleanType()) {
+    if (_Havoc.clampIntegers && anyPointer && declared->isIntegerType() &&
+        !declared->isBooleanType()) {
       std::string local = "__h" + std::to_string(counter++);
       call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
                        " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
@@ -231,4 +161,74 @@ std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   body += "  int argc = __HAVOC_ARGC();\n";
   body += "  original_main(argc, __havoc_argv_fill(argc));\n";
   return body;
+}
+
+std::string MainGenConsumer::harnessBlock(const std::string &statements) {
+  std::string block = "  {\n";
+  size_t start = 0;
+  while (start < statements.size()) {
+    size_t end = statements.find('\n', start);
+    if (end == std::string::npos) end = statements.size() - 1;
+    block += "  " + statements.substr(start, end - start + 1);
+    start = end + 1;
+  }
+  return block + "  }\n";
+}
+
+namespace {
+
+/**
+ * @brief Collects in-file functions named anywhere but a direct call, e.g. as a
+ * function pointer or a callback passed to a library call.
+ *
+ * Skips the whole subtree of a call to an in-file function, not just its callee:
+ * HavocCallsVisitor replaces or discards that call's entire text, arguments
+ * included. Also skips the bodies of discarded functions.
+ */
+class NonCallReferenceCollector : public clang::RecursiveASTVisitor<NonCallReferenceCollector> {
+public:
+  NonCallReferenceCollector(clang::SourceManager &mgr,
+                            const std::set<std::string> &discardedFunctions,
+                            std::set<const clang::FunctionDecl *> &referenced)
+      : _Mgr(mgr), _Discarded(discardedFunctions), _Referenced(referenced) {}
+
+  bool TraverseFunctionDecl(clang::FunctionDecl *decl) {
+    bool wasDiscarded = _InDiscardedBody;
+    _InDiscardedBody =
+        decl->doesThisDeclarationHaveABody() && _Discarded.count(decl->getNameAsString()) != 0;
+    bool result = RecursiveASTVisitor::TraverseFunctionDecl(decl);
+    _InDiscardedBody = wasDiscarded;
+    return result;
+  }
+
+  bool TraverseCallExpr(clang::CallExpr *call) {
+    const clang::FunctionDecl *callee = call->getDirectCallee();
+    if (callee && _Mgr.isInMainFile(_Mgr.getFileLoc(callee->getLocation())))
+      return true; // whole call is havocked or rejected away; nothing inside it survives
+    return RecursiveASTVisitor::TraverseCallExpr(call);
+  }
+
+  bool VisitDeclRefExpr(clang::DeclRefExpr *ref) {
+    if (_InDiscardedBody) return true;
+    if (const auto *func = llvm::dyn_cast<clang::FunctionDecl>(ref->getDecl()))
+      _Referenced.insert(func->getCanonicalDecl());
+    return true;
+  }
+
+private:
+  clang::SourceManager &_Mgr;
+  const std::set<std::string> &_Discarded;
+  std::set<const clang::FunctionDecl *> &_Referenced;
+  bool _InDiscardedBody = false;
+};
+
+} // namespace
+
+std::set<const clang::FunctionDecl *>
+MainGenConsumer::collectNonCallReferences(clang::ASTContext &Context,
+                                          const std::set<std::string> &discardedFunctions) {
+  std::set<const clang::FunctionDecl *> referenced;
+  NonCallReferenceCollector(Context.getSourceManager(), discardedFunctions, referenced)
+      .TraverseDecl(Context.getTranslationUnitDecl());
+  return referenced;
 }

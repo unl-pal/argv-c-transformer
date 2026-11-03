@@ -29,12 +29,11 @@ struct HarnessSplit {
 };
 
 /**
- * @brief Splits the generated main into one entry per harnessed function.
+ * @brief Splits the generated main by harnessed function.
  *
  * MainGenConsumer emits each harness call and its setup as a top-level block
- * of main, ending in the call. Blocks whose target the verify stage rejected
- * are dropped; head and tail are read through the shared Rewriter, so they
- * carry RemoveConsumer's edits. Must run after every consumer that edits.
+ * of main, ending in the call. Each block is turned into a HarnessEntry for
+ * splitting into seperate files with the same head and tail.
  */
 class HarnessSplitConsumer : public clang::ASTConsumer {
 public:

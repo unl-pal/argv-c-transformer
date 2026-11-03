@@ -62,7 +62,8 @@ bool CountingVisitor::VisitCallExpr(clang::CallExpr *CE) {
   // don't count Verifier nondet / havoc-helper / reach_error / asserts
   if (const clang::FunctionDecl *callee = CE->getDirectCallee()) {
     if (callee->getIdentifier() && isVerifierGenerated(callee->getNameAsString())) {
-      if (callee->getName() == "reach_error") _allFunctions->try_emplace("reach_error");
+      if (callee->getName() == "reach_error")
+        _allFunctions->at(getStmtParentFuncName(*CE)).Features.ReachError = true;
       return true;
     }
   }

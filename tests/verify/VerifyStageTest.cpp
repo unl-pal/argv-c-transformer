@@ -518,6 +518,27 @@ TEST_F(VerifyStageTest, AssertRewriteAddsUnreachCallProperty) {
   EXPECT_NE(yml.find("unreach-call.prp"), std::string::npos);
 }
 
+TEST_F(VerifyStageTest, UnreachCallFollowsTheHarnessedFunctionOnly) {
+  // sub's body ships in add's benchmark too, but main never reaches it.
+  writeFile(filterDir / "sibling.c", "#include <assert.h>\n"
+                                     "int add(int a, int b) {\n"
+                                     "  int r = a + b;\n"
+                                     "  assert(r >= a);\n"
+                                     "  return r;\n"
+                                     "}\n"
+                                     "int sub(int a, int b) { return a - b; }\n");
+
+  int count = transformAndVerify();
+
+  EXPECT_EQ(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "sibling__add.yml"));
+  ASSERT_TRUE(fs::exists(benchmarkDir / "sibling__sub.yml"));
+  std::string addYml = readFile(benchmarkDir / "sibling__add.yml");
+  std::string subYml = readFile(benchmarkDir / "sibling__sub.yml");
+  EXPECT_NE(addYml.find("unreach-call.prp"), std::string::npos) << addYml;
+  EXPECT_EQ(subYml.find("unreach-call.prp"), std::string::npos) << subYml;
+}
+
 TEST_F(VerifyStageTest, ArgcArgvMainSurvivesVerify) {
   // original_main takes (int, char**): the verify re-check must not trip
   // over its unsupported params (no param check post-transform) and the

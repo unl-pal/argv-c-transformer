@@ -38,7 +38,8 @@ void HarnessSplitConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   auto lineStart = [&](clang::SourceLocation loc, unsigned offset = 0) {
     return mgr.translateLineCol(fid, mgr.getSpellingLineNumber(loc) + offset, 1);
   };
-  auto rewritten = [&](clang::SourceLocation begin, clang::SourceLocation end) {
+  // Edited text in [begin, end); a plain SourceRange is a token range and would overrun end.
+  auto textBetween = [&](clang::SourceLocation begin, clang::SourceLocation end) {
     return _Rewriter.getRewrittenText(clang::CharSourceRange::getCharRange(begin, end));
   };
 
@@ -59,10 +60,10 @@ void HarnessSplitConsumer::HandleTranslationUnit(clang::ASTContext &context) {
       continue;
     }
     _Output.entries.push_back(
-        {name, rewritten(lineStart(block->getBeginLoc()), lineStart(block->getRBracLoc(), 1))});
+        {name, textBetween(lineStart(block->getBeginLoc()), lineStart(block->getRBracLoc(), 1))});
   }
   if (!first) return;
 
-  _Output.head = rewritten(mgr.getLocForStartOfFile(fid), lineStart(first->getBeginLoc()));
-  _Output.tail = rewritten(lineStart(last->getRBracLoc(), 1), mgr.getLocForEndOfFile(fid));
+  _Output.head = textBetween(mgr.getLocForStartOfFile(fid), lineStart(first->getBeginLoc()));
+  _Output.tail = textBetween(lineStart(last->getRBracLoc(), 1), mgr.getLocForEndOfFile(fid));
 }

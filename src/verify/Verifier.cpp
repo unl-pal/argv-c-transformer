@@ -11,6 +11,7 @@
 #include "HarnessHeaderData.hpp"
 #include "WorkerPool.hpp"
 
+#include <algorithm>
 #include <clang/Frontend/FrontendActions.h>
 #include <cstdlib>
 #include <filesystem>
@@ -87,16 +88,15 @@ bool Verifier::verifyFile(std::filesystem::path path) {
     allBlocks += entry.block;
   if (!writeText(combinedPath, header + split.head + allBlocks + split.tail)) return false;
 
-  // One check covers every benchmark: each is the combined file minus whole blocks.
+  // One check covers every benchmark: each is the combined file minus whole
+  // blocks.
   if (!checkCompilable(combinedPath)) {
     if (configuration.keepCompilesOnly) {
       debugLog(1, "[verify] discarded (fails compile check): " + combinedPath.string());
       cleanupPartialOutput(path);
       return false;
     }
-    // Kept for inspection, but not a benchmark: no task file, no .i. Left on
-    // disk deliberately, so no cleanup here - and none from the pool either,
-    // which never touches a child that exited under its own control.
+    // Kept for inspection, but not a benchmark: no task file, no .i
     debugLog(1,
              "[verify] kept but not a benchmark (fails compile check): " + combinedPath.string());
     return false;
@@ -137,10 +137,7 @@ std::unordered_map<std::string, CountingVisitor::attributes>
 Verifier::targetCounts(const std::unordered_map<std::string, CountingVisitor::attributes> &counts,
                        const std::string &target) {
   std::unordered_map<std::string, CountingVisitor::attributes> result;
-  // reach_error is recorded file-wide, not per function; an assert in an
-  // unharnessed sibling only adds unreach-call with a verdict that still holds.
-  for (const std::string &name : {target, std::string("reach_error")})
-    if (auto it = counts.find(name); it != counts.end()) result.insert(*it);
+  if (auto it = counts.find(target); it != counts.end()) result.insert(*it);
   return result;
 }
 
@@ -225,16 +222,12 @@ std::string summarizeCompileFailure(const std::string &diagnostics) {
   std::string line, firstError;
   int errorCount = 0;
   while (std::getline(lines, line)) {
-    if (line.find("error:") == std::string::npos)
-      continue;
+    if (line.find("error:") == std::string::npos) continue;
     ++errorCount;
-    if (firstError.empty())
-      firstError = line;
+    if (firstError.empty()) firstError = line;
   }
-  if (firstError.empty())
-    return diagnostics.substr(0, 200);
-  if (errorCount > 1)
-    firstError += " (+" + std::to_string(errorCount - 1) + " more )";
+  if (firstError.empty()) return diagnostics.substr(0, 200);
+  if (errorCount > 1) firstError += " (+" + std::to_string(errorCount - 1) + " more )";
   return firstError;
 }
 
@@ -254,18 +247,18 @@ bool Verifier::checkCompilable(std::filesystem::path path) {
 std::vector<BenchmarkProperty> Verifier::selectProperties(
     const std::unordered_map<std::string, CountingVisitor::attributes> &counts) {
   std::vector<BenchmarkProperty> properties;
-  if (counts.count("reach_error")) properties.push_back({"../properties/unreach-call.prp", true});
   bool loopsPresent = false;
   bool intArithPresent = false;
   bool memsafetyPresent = false;
+  bool reachErrorPresent = false;
   for (const auto &[name, attr] : counts) {
     if (!loopsPresent && (attr.Complexity.ForLoops || attr.Complexity.WhileLoops)) {
       loopsPresent = true;
       properties.push_back({"../properties/termination.prp", true});
     }
     if (!intArithPresent && attr.Complexity.Operations) {
-      // The operations check is pretty naive as it counts any/all binary and unary operations with
-      // side effects
+      // The operations check is pretty naive as it counts any/all binary and
+      // unary operations with side effects
       intArithPresent = true;
       properties.push_back({"../properties/no-overflow.prp", true});
     }
@@ -275,7 +268,11 @@ std::vector<BenchmarkProperty> Verifier::selectProperties(
       memsafetyPresent = true;
       properties.push_back({"../properties/valid-memsafety.prp", true});
     }
-    if (loopsPresent && intArithPresent && memsafetyPresent) break;
+    if (!reachErrorPresent && attr.Features.ReachError) {
+      reachErrorPresent = true;
+      properties.push_back({"../properties/unreach-call.prp", true});
+    }
+    if (loopsPresent && intArithPresent && memsafetyPresent && reachErrorPresent) break;
   }
   return properties;
 }
@@ -295,8 +292,7 @@ void Verifier::writeBenchmarkTask(
     return;
   }
 
-  out << provenanceComment("#")
-      << "format_version: '2.0'\n"
+  out << provenanceComment("#") << "format_version: '2.0'\n"
       << "\n"
       << "input_files: '" << inputFile << "'\n"
       << "\n";
@@ -318,8 +314,9 @@ void Verifier::writeBenchmarkTask(
 
 namespace {
 
-// Lines matching one of these are pure header noise. Each entry is a case a specific verifier
-// frontend chokes on despite the declaration being semantically inert.
+// Lines matching one of these are pure header noise. Each entry is a case a
+// specific verifier frontend chokes on despite the declaration being
+// semantically inert.
 //
 // - _Float16/32/64/128(x): glibc's <bits/floatn-common.h> fallback typedefs
 //   for the C23 extended float types, pulled in transitively by <stdio.h>
@@ -358,16 +355,12 @@ void stripNoiseTypedefs(const std::filesystem::path &iPath) {
     out << l << "\n";
 }
 
-// A typedef may legally repeat verbatim - glibc's own headers commonly reach the
-// same typedef (e.g. size_t) through more than one internal path, and C allows
-// redeclaring a typedef to the same type any number of times. Some verifier
-// frontends (e.g. Ultimate Automizer) reject the redeclaration anyway, even
-// though it is valid C
+// A typedef may legally repeat verbatim. Some verifier frontends (e.g. Ultimate Automizer)
+// reject the redeclaration anyway, even though it is valid C
 void dedupeExactTypedefLines(const std::filesystem::path &iPath) {
   static const std::regex typedefLine(R"(^\s*typedef\s+.+;\s*$)");
   std::ifstream in(iPath);
-  if (!in)
-    return;
+  if (!in) return;
   std::vector<std::string> kept;
   std::set<std::string> seenTypedefs;
   std::string line;
@@ -380,8 +373,7 @@ void dedupeExactTypedefLines(const std::filesystem::path &iPath) {
     kept.push_back(std::move(line));
   }
   in.close();
-  if (!changed)
-    return;
+  if (!changed) return;
   std::ofstream out(iPath, std::ios::trunc);
   for (const std::string &l : kept)
     out << l << "\n";
@@ -416,7 +408,8 @@ int Verifier::run() {
     debugLog(0, "Transform directory not found: " + configuration.transformDir);
     return 0;
   }
-  checkOrCleanOutputDir(configuration.benchmarkDir, {configuration.transformDir, config.databaseDir},
+  checkOrCleanOutputDir(configuration.benchmarkDir,
+                        {configuration.transformDir, config.databaseDir},
                         configuration.cleanOutput);
   writeHarnessHeader();
   WorkerPoolResult result = verifyAll(path);

@@ -23,12 +23,7 @@
  * Any pre-existing {@code main} (including its forward declarations) is renamed
  * to {@code original_main}, then a fresh {@code int main(void)} is appended that
  * calls every function defined in the file with {@code __VERIFIER_nondet_*}
- * arguments, each call and its setup in its own top-level block: the verify
- * stage splits the file into one benchmark per block. Functions with a parameter type that has no nondet equivalent
- * (pointers, structs, ...), variadic functions, and functions
- * {@code HavocCallsConsumer} discarded (a no-op body, or an unhavockable
- * call) are skipped. For {@code original_main(int, char**)}, a synthesized
- * {@code argc}/{@code argv} harness is generated instead of skipping.
+ * arguments, each call and its setup in its own top-level block.
  */
 class MainGenConsumer : public clang::ASTConsumer {
 public:
@@ -83,8 +78,8 @@ private:
    * {@code renderPointerStorage} as stack storage filled with
    * {@code __VERIFIER_nondet_memory}. When a pointer is present and
    * {@code clampIntegers} is set, integer parameters are emitted as locals
-   * clamped to {@code __HAVOC_ARRAY_ELEMS} instead, so that any index derived from them stays inside the block handed
-   * to the callee.
+   * clamped to {@code __HAVOC_ARRAY_ELEMS} instead, so that any index derived from them stays
+   * inside the block handed to the callee.
    *
    * @param func    The function to synthesize a call for.
    * @param Context The AST context, for the SourceManager (telling types that
@@ -107,6 +102,19 @@ private:
    *         generated {@code main} body.
    */
   std::string genMainHarness(const clang::FunctionDecl *mainFn);
+
+  /**
+   * @brief Finds every in-file function named outside a direct in-file call and
+   * outside a discarded body (e.g. as a function pointer), so its declaration must survive.
+   *
+   * @return Decls of those functions.
+   */
+  static std::set<const clang::FunctionDecl *>
+  collectNonCallReferences(clang::ASTContext &Context,
+                           const std::set<std::string> &discardedFunctions);
+
+  /// One harness entry as its own block, so verify can split main on top-level statements.
+  static std::string harnessBlock(const std::string &statements);
 
   std::shared_ptr<std::set<std::string>> _DiscardedFunctions;
   std::shared_ptr<std::set<std::string>> _NeededFwdDecls;

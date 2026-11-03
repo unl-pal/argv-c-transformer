@@ -38,13 +38,11 @@ struct verifyConfigs {
  * @brief Top-level orchestrator for the verify step - the third stage of the
  * pipeline (filter → transform → verify).
  *
- * Reparses each transformed file and re-applies the filter's thresholds,
- * stripping a rejected function's body and dropping its harness block. Each
- * remaining block becomes its own benchmark; a file with none left is discarded.
+ * Reparses each transformed file and re-applies the filter's thresholds.
+ * Each remaining function becomes its own benchmark.
  *
- * Verify also owns benchmark finalization: the compile check (once per input
- * file), and per benchmark the .yml task file and preprocessing to the .i the
- * task file references.
+ * Verify also owns benchmark finalization: the compile check, the
+ * .yml task file, and preprocessing to the .i the task file references.
  */
 class Verifier {
 public:
@@ -192,7 +190,7 @@ private:
   /** @brief Writes text to path, logging on failure. @return false if the write failed. */
   static bool writeText(const std::filesystem::path &path, const std::string &text);
 
-  /** @brief The subset of counts that describes one benchmark: its target plus file-wide markers. */
+  /** @brief The subset of counts that describes one benchmark: its target's entry alone. */
   static std::unordered_map<std::string, CountingVisitor::attributes>
   targetCounts(const std::unordered_map<std::string, CountingVisitor::attributes> &counts,
                const std::string &target);

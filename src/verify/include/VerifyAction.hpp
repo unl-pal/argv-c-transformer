@@ -27,8 +27,7 @@
  * Reparses the generated source from scratch and runs: CountingConsumer
  * (fresh counts), VerifyFunctionsConsumer (re-apply thresholds),
  * RemoveConsumer (strip rejected bodies), HarnessSplitConsumer (cut the
- * repaired source into one entry per surviving harness block, into
- * {@code output}).
+ * repaired source into one entry per surviving function, into {@code output}).
  *
  * The counts map and removal list are owned by the Verifier driver so it can
  * read them back after the tool run (e.g. for property selection).
