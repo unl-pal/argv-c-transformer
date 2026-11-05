@@ -348,7 +348,7 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
 
   clang::QualType returnType = E->getCallReturnType(*_C);
   std::string stub = "__hret" + std::to_string(_StubCounter++);
-  PointerStorage store = renderPointerStorage(plan, returnType, stub, returnType.getAsString(),
+  PointerStorage store = renderPointerStorage(plan, stub, returnType.getAsString(),
                                               /*indent=*/"");
 
   _Rewriter.InsertText(anchor->getBeginLoc(), store.decls, /*InsertAfter=*/false,

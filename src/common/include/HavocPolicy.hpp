@@ -27,12 +27,6 @@
  *
  * @ref planPointer is the single source of truth for pointer handling, shared
  * by pointer-returning calls and harnessed pointer parameters.
- *
- * The pointer depth selects how much structure is modelled. Depth 0 havocs
- * every pointer as an opaque byte block (char pointers stay strings). Depth
- * k >= 1 builds typed storage and initializes the pointers inside it k levels
- * deep; a pointer past the bound makes the plan non-viable, so its function is
- * dropped.
  */
 
 /**
@@ -53,11 +47,9 @@ struct PointerPlan;
  * @brief A pointer inside each element of a plan's storage, assigned after the
  * nondet fill so no raw nondet pointer value survives.
  */
-struct PointerSlot {
-  std::vector<std::string> path; ///< From an element: ".member" segments, "[]" per entry of @c dims.
-  std::vector<uint64_t> dims;
-  clang::QualType type;
-  std::shared_ptr<PointerPlan> child; ///< Null: the slot is set to 0 (unspellable target).
+struct PointerField {
+  std::vector<const clang::FieldDecl *> path; ///< Members from the element; empty if the element is the pointer.
+  std::shared_ptr<PointerPlan> target;        ///< Null: the pointer is set to 0 (unspellable target).
 };
 
 /**
@@ -65,12 +57,12 @@ struct PointerSlot {
  * spelling needs.
  */
 struct PointerPlan {
+  clang::QualType type; ///< The pointer or constant-array type planned.
   PointerShape shape = PointerShape::Opaque;
   bool viable = false;
-  std::string fwdDecl;      ///< For an opaque pointee.
-  unsigned elems = 0;       ///< Constant array size.
-  std::string opaqueSizeof; ///< Type whose sizeof floors an opaque block; "" for none.
-  std::vector<PointerSlot> slots;
+  std::string fwdDecl; ///< For an opaque pointee.
+  bool opaqueSized = false; ///< An opaque block is floored at the planned type's sizeof.
+  std::vector<PointerField> fields;
 };
 
 /**
@@ -128,16 +120,17 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
                             unsigned depth, PointerPlan &plan);
 
 /**
- * @brief Plans the storage a pointer slot points to: null to set it to 0 (an
+ * @brief Plans the storage a pointer field points to: null to set it to 0 (an
  * unspellable pointee), or nullopt if no storage can be built, which makes the
  * enclosing plan non-viable.
  *
  * @param depth Levels remaining for the target; at least 1.
  */
 inline std::optional<std::shared_ptr<PointerPlan>>
-planSlotTarget(clang::QualType type, const clang::SourceManager &mgr, unsigned depth) {
+planFieldTarget(clang::QualType type, const clang::SourceManager &mgr, unsigned depth) {
   if (!isSpellable(type)) return nullptr;
   auto plan = std::make_shared<PointerPlan>();
+  plan->type = type;
   plan->shape = PointerShape::Block;
   if (!classifyPointee(type->getPointeeType(), mgr, depth, *plan)) return std::nullopt;
   plan->viable = true;
@@ -160,7 +153,7 @@ inline bool holdsPointer(clang::QualType type, unsigned depth = 0) {
 }
 
 /**
- * @brief Appends a slot for every pointer reachable by value inside @p record.
+ * @brief Appends a field for every pointer reachable by value inside @p record.
  *
  * @param readOnly The record is reached through a const member.
  * @param enclosing Records being walked above this one.
@@ -168,10 +161,10 @@ inline bool holdsPointer(clang::QualType type, unsigned depth = 0) {
  * or inside a flexible array member), is a function pointer, or its target
  * can't be built (including past the depth bound).
  */
-inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std::string> &path,
-                         const std::vector<uint64_t> &dims, bool readOnly,
-                         const clang::SourceManager &mgr, unsigned depth, PointerPlan &plan,
-                         std::vector<const clang::RecordDecl *> enclosing = {}) {
+inline bool collectFields(const clang::RecordDecl *record,
+                          const std::vector<const clang::FieldDecl *> &path, bool readOnly,
+                          const clang::SourceManager &mgr, unsigned depth, PointerPlan &plan,
+                          std::vector<const clang::RecordDecl *> enclosing = {}) {
   const clang::RecordDecl *def = record->getDefinition();
   if (!def || def->isUnion()) { // assigning one member would clobber its siblings
     if (def)
@@ -184,9 +177,8 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
   enclosing.push_back(def);
   for (const clang::FieldDecl *field : def->fields()) {
     if (field->isInvalidDecl()) continue;
-    std::vector<std::string> fieldPath = path;
-    std::vector<uint64_t> fieldDims = dims;
-    if (!field->isAnonymousStructOrUnion()) fieldPath.push_back("." + field->getName().str());
+    std::vector<const clang::FieldDecl *> fieldPath = path;
+    fieldPath.push_back(field);
     clang::QualType type = field->getType();
     bool flexible = false;
     while (const clang::ArrayType *array = type->getAsArrayTypeUnsafe()) {
@@ -195,8 +187,6 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
         flexible = true;
         break;
       }
-      fieldDims.push_back(constant->getSize().getZExtValue());
-      fieldPath.push_back("[]");
       type = constant->getElementType();
     }
     if (flexible) { // outside sizeof, so outside the storage
@@ -206,11 +196,11 @@ inline bool collectSlots(const clang::RecordDecl *record, const std::vector<std:
     bool fieldReadOnly = readOnly || type.isConstQualified();
     if (type->isAnyPointerType()) {
       if (fieldReadOnly || type->isFunctionPointerType() || depth == 1) return false;
-      auto target = planSlotTarget(type, mgr, depth - 1);
+      auto target = planFieldTarget(type, mgr, depth - 1);
       if (!target) return false;
-      plan.slots.push_back({fieldPath, fieldDims, type, *target});
+      plan.fields.push_back({fieldPath, *target});
     } else if (const clang::RecordDecl *nested = type->getAsRecordDecl()) {
-      if (!collectSlots(nested, fieldPath, fieldDims, fieldReadOnly, mgr, depth, plan, enclosing))
+      if (!collectFields(nested, fieldPath, fieldReadOnly, mgr, depth, plan, enclosing))
         return false;
     }
   }
@@ -233,9 +223,9 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
   }
   if (pointee->isAnyPointerType()) { // storage is unqualified, so a const element still assigns
     if (pointee->isFunctionPointerType() || depth == 1) return false;
-    auto target = planSlotTarget(pointee, mgr, depth - 1);
+    auto target = planFieldTarget(pointee, mgr, depth - 1);
     if (!target) return false;
-    plan.slots.push_back({{}, {}, pointee, *target});
+    plan.fields.push_back({{}, *target});
     return true;
   }
   if (!isSizedPointee(pointee, mgr)) {
@@ -245,7 +235,7 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
   }
   if (const clang::RecordDecl *record = pointee->getAsRecordDecl()) {
     if (plan.shape != PointerShape::Array) plan.shape = PointerShape::Record;
-    return collectSlots(record, {}, {}, false, mgr, depth, plan);
+    return collectFields(record, {}, false, mgr, depth, plan);
   }
   return true;
 }
@@ -260,13 +250,13 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
                                unsigned depth = 1) {
   PointerPlan plan;
   if (QT.isNull() || QT.getTypePtrOrNull() == nullptr) return plan;
+  plan.type = QT;
 
   clang::QualType pointee;
   if (const auto *arrayType =
           llvm::dyn_cast_or_null<clang::ConstantArrayType>(QT->getAsArrayTypeUnsafe())) {
     pointee = arrayType->getElementType();
     plan.shape = PointerShape::Array;
-    plan.elems = static_cast<unsigned>(arrayType->getSize().getZExtValue());
   } else if (QT->isAnyPointerType()) {
     pointee = QT->getPointeeType();
     plan.shape = PointerShape::Block;
@@ -286,8 +276,7 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
     } else {
       plan.shape = PointerShape::Opaque;
       plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
-      if (isSizedPointee(pointee, mgr)) // clang nests array declarators, e.g. int (*[2])(int)
-        plan.opaqueSizeof = (QT->isArrayType() ? QT : pointee).getUnqualifiedType().getAsString();
+      plan.opaqueSized = isSizedPointee(pointee, mgr);
     }
     plan.viable = true;
     return plan;
@@ -308,16 +297,27 @@ struct PointerStorage {
 
 namespace havoc_detail {
 
+/**
+ * @brief The type whose sizeof floors an opaque block, or "" for none.
+ */
+inline std::string opaqueSizeofType(const PointerPlan &plan) {
+  if (plan.shape != PointerShape::Opaque || !plan.opaqueSized) return "";
+  clang::QualType type = plan.type->isArrayType() ? plan.type : plan.type->getPointeeType();
+  return type.getUnqualifiedType().getAsString(); // clang nests array declarators, e.g. int (*[2])(int)
+}
+
 inline std::string elementCount(const PointerPlan &plan) {
   switch (plan.shape) {
   case PointerShape::Array:
-    return std::to_string(plan.elems);
+    return std::to_string(
+        llvm::cast<clang::ConstantArrayType>(plan.type->getAsArrayTypeUnsafe())->getSize().getZExtValue());
   case PointerShape::CString:
     return "__HAVOC_STR_MAX";
-  case PointerShape::Opaque:
-    if (plan.opaqueSizeof.empty()) return "__HAVOC_BLOCK_MAX";
-    return "sizeof(" + plan.opaqueSizeof + ") > __HAVOC_BLOCK_MAX ? sizeof(" + plan.opaqueSizeof +
-           ") : __HAVOC_BLOCK_MAX";
+  case PointerShape::Opaque: {
+    std::string sized = opaqueSizeofType(plan);
+    if (sized.empty()) return "__HAVOC_BLOCK_MAX";
+    return "sizeof(" + sized + ") > __HAVOC_BLOCK_MAX ? sizeof(" + sized + ") : __HAVOC_BLOCK_MAX";
+  }
   default:
     return "__HAVOC_ARRAY_ELEMS";
   }
@@ -333,34 +333,23 @@ inline std::string indexed(const std::string &name, size_t count) {
 }
 
 /**
- * @brief Emits loops over @p dims then @p fieldDims assigning @p value to
- * @p path within every element of @p name.
- *
- * @param looped Leading entries of @p dims the caller has already opened loops for.
+ * @brief The type of one element of @p plan's storage; null if @c plan.type is
+ * neither a pointer nor a constant array.
  */
-inline void assignEach(const std::string &name, const std::vector<std::string> &dims,
-                       const std::vector<std::string> &path, const std::vector<uint64_t> &fieldDims,
-                       const std::string &value, const std::string &indent, std::string &out,
-                       size_t looped = 0) {
-  std::vector<std::string> loopDims = dims;
-  for (uint64_t dim : fieldDims)
-    loopDims.push_back(std::to_string(dim));
-  std::string lhs = indexed(name, dims.size());
-  size_t var = dims.size();
-  for (const std::string &segment : path)
-    lhs += segment == "[]" ? "[" + loopVar(var++) + "]" : segment;
-  for (size_t i = looped; i < loopDims.size(); ++i)
-    out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
-           " < " + loopDims[i] + "; ++" + loopVar(i) + ")\n";
-  out += indent + std::string(2 * loopDims.size(), ' ') + lhs + " = " + value + ";\n";
+inline clang::QualType elementType(const PointerPlan &plan) {
+  if (plan.type.isNull()) return {};
+  if (const auto *array =
+          llvm::dyn_cast_or_null<clang::ConstantArrayType>(plan.type->getAsArrayTypeUnsafe()))
+    return array->getElementType();
+  return plan.type->getPointeeType();
 }
 
 /**
  * @brief Emits @c name[outer...][count] storage for @p plan, fills it with
- * nondet bytes, and assigns every slot in every element, recursing into slot
- * targets first.
+ * nondet bytes, and assigns every pointer field in every element, recursing
+ * into field targets first.
  */
-inline void renderStorage(const PointerPlan &plan, clang::QualType element, const std::string &name,
+inline void renderStorage(const PointerPlan &plan, const std::string &name,
                           const std::vector<std::string> &outer, const std::string &indent,
                           std::string &out) {
   std::string count = elementCount(plan);
@@ -370,32 +359,44 @@ inline void renderStorage(const PointerPlan &plan, clang::QualType element, cons
   decl += "[" + count + "]";
   if (plan.shape == PointerShape::Opaque) decl = "unsigned char " + decl; // alignment potentially an issue
   else // appends an n-dimensional element's own bounds after ours
-    element.getUnqualifiedType().getAsStringInternal(decl, clang::LangOptions());
+    elementType(plan).getUnqualifiedType().getAsStringInternal(decl, clang::LangOptions());
   out += indent + decl + ";\n";
   if (plan.shape == PointerShape::CString) return; // filled where it is referenced
 
   std::vector<std::string> dims = outer;
   dims.push_back(count);
   out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
-  for (size_t s = 0; s < plan.slots.size(); ++s) {
-    const PointerSlot &slot = plan.slots[s];
+  for (size_t f = 0; f < plan.fields.size(); ++f) {
+    const PointerField &field = plan.fields[f];
     std::vector<std::string> loopDims = dims;
-    for (uint64_t dim : slot.dims)
-      loopDims.push_back(std::to_string(dim));
+    std::string lhs = indexed(name, dims.size());
+    for (const clang::FieldDecl *member : field.path) {
+      if (!member->isAnonymousStructOrUnion()) lhs += "." + member->getName().str();
+      clang::QualType type = member->getType();
+      while (const auto *array =
+                 llvm::dyn_cast_or_null<clang::ConstantArrayType>(type->getAsArrayTypeUnsafe())) {
+        lhs += "[" + loopVar(loopDims.size()) + "]";
+        loopDims.push_back(std::to_string(array->getSize().getZExtValue()));
+        type = array->getElementType();
+      }
+    }
 
     std::string value = "0";
-    if (slot.child) {
-      std::string target = name + "_" + std::to_string(s);
-      renderStorage(*slot.child, slot.type->getPointeeType(), target, loopDims, indent, out);
+    if (field.target) {
+      std::string target = name + "_" + std::to_string(f);
+      renderStorage(*field.target, target, loopDims, indent, out);
       std::string row = indexed(target, loopDims.size());
-      if (slot.child->shape == PointerShape::CString)
+      if (field.target->shape == PointerShape::CString)
         value = "__havoc_cstring_fill(" + row + ", __HAVOC_STR_MAX)";
-      else if (slot.child->shape == PointerShape::Opaque)
-        value = "(" + slot.type.getAsString() + ")" + row;
+      else if (field.target->shape == PointerShape::Opaque)
+        value = "(" + field.target->type.getAsString() + ")" + row;
       else
         value = row;
     }
-    assignEach(name, dims, slot.path, slot.dims, value, indent, out);
+    for (size_t i = 0; i < loopDims.size(); ++i)
+      out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
+             " < " + loopDims[i] + "; ++" + loopVar(i) + ")\n";
+    out += indent + std::string(2 * loopDims.size(), ' ') + lhs + " = " + value + ";\n";
   }
 }
 
@@ -405,30 +406,19 @@ inline void renderStorage(const PointerPlan &plan, clang::QualType element, cons
  * @brief Declares stack storage for a viable pointer plan and fills it with
  * nondet values, for use in statement position.
  *
- * @param declared The parameter's pre-decay type, or a call's return type.
  * @param name     Unique local name for the storage; nested storage appends suffixes to it.
  * @param castType Cast applied only to the opaque byte buffer. Empty to omit.
  * @param indent   Leading whitespace for each emitted statement line.
  * @return The setup and argument; empty when the plan is not viable.
  */
-inline PointerStorage renderPointerStorage(const PointerPlan &plan, clang::QualType declared,
-                                           const std::string &name, const std::string &castType,
+inline PointerStorage renderPointerStorage(const PointerPlan &plan, const std::string &name,
+                                           const std::string &castType,
                                            const std::string &indent = "  ") {
   PointerStorage out;
   if (!plan.viable) return out;
+  if (plan.shape != PointerShape::Opaque && havoc_detail::elementType(plan).isNull()) return out;
 
-  clang::QualType element; // unused by an opaque block
-  if (plan.shape != PointerShape::Opaque) {
-    if (const auto *arrayType =
-            llvm::dyn_cast_or_null<clang::ConstantArrayType>(declared->getAsArrayTypeUnsafe()))
-      element = arrayType->getElementType();
-    else if (declared->isAnyPointerType())
-      element = declared->getPointeeType();
-    else
-      return out;
-  }
-
-  havoc_detail::renderStorage(plan, element, name, {}, indent, out.decls);
+  havoc_detail::renderStorage(plan, name, {}, indent, out.decls);
   if (plan.shape == PointerShape::CString) {
     out.arg = "__havoc_cstring_fill(" + name + ", " + havoc_detail::elementCount(plan) + ")";
     out.cstring = true;
