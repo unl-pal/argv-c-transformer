@@ -257,7 +257,7 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
  * @return The plan; check @c viable before using it.
  */
 inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr,
-                               PointerModel model = {}) {
+                               unsigned depth = 1) {
   PointerPlan plan;
   if (QT.isNull() || QT.getTypePtrOrNull() == nullptr) return plan;
 
@@ -280,7 +280,7 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
   }
   if (!isSpellable(QT)) return plan; // no name for the storage or the cast
 
-  if (model.depth == 0) {
+  if (depth == 0) {
     if (pointee->isAnyCharacterType()) {
       plan.shape = PointerShape::CString;
     } else {
@@ -293,7 +293,7 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
     return plan;
   }
 
-  plan.viable = classifyPointee(pointee, mgr, model.depth, plan);
+  plan.viable = classifyPointee(pointee, mgr, depth, plan);
   return plan;
 }
 

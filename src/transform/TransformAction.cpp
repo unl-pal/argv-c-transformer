@@ -96,7 +96,7 @@ TransformAction::CreateASTConsumer(clang::CompilerInstance &compiler, llvm::Stri
   std::vector<std::unique_ptr<clang::ASTConsumer>> tempVector;
   tempVector.emplace_back(
       std::make_unique<HavocCallsConsumer>(discardedFunctions, neededFwdDecls, _Rewriter,
-                                           _Havoc.pointers));
+                                           _Havoc.pointerDepth));
   tempVector.emplace_back(
       std::make_unique<MainGenConsumer>(discardedFunctions, neededFwdDecls, _Rewriter, _Havoc));
   tempVector.emplace_back(
