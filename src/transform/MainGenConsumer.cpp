@@ -109,7 +109,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
   for (const clang::ParmVarDecl *parm : func->parameters()) {
     PointerPlan plan;
     if (!verifierSuffixForType(parm->getOriginalType())) {
-      plan = planPointer(parm->getOriginalType(), mgr);
+      plan = planPointer(parm->getOriginalType(), mgr, _Havoc.pointers);
       if (!plan.viable) return call;
       anyPointer = true;
     }

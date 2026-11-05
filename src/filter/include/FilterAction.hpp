@@ -6,6 +6,7 @@
 
 #include "ConfigParser.hpp"
 #include "CountingVisitor.hpp"
+#include "HavocBounds.hpp"
 #include "HeaderClosure.hpp"
 
 #include <clang/AST/ASTConsumer.h>
@@ -36,9 +37,11 @@ public:
    * @param featureConfig     Per-feature require/forbid/ignore gates owned by
    *                          {@code Filterer}.
    * @param output            Destination file stream for the filtered output.
+   * @param pointers          Passed to {@code planPointer}, matching the transform's.
    */
   FilterAction(std::map<std::string, std::pair<int, int>> *complexityConfig,
-               std::map<std::string, FeatureGate> *featureConfig, llvm::raw_fd_ostream &output);
+               std::map<std::string, FeatureGate> *featureConfig, llvm::raw_fd_ostream &output,
+               PointerModel pointers = {});
 
   /**
    * @brief Builds a {@code MultiplexConsumer} containing all three filter passes.
@@ -80,6 +83,7 @@ private:
   std::map<std::string, FeatureGate> *_FeatureConfig;
   clang::Rewriter _Rewriter;
   llvm::raw_fd_ostream &_Output;
+  PointerModel _Pointers;
   /// Shared between LocalHeaderPP (fills it during preprocessing) and
   /// HeaderClosureConsumer (reads it once the AST is complete).
   std::shared_ptr<HeaderClosureState> _ClosureState;
@@ -100,10 +104,11 @@ public:
    * @param complexityConfig  Pointer to the per-metric [min, max] map owned by {@code Filterer}.
    * @param featureConfig     Pointer to the per-feature gate map owned by {@code Filterer}.
    * @param output            Reference to the output stream for the filtered file.
+   * @param pointers          Passed to {@code planPointer}, matching the transform's.
    */
   FrontendFactoryWithArgs(std::map<std::string, std::pair<int, int>> *complexityConfig,
                           std::map<std::string, FeatureGate> *featureConfig,
-                          llvm::raw_fd_ostream &output);
+                          llvm::raw_fd_ostream &output, PointerModel pointers = {});
 
   /**
    * @brief Called by {@code ClangTool} once per source file to create the action.
@@ -118,4 +123,5 @@ private:
   std::map<std::string, std::pair<int, int>> *_ComplexityConfig;
   std::map<std::string, FeatureGate> *_FeatureConfig;
   llvm::raw_fd_ostream &_Output;
+  PointerModel _Pointers;
 };
