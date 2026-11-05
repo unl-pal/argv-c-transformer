@@ -37,7 +37,8 @@ int first_arg(char **argv) { return argv[0][0]; }
 int main(void) {
   {
     struct Named __h0[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+      __h0[__i0].id = __VERIFIER_nondet_int();
     char __h0_0[__HAVOC_ARRAY_ELEMS][__HAVOC_STR_MAX];
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h0[__i0].name = __havoc_cstring_fill(__h0_0[__i0], __HAVOC_STR_MAX);
@@ -49,7 +50,6 @@ int main(void) {
   }
   {
     char *__h1[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h1, sizeof(__h1));
     char __h1_0[__HAVOC_ARRAY_ELEMS][__HAVOC_STR_MAX];
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h1[__i0] = __havoc_cstring_fill(__h1_0[__i0], __HAVOC_STR_MAX);

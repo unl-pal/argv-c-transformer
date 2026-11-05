@@ -17,7 +17,8 @@ int compute(int n) {
   char __hret0[__HAVOC_STR_MAX];
   char *s = __havoc_cstring_fill(__hret0, __HAVOC_STR_MAX);
   int __hret1[__HAVOC_ARRAY_ELEMS];
-  __VERIFIER_nondet_memory(__hret1, sizeof(__hret1));
+  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+    __hret1[__i0] = __VERIFIER_nondet_int();
   int *b = __hret1;
   float f = __VERIFIER_nondet_float();
   return a + s[0] + b[0] + (int)f;
