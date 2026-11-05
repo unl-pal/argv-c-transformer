@@ -53,12 +53,13 @@ struct PipelineConfig {
   };
 
   /**
-   * Bounds the transform stage emits as __HAVOC_* macros into each
-   * transformed file (see HavocBounds.hpp).
+   * Havoc settings (see HavocBounds.hpp): bounds the transform stage emits
+   * as __HAVOC_* macros, plus havocPointerDepth, which the filter also reads.
    */
   std::map<std::string, int> havoc = {
       {"havocArgcMin", 1},    {"havocArgcMax", 4},    {"havocStrMax", 16},
-      {"havocBlockMax", 128}, {"havocArrayElems", 8}, {"clampIntegers", 1},
+      {"havocBlockMax", 128}, {"havocArrayElems", 8}, {"havocPointerDepth", 1},
+      {"clampIntegers", 1},
   };
 
   std::string databaseDir;  ///< Input tree for the filter stage ("" = unset).
@@ -244,7 +245,9 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       }
     } else if (config.havoc.count(key)) {
       try {
-        int parsed = std::stoi(value);
+        int parsed = value == "true" || value == "True"     ? 1
+                     : value == "false" || value == "False" ? 0
+                                                            : std::stoi(value);
         if (parsed < 0) {
           std::cerr << "Warning: '" << key << "' expects a non-negative count - ignoring value '"
                     << value << "'" << std::endl;
