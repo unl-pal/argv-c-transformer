@@ -107,7 +107,7 @@ TEST_P(TransformGolden, MatchesExpected) {
   HavocBounds havoc;
   size_t depthAt = testCase.name.rfind("-depth");
   if (depthAt != std::string::npos)
-    havoc.pointers.depth = std::stoul(testCase.name.substr(depthAt + std::strlen("-depth")));
+    havoc.pointerDepth = std::stoul(testCase.name.substr(depthAt + std::strlen("-depth")));
 
   std::string out;
   llvm::raw_string_ostream os(out);

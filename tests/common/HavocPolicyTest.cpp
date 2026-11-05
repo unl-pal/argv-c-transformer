@@ -32,7 +32,7 @@ struct Parsed {
 // classifies its declared (pre-decay) type. The ASTUnit is returned alongside
 // the plan because the plan's strings outlive nothing but the AST must stay
 // alive for the duration of the parse itself.
-Parsed planFirstParam(const std::string &code, PointerModel model = {},
+Parsed planFirstParam(const std::string &code, unsigned depth = 1,
                       const std::string &func = "f") {
   Parsed p;
   p.ast = clang::tooling::buildASTFromCodeWithArgs(code, {"-xc"}, "test.c");
@@ -44,7 +44,7 @@ Parsed planFirstParam(const std::string &code, PointerModel model = {},
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!fn || fn->getNameAsString() != func || fn->param_empty()) continue;
     p.declared = fn->getParamDecl(0)->getOriginalType();
-    p.plan = planPointer(p.declared, ctx.getSourceManager(), model);
+    p.plan = planPointer(p.declared, ctx.getSourceManager(), depth);
     return p;
   }
   ADD_FAILURE() << "no function named " << func << " with a parameter";
@@ -196,7 +196,7 @@ TEST(PlanPointer, SelfContainingRecordFromErrorRecoveryTerminates) {
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!fn || fn->getNameAsString() != "f") continue;
     planPointer(fn->getParamDecl(0)->getOriginalType(), ast->getASTContext().getSourceManager(),
-                PointerModel{2});
+                2);
     return; // reaching here at all is the assertion
   }
   ADD_FAILURE() << "no f";

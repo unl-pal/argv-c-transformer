@@ -16,12 +16,12 @@
 
 HavocCallsConsumer::HavocCallsConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                                        std::shared_ptr<std::set<std::string>> neededFwdDecls,
-                                       clang::Rewriter &rewriter, PointerModel pointers)
+                                       clang::Rewriter &rewriter, unsigned pointerDepth)
     : _DiscardedFunctions(discardedFunctions), _NeededFwdDecls(neededFwdDecls), _Rewriter(rewriter),
-      _Pointers(pointers) {}
+      _PointerDepth(pointerDepth) {}
 
 void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
-  HavocCallsVisitor Visitor(&Context, _NeededFwdDecls, _Rewriter, _Pointers);
+  HavocCallsVisitor Visitor(&Context, _NeededFwdDecls, _Rewriter, _PointerDepth);
   Visitor.TraverseDecl(Context.getTranslationUnitDecl());
 
   // Strip any function whose body collapsed entirely to no-ops, or that
