@@ -5,6 +5,15 @@
 #pragma once
 
 /**
+ * @brief How pointers are modelled, shared by the filter's viability gate and
+ * the transform.
+ */
+struct PointerModel {
+  /** Pointer levels given typed storage; 0 havocs every pointer as opaque bytes. */
+  unsigned depth = 1;
+};
+
+/**
  * @brief Bounds on synthesized symbolic state, emitted as {@code __HAVOC_*}
  * macros ahead of each transformed file's {@code #include "argv_c_harness.h"}.
  */
@@ -19,6 +28,7 @@ struct HavocBounds {
   int blockMax = 128;
   /** Element count for a havocked pointer to a sized type with no declared bound. */
   int arrayElems = 8;
+  PointerModel pointers;
   /** Bound integer params of a pointer-taking function to [0, arrayElems] via abort(). */
   bool clampIntegers = true;
 };
