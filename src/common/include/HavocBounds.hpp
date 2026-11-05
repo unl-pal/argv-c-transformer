@@ -11,6 +11,8 @@
 struct PointerModel {
   /** Pointer levels given typed storage; 0 havocs every pointer as opaque bytes. */
   unsigned depth = 1;
+  /** Every pointer is an opaque __HAVOC_BLOCK_MAX byte block; depth is ignored. */
+  bool generic = false;
   /** Assign typed nondets field by field where possible; false bulk-fills with nondet_memory. */
   bool fieldwise = true;
 };

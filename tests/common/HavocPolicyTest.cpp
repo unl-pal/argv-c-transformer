@@ -272,6 +272,53 @@ TEST(PlanPointerDepthZero, FunctionPointerIsStillNotViable) {
   EXPECT_FALSE(p.plan.viable);
 }
 
+// ---------------------------------------------------------------------------
+// Generic: every pointer is an opaque __HAVOC_BLOCK_MAX block, strings included.
+// ---------------------------------------------------------------------------
+
+namespace {
+constexpr PointerModel kGeneric{1, true};
+}
+
+TEST(PlanPointerGeneric, EveryViableShapeIsUnflooredOpaque) {
+  for (const char *code : {"void f(const char *s) {}", "void f(char **argv) {}",
+                           "void f(int g[3][4]) {}", "void f(void *p) {}",
+                           "struct Node { int v; struct Node *next; };\n"
+                           "void f(struct Node *n) {}"}) {
+    auto p = planFirstParam(code, kGeneric);
+    EXPECT_TRUE(p.plan.viable) << code;
+    EXPECT_EQ(p.plan.shape, PointerShape::Opaque) << code;
+    EXPECT_EQ(p.plan.opaqueSizeof, "") << code;
+    EXPECT_TRUE(p.plan.slots.empty()) << code;
+  }
+}
+
+TEST(PlanPointerGeneric, RecordPointeeGetsFwdDecl) {
+  auto p = planFirstParam("struct Hidden; void f(struct Hidden *p) {}", kGeneric);
+  EXPECT_EQ(p.plan.fwdDecl, "struct Hidden");
+}
+
+TEST(PlanPointerGeneric, ConstPointerFieldIsViable) {
+  // Nothing inside the block is assigned, so a const member is no obstacle.
+  auto p = planFirstParam("struct R { char *const name; };\n"
+                          "void f(struct R *r) {}",
+                          kGeneric);
+  EXPECT_TRUE(p.plan.viable);
+}
+
+TEST(PlanPointerGeneric, FunctionPointerIsStillNotViable) {
+  auto p = planFirstParam("void f(int (*cb)(int)) {}", kGeneric);
+  EXPECT_FALSE(p.plan.viable);
+}
+
+TEST(RenderPointerStorageGeneric, CharPointerIsCastBlockWithoutTerminator) {
+  auto p = planFirstParam("void f(char *s) {}", kGeneric);
+  PointerStorage s = renderPointerStorage(p.plan, p.declared, "__h0", "char *");
+  EXPECT_EQ(s.decls, "  unsigned char __h0[__HAVOC_BLOCK_MAX];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+  EXPECT_EQ(s.arg, "(char *)__h0");
+}
+
 TEST(PlanPointer, AnonymousRecordPointerIsNotViable) {
   // No spelling for the storage declaration or the harness cast, at any depth.
   for (unsigned depth : {0u, 1u, 2u}) {

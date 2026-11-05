@@ -33,7 +33,9 @@
  * every pointer as an opaque byte block (char pointers stay strings). Depth
  * k >= 1 builds typed storage and initializes the pointers inside it k levels
  * deep; a pointer past the bound makes the plan non-viable, so its function is
- * dropped.
+ * dropped. A generic model havocs every
+ * pointer, char pointers included, as an opaque block of exactly
+ * @c __HAVOC_BLOCK_MAX bytes.
  */
 
 /**
@@ -321,6 +323,13 @@ inline PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &m
     return plan;
   }
   if (!isSpellable(QT)) return plan; // no name for the storage or the cast
+
+  if (model.generic) {
+    plan.shape = PointerShape::Opaque;
+    plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
+    plan.viable = true;
+    return plan;
+  }
 
   if (model.depth == 0) {
     if (pointee->isAnyCharacterType()) {
