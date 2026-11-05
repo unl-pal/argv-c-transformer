@@ -134,8 +134,8 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
     }
 
     // clamp every integer rather than guessing which one is "the length"
-    if (_Havoc.clampIntegers && anyPointer && declared->isIntegerType() &&
-        !declared->isBooleanType()) {
+    if (_Havoc.clampIntegers && anyPointer && !_Havoc.pointers.generic &&
+        declared->isIntegerType() && !declared->isBooleanType()) {
       std::string local = "__h" + std::to_string(counter++);
       call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
                        " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
@@ -158,6 +158,13 @@ std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   if (numParams == 0) return "  original_main();\n";
 
   std::string body;
+  if (_Havoc.pointers.generic) { // argc unbounded and unrelated to the block, like any other params
+    std::string argv = "__h" + std::to_string(_LocalCounter++);
+    body += "  unsigned char " + argv + "[__HAVOC_BLOCK_MAX];\n";
+    body += "  __VERIFIER_nondet_memory(" + argv + ", sizeof(" + argv + "));\n";
+    body += "  original_main(__VERIFIER_nondet_int(), (char **)" + argv + ");\n";
+    return body;
+  }
   body += "  int argc = __HAVOC_ARGC();\n";
   body += "  original_main(argc, __havoc_argv_fill(argc));\n";
   return body;
