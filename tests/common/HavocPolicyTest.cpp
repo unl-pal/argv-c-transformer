@@ -326,14 +326,35 @@ TEST(RenderPointerStorage, BlockDeclaresTypedArrayAndPassesIt) {
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "int *");
   EXPECT_EQ(s.arg, "__h0");
   EXPECT_EQ(s.decls, "  int __h0[__HAVOC_ARRAY_ELEMS];\n"
-                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    __h0[__i0] = __VERIFIER_nondet_int();\n");
 }
 
 TEST(RenderPointerStorage, ArrayUsesDeclaredBound) {
   auto p = planFirstParam("void f(int a[3]) {}");
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "int *");
   EXPECT_EQ(s.decls, "  int __h0[3];\n"
-                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+                     "  for (int __i0 = 0; __i0 < 3; ++__i0)\n"
+                     "    __h0[__i0] = __VERIFIER_nondet_int();\n");
+}
+
+TEST(RenderPointerStorage, EnumElementUsesUnderlyingSuffix) {
+  auto p = planFirstParam("enum E { A, B };\n"
+                          "void f(enum E *e) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "enum E *");
+  EXPECT_EQ(s.decls, "  enum E __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    __h0[__i0] = __VERIFIER_nondet_uint();\n");
+}
+
+TEST(RenderPointerStorage, ElementWithoutSuffixIsBulkFilled) {
+  for (const char *code : {"void f(long double *x) {}", "void f(int m[3][4]) {}"}) {
+    auto p = planFirstParam(code);
+    EXPECT_FALSE(p.plan.fieldwise) << code;
+    PointerStorage s = renderPointerStorage(p.plan, "__h0", "");
+    EXPECT_NE(s.decls.find("__VERIFIER_nondet_memory(__h0, sizeof(__h0));"), std::string::npos)
+        << code;
+  }
 }
 
 TEST(RenderPointerStorage, CStringPlantsInBoundsTerminator) {
@@ -358,7 +379,8 @@ TEST(RenderPointerStorage, IndentParameterPrefixesEveryLine) {
   auto p = planFirstParam("void f(int *a) {}");
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "int *", "");
   EXPECT_EQ(s.decls, "int __h0[__HAVOC_ARRAY_ELEMS];\n"
-                     "__VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+                     "for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "  __h0[__i0] = __VERIFIER_nondet_int();\n");
 }
 
 TEST(RenderPointerStorage, PointerPastTheBoundRendersNothing) {
@@ -375,9 +397,12 @@ TEST(RenderPointerStorage, NestedRecordGetsARowPerElement) {
                           2);
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct Node *");
   EXPECT_EQ(s.decls, "  struct Node __h0[__HAVOC_ARRAY_ELEMS];\n"
-                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    __h0[__i0].v = __VERIFIER_nondet_int();\n"
                      "  struct Leaf __h0_0[__HAVOC_ARRAY_ELEMS][__HAVOC_ARRAY_ELEMS];\n"
-                     "  __VERIFIER_nondet_memory(__h0_0, sizeof(__h0_0));\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    for (int __i1 = 0; __i1 < __HAVOC_ARRAY_ELEMS; ++__i1)\n"
+                     "      __h0_0[__i0][__i1].v = __VERIFIER_nondet_int();\n"
                      "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
                      "    __h0[__i0].next = __h0_0[__i0];\n");
 }
@@ -389,11 +414,20 @@ TEST(RenderPointerStorage, NestedStringFieldIsFilledPerRow) {
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct Names *");
   EXPECT_EQ(s.decls,
             "  struct Names __h0[__HAVOC_ARRAY_ELEMS];\n"
-            "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n"
             "  char __h0_0[__HAVOC_ARRAY_ELEMS][4][__HAVOC_STR_MAX];\n"
             "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
             "    for (int __i1 = 0; __i1 < 4; ++__i1)\n"
             "      __h0[__i0].names[__i1] = __havoc_cstring_fill(__h0_0[__i0][__i1], __HAVOC_STR_MAX);\n");
+}
+
+TEST(RenderPointerStorage, RecordWithoutSuffixForAFieldIsBulkFilled) {
+  auto p = planFirstParam("struct T { int k; union { int i; float f; } u; };\n"
+                          "void f(struct T *t) {}");
+  EXPECT_FALSE(p.plan.fieldwise);
+  EXPECT_TRUE(p.plan.scalars.empty());
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+  EXPECT_EQ(s.decls, "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }
 
 TEST(RenderPointerStorage, OpaqueSizeofFloorsTheBlock) {
@@ -415,10 +449,11 @@ TEST(PlanPointer, UnionWithPointerMemberIsNeverViable) {
   EXPECT_FALSE(p.plan.viable);
 }
 
-TEST(PlanPointer, UnionWithoutPointersIsViable) {
+TEST(PlanPointer, UnionWithoutPointersIsBulkFilled) {
   auto p = planFirstParam("union Num { int i; float f; };\n"
                           "void f(union Num *n) {}");
   EXPECT_TRUE(p.plan.viable);
+  EXPECT_FALSE(p.plan.fieldwise);
 }
 
 TEST(PlanPointer, FlexibleArrayIsNeverViable) {

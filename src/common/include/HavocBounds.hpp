@@ -23,4 +23,6 @@ struct HavocBounds {
   unsigned pointerDepth = 1;
   /** Bound integer params of a pointer-taking function to [0, arrayElems] via abort(). */
   bool clampIntegers = true;
+  /** Fill typed storage with a typed nondet per scalar field; false bulk-fills with nondet_memory. */
+  bool fieldwise = true;
 };

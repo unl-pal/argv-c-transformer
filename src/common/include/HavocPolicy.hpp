@@ -36,6 +36,15 @@ enum class PointerShape {
 };
 
 /**
+ * @brief A scalar inside each element of a plan's storage, assigned a
+ * @c __VERIFIER_nondet_<suffix>() value under a fieldwise fill.
+ */
+struct ScalarField {
+  std::vector<const clang::FieldDecl *> path; ///< Members from the element; empty if the element is the scalar.
+  std::string suffix;
+};
+
+/**
  * @brief A decision about one pointer type: what shape, and any declaration its
  * spelling needs.
  */
@@ -47,6 +56,8 @@ struct PointerPlan {
   std::string fwdDecl; ///< For an opaque pointee.
   bool opaqueSized = false; ///< An opaque block is floored at the planned type's sizeof.
   std::vector<PointerPlan> fields; ///< Pointers inside each element, assigned after the nondet fill.
+  std::vector<ScalarField> scalars;
+  bool fieldwise = false; ///< @c scalars and @c fields cover every field, so no bulk fill is needed.
 };
 
 /**
