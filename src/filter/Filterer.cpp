@@ -161,7 +161,8 @@ bool Filterer::filterFile(std::filesystem::path oldPath) {
   std::vector<std::string> includeDirs = collectLocalIncludeDirs(oldPath, *headerIndex);
 
   FrontendFactoryWithArgs factory(&config.complexity, &config.features, output,
-                                  PointerModel{static_cast<unsigned>(config.havoc.at("havocPointerDepth"))});
+                                  PointerModel{static_cast<unsigned>(config.havoc.at("havocPointerDepth")),
+                                               config.havoc.at("havocFieldwise") != 0});
   bool ran = runToolOnFile(oldPath.string(), factory, includeDirs);
   output.close();
   if (!ran) {
