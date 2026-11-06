@@ -286,7 +286,8 @@ void renderStorage(const PointerPlan &plan, const std::string &name,
 
 } // namespace
 
-PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr, unsigned depth) {
+PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr,
+                        const HavocBounds &havoc) {
   PointerPlan plan;
   if (QT.isNull() || QT.getTypePtrOrNull() == nullptr) return plan;
   plan.type = QT;
@@ -309,7 +310,7 @@ PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr, uns
   }
   if (!isSpellable(QT)) return plan; // no name for the storage or the cast
 
-  if (depth == 0) {
+  if (havoc.pointerDepth == 0) {
     if (pointee->isAnyCharacterType()) {
       plan.shape = PointerShape::CString;
     } else {
@@ -321,7 +322,7 @@ PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr, uns
     return plan;
   }
 
-  plan.viable = classifyPointee(pointee, mgr, depth, plan);
+  plan.viable = classifyPointee(pointee, mgr, havoc.pointerDepth, plan);
   return plan;
 }
 

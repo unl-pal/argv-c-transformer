@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "HavocBounds.hpp"
+
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
@@ -269,4 +271,19 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
     }
   }
   return config;
+}
+
+/**
+ * @brief The @c [Havoc Settings] of @p config as a @c HavocBounds.
+ */
+inline HavocBounds havocBoundsFromConfig(const PipelineConfig &config) {
+  HavocBounds havoc;
+  havoc.argcMin = config.havoc.at("havocArgcMin");
+  havoc.argcMax = config.havoc.at("havocArgcMax");
+  havoc.strMax = config.havoc.at("havocStrMax");
+  havoc.blockMax = config.havoc.at("havocBlockMax");
+  havoc.arrayElems = config.havoc.at("havocArrayElems");
+  havoc.pointerDepth = config.havoc.at("havocPointerDepth");
+  havoc.clampIntegers = config.havoc.at("clampIntegers") != 0;
+  return havoc;
 }
