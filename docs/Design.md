@@ -114,6 +114,20 @@ parameters); `MainGenConsumer` writes the whole set into the file's prelude once
 call is known, since it runs last of the two. A repeated forward declaration is legal C
 even when a full definition follows.
 
+An anonymous struct or union with no typedef (`struct { int x; } *p`) has no name to
+spell, and every shape needs one: the storage declaration (`T b[N]`) and the harness
+cast both have to write the pointee's type. `isSpellable` checks for this, and an
+unspellable pointer is not viable wherever it appears. As a parameter or return, it is
+rejected at every depth, including 0, where the `Opaque` cast still has to name it. As a
+pointer field (`struct Outer { struct { int x; } *inner; }`), it makes the enclosing
+plan non-viable at any depth that would give `inner` storage. It is deliberately not
+set to `0`: that would plant a NULL dereference the input never had, which is the same
+reasoning that rejects a pointer past the depth bound. The restriction is only on
+*naming* the pointee. A typedef'd anonymous record (`typedef struct { ... } S;`) is
+spelled through its typedef and is fine, and so is an anonymous member embedded by value
+(`struct { int *p; };` inside a record): it needs no storage of its own, and its pointer
+fields are reached through the parent as `parent.p`.
+
 ### Intraprocedural by Design
 
 Each function body is made self-contained: calls to other functions *in the same file*
@@ -303,6 +317,14 @@ emptied by repair collapses back to that same verbatim text.
   synthesize a meaningful argument list
 - **Function pointers, as a parameter or a return**: never viable (see "Pointer Shapes"),
   so a parameter of this kind is unsupported and a returning call is rejected
+- **Flexible array members** (`struct Buf { int len; int data[]; }`): a pointer to such a
+  record is not viable at depth >= 1, wherever the member sits (directly or in an embedded
+  record). Storage is an array of elements, `struct Buf b[N]`, and the tail is outside
+  `sizeof`, so no element has room for it; the callee's `b->data[i]` would read into the
+  next element, an out-of-bounds access the harness planted. Supporting it needs a
+  single-element, aligned byte buffer with a fixed tail (`sizeof(struct Buf) + K *
+  sizeof(int)`) plus a clamp on the in-struct length. At depth 0 the record is an `Opaque`
+  byte block like any other.
 - **`envp` (third `main` parameter)**: `int main(int, char**, char**)` is not explicitly
   handled; only the first two parameters (`argc`, `argv`) are synthesized
 - **Opaque definitions could introduce memsafety errors**: if for whatever reason some
