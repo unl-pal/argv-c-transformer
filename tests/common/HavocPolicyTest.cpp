@@ -49,6 +49,17 @@ Parsed planFirstParam(const std::string &code, unsigned depth = 1,
   return p;
 }
 
+// The storage declaration renderPointerStorage emits for a plan, without indent.
+std::string storageDecl(const PointerPlan &plan) {
+  std::string decls = renderPointerStorage(plan, "__h0", "", "").decls;
+  return decls.substr(0, decls.find('\n'));
+}
+
+std::string flooredDecl(const std::string &type) {
+  return "unsigned char __h0[sizeof(" + type + ") > __HAVOC_BLOCK_MAX ? sizeof(" + type +
+         ") : __HAVOC_BLOCK_MAX];";
+}
+
 std::vector<std::string> memberNames(const PointerPlan &field) {
   std::vector<std::string> names;
   for (const clang::FieldDecl *member : field.path)
@@ -89,7 +100,7 @@ TEST(PlanPointer, ArrayParamKeepsDeclaredBound) {
   auto p = planFirstParam("void f(int a[3]) {}");
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Array);
-  EXPECT_EQ(havoc_detail::elementCount(p.plan), "3");
+  EXPECT_EQ(storageDecl(p.plan), "int __h0[3];");
 }
 
 TEST(PlanPointer, VoidPointerIsOpaqueByteCount) {
@@ -227,7 +238,7 @@ TEST(PlanPointerDepthZero, RecordWithPointersIsOpaqueFlooredBySizeof) {
                           0);
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
-  EXPECT_EQ(havoc_detail::opaqueSizeofType(p.plan), "struct Node");
+  EXPECT_EQ(storageDecl(p.plan), flooredDecl("struct Node"));
   EXPECT_TRUE(p.plan.fields.empty());
 }
 
@@ -241,31 +252,31 @@ TEST(PlanPointerDepthZero, ArrayParamFlooredByWholeArray) {
   auto p = planFirstParam("void f(int a[3]) {}", 0);
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
-  EXPECT_EQ(havoc_detail::opaqueSizeofType(p.plan), "int[3]");
+  EXPECT_EQ(storageDecl(p.plan), flooredDecl("int[3]"));
 }
 
 TEST(PlanPointerDepthZero, ArrayOfFunctionPointersSpellsItsSizeof) {
   // The bound nests inside the declarator; appending it would name a function returning an array.
   auto p = planFirstParam("void f(int (*fs[2])(int)) {}", 0);
   EXPECT_TRUE(p.plan.viable);
-  EXPECT_EQ(havoc_detail::opaqueSizeofType(p.plan), "int (*[2])(int)");
+  EXPECT_EQ(storageDecl(p.plan), flooredDecl("int (*[2])(int)"));
 }
 
 TEST(PlanPointerDepthZero, MultiDimArrayKeepsBoundOrder) {
   auto p = planFirstParam("void f(int g[3][4]) {}", 0);
-  EXPECT_EQ(havoc_detail::opaqueSizeofType(p.plan), "int[3][4]");
+  EXPECT_EQ(storageDecl(p.plan), flooredDecl("int[3][4]"));
 }
 
 TEST(PlanPointerDepthZero, CStringHasNoSizeofFloor) {
   auto p = planFirstParam("void f(char *s) {}", 0);
-  EXPECT_EQ(havoc_detail::opaqueSizeofType(p.plan), "");
+  EXPECT_EQ(storageDecl(p.plan), "char __h0[__HAVOC_STR_MAX];");
 }
 
 TEST(PlanPointerDepthZero, IncompleteRecordHasNoSizeofFloor) {
   auto p = planFirstParam("struct Hidden; void f(struct Hidden *p) {}", 0);
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
-  EXPECT_EQ(havoc_detail::opaqueSizeofType(p.plan), "");
+  EXPECT_EQ(storageDecl(p.plan), "unsigned char __h0[__HAVOC_BLOCK_MAX];");
   EXPECT_EQ(p.plan.fwdDecl, "struct Hidden");
 }
 
@@ -310,7 +321,6 @@ TEST(RenderPointerStorage, BlockDeclaresTypedArrayAndPassesIt) {
   auto p = planFirstParam("void f(int *a) {}");
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "int *");
   EXPECT_EQ(s.arg, "__h0");
-  EXPECT_FALSE(s.cstring);
   EXPECT_EQ(s.decls, "  int __h0[__HAVOC_ARRAY_ELEMS];\n"
                      "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }
@@ -328,7 +338,6 @@ TEST(RenderPointerStorage, CStringPlantsInBoundsTerminator) {
   // stands in for the call directly - only the declaration is hoisted.
   auto p = planFirstParam("void f(char *s) {}");
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "char *");
-  EXPECT_TRUE(s.cstring);
   EXPECT_EQ(s.arg, "__havoc_cstring_fill(__h0, __HAVOC_STR_MAX)");
   EXPECT_EQ(s.decls, "  char __h0[__HAVOC_STR_MAX];\n");
 }
@@ -406,6 +415,20 @@ TEST(PlanPointer, UnionWithoutPointersIsViable) {
   auto p = planFirstParam("union Num { int i; float f; };\n"
                           "void f(union Num *n) {}");
   EXPECT_TRUE(p.plan.viable);
+}
+
+TEST(PlanPointer, FlexibleArrayIsNeverViable) {
+  // No room for the tail in any element of `struct Buf b[N]`.
+  auto p = planFirstParam("struct Buf { int len; int data[]; };\n"
+                          "void f(struct Buf *b) {}");
+  EXPECT_FALSE(p.plan.viable);
+}
+
+TEST(PlanPointer, NestedFlexibleArrayIsNeverViable) {
+  auto p = planFirstParam("struct Buf { int len; int data[]; };\n"
+                          "struct Outer { int id; struct Buf buf; };\n"
+                          "void f(struct Outer *o) {}");
+  EXPECT_FALSE(p.plan.viable);
 }
 
 TEST(PlanPointer, FlexiblePointerArrayIsNeverViable) {
