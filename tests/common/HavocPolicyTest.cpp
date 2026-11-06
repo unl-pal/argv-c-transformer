@@ -42,7 +42,9 @@ Parsed planFirstParam(const std::string &code, unsigned depth = 1,
   for (clang::Decl *decl : ctx.getTranslationUnitDecl()->decls()) {
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!fn || fn->getNameAsString() != func || fn->param_empty()) continue;
-    p.plan = planPointer(fn->getParamDecl(0)->getOriginalType(), ctx.getSourceManager(), depth);
+    HavocBounds havoc;
+    havoc.pointerDepth = depth;
+    p.plan = planPointer(fn->getParamDecl(0)->getOriginalType(), ctx.getSourceManager(), havoc);
     return p;
   }
   ADD_FAILURE() << "no function named " << func << " with a parameter";
@@ -208,8 +210,10 @@ TEST(PlanPointer, SelfContainingRecordFromErrorRecoveryTerminates) {
   for (clang::Decl *decl : ast->getASTContext().getTranslationUnitDecl()->decls()) {
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!fn || fn->getNameAsString() != "f") continue;
+    HavocBounds havoc;
+    havoc.pointerDepth = 2;
     planPointer(fn->getParamDecl(0)->getOriginalType(), ast->getASTContext().getSourceManager(),
-                2);
+                havoc);
     return; // reaching here at all is the assertion
   }
   ADD_FAILURE() << "no f";

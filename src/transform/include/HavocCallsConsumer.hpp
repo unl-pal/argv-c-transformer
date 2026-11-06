@@ -42,11 +42,11 @@ public:
    *        havocked pointer's prototype-scope struct tag needs, shared with
    *        {@code MainGenConsumer} which emits them into the file prelude.
    * @param rewriter        Shared rewriter for modifying the source buffer.
-   * @param pointerDepth    Passed to {@code planPointer} for pointer-returning calls.
+   * @param havoc           Passed to {@code planPointer} for pointer-returning calls.
    */
   HavocCallsConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                      std::shared_ptr<std::set<std::string>> neededFwdDecls,
-                     clang::Rewriter &rewriter, unsigned pointerDepth = 1);
+                     clang::Rewriter &rewriter, HavocBounds havoc = {});
 
   /**
    * @brief Launches {@code HavocCallsVisitor} and strips any function that
@@ -60,5 +60,5 @@ private:
   std::shared_ptr<std::set<std::string>> _DiscardedFunctions;
   std::shared_ptr<std::set<std::string>> _NeededFwdDecls;
   clang::Rewriter &_Rewriter;
-  unsigned _PointerDepth;
+  HavocBounds _Havoc;
 };

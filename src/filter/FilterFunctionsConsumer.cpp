@@ -18,9 +18,9 @@ FilterFunctionsConsumer::FilterFunctionsConsumer(
     std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,
     std::shared_ptr<std::vector<std::string>> toRemove,
     std::map<std::string, std::pair<int, int>> *complexityConfig,
-    std::map<std::string, FeatureGate> *featureConfig, unsigned pointerDepth)
+    std::map<std::string, FeatureGate> *featureConfig, HavocBounds havoc)
     : _ToFilter(toFilter), _ToRemove(toRemove), _ComplexityConfig(complexityConfig),
-      _FeatureConfig(featureConfig), _PointerDepth(pointerDepth) {}
+      _FeatureConfig(featureConfig), _Havoc(havoc) {}
 
 void FilterFunctionsConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   FilterFunctions(context);
@@ -79,7 +79,7 @@ void FilterFunctionsConsumer::FilterFunctions(clang::ASTContext &context) {
     if (key != "main" && declByName.contains(key)) {
       for (auto parm : declByName.at(key)->parameters()) {
         clang::QualType declared = parm->getOriginalType();
-        if (verifierSuffixForType(declared) || planPointer(declared, mgr, _PointerDepth).viable) continue;
+        if (verifierSuffixForType(declared) || planPointer(declared, mgr, _Havoc).viable) continue;
         debugLog(2, "[filter] " + key + ": unsupported parameter type, body stripped");
         _ToRemove->push_back(key);
         break;
