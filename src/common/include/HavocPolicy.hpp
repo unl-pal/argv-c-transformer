@@ -13,8 +13,6 @@
 #include <clang/Basic/SourceManager.h>
 #include <cstdint>
 #include <llvm/Support/Casting.h>
-#include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -41,28 +39,18 @@ enum class PointerShape {
   Function, ///< Never viable: no value can be synthesized.
 };
 
-struct PointerPlan;
-
-/**
- * @brief A pointer inside each element of a plan's storage, assigned after the
- * nondet fill so no raw nondet pointer value survives.
- */
-struct PointerField {
-  std::vector<const clang::FieldDecl *> path; ///< Members from the element; empty if the element is the pointer.
-  std::shared_ptr<PointerPlan> target;        ///< Null: the pointer is set to 0 (unspellable target).
-};
-
 /**
  * @brief A decision about one pointer type: what shape, and any declaration its
  * spelling needs.
  */
 struct PointerPlan {
   clang::QualType type; ///< The pointer or constant-array type planned.
+  std::vector<const clang::FieldDecl *> path; ///< Members to this pointer from a parent element; empty at the root.
   PointerShape shape = PointerShape::Opaque;
   bool viable = false;
   std::string fwdDecl; ///< For an opaque pointee.
   bool opaqueSized = false; ///< An opaque block is floored at the planned type's sizeof.
-  std::vector<PointerField> fields;
+  std::vector<PointerPlan> fields; ///< Pointers inside each element, assigned after the nondet fill.
 };
 
 /**
@@ -120,21 +108,24 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
                             unsigned depth, PointerPlan &plan);
 
 /**
- * @brief Plans the storage a pointer field points to: null to set it to 0 (an
- * unspellable pointee), or nullopt if no storage can be built, which makes the
- * enclosing plan non-viable.
+ * @brief Plans the pointer of @p type at @p path in each element of @p parent
+ * and appends it to @c parent.fields.
  *
- * @param depth Levels remaining for the target; at least 1.
+ * @param depth Levels remaining for @p parent.
+ * @return False if it can't be given storage: a function pointer, an
+ * unspellable pointee, or past the depth bound.
  */
-inline std::optional<std::shared_ptr<PointerPlan>>
-planFieldTarget(clang::QualType type, const clang::SourceManager &mgr, unsigned depth) {
-  if (!isSpellable(type)) return nullptr;
-  auto plan = std::make_shared<PointerPlan>();
-  plan->type = type;
-  plan->shape = PointerShape::Block;
-  if (!classifyPointee(type->getPointeeType(), mgr, depth, *plan)) return std::nullopt;
-  plan->viable = true;
-  return plan;
+inline bool addField(PointerPlan &parent, std::vector<const clang::FieldDecl *> path,
+                     clang::QualType type, const clang::SourceManager &mgr, unsigned depth) {
+  if (type->isFunctionPointerType() || depth == 1 || !isSpellable(type)) return false;
+  PointerPlan field;
+  field.type = type;
+  field.path = std::move(path);
+  field.shape = PointerShape::Block;
+  if (!classifyPointee(type->getPointeeType(), mgr, depth - 1, field)) return false;
+  field.viable = true;
+  parent.fields.push_back(std::move(field));
+  return true;
 }
 
 /**
@@ -158,8 +149,7 @@ inline bool holdsPointer(clang::QualType type, unsigned depth = 0) {
  * @param readOnly The record is reached through a const member.
  * @param enclosing Records being walked above this one.
  * @return False if a pointer can't be assigned (a const member, a union member,
- * or inside a flexible array member), is a function pointer, or its target
- * can't be built (including past the depth bound).
+ * or inside a flexible array member) or @ref addField rejects it.
  */
 inline bool collectFields(const clang::RecordDecl *record,
                           const std::vector<const clang::FieldDecl *> &path, bool readOnly,
@@ -195,10 +185,7 @@ inline bool collectFields(const clang::RecordDecl *record,
     }
     bool fieldReadOnly = readOnly || type.isConstQualified();
     if (type->isAnyPointerType()) {
-      if (fieldReadOnly || type->isFunctionPointerType() || depth == 1) return false;
-      auto target = planFieldTarget(type, mgr, depth - 1);
-      if (!target) return false;
-      plan.fields.push_back({fieldPath, *target});
+      if (fieldReadOnly || !addField(plan, fieldPath, type, mgr, depth)) return false;
     } else if (const clang::RecordDecl *nested = type->getAsRecordDecl()) {
       if (!collectFields(nested, fieldPath, fieldReadOnly, mgr, depth, plan, enclosing))
         return false;
@@ -221,13 +208,8 @@ inline bool classifyPointee(clang::QualType pointee, const clang::SourceManager 
     plan.shape = PointerShape::CString;
     return true;
   }
-  if (pointee->isAnyPointerType()) { // storage is unqualified, so a const element still assigns
-    if (pointee->isFunctionPointerType() || depth == 1) return false;
-    auto target = planFieldTarget(pointee, mgr, depth - 1);
-    if (!target) return false;
-    plan.fields.push_back({{}, *target});
-    return true;
-  }
+  if (pointee->isAnyPointerType()) // storage is unqualified, so a const element still assigns
+    return addField(plan, {}, pointee, mgr, depth);
   if (!isSizedPointee(pointee, mgr)) {
     plan.shape = PointerShape::Opaque;
     plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
@@ -347,7 +329,7 @@ inline clang::QualType elementType(const PointerPlan &plan) {
 /**
  * @brief Emits @c name[outer...][count] storage for @p plan, fills it with
  * nondet bytes, and assigns every pointer field in every element, recursing
- * into field targets first.
+ * into fields first.
  */
 inline void renderStorage(const PointerPlan &plan, const std::string &name,
                           const std::vector<std::string> &outer, const std::string &indent,
@@ -367,7 +349,7 @@ inline void renderStorage(const PointerPlan &plan, const std::string &name,
   dims.push_back(count);
   out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
   for (size_t f = 0; f < plan.fields.size(); ++f) {
-    const PointerField &field = plan.fields[f];
+    const PointerPlan &field = plan.fields[f];
     std::vector<std::string> loopDims = dims;
     std::string lhs = indexed(name, dims.size());
     for (const clang::FieldDecl *member : field.path) {
@@ -381,18 +363,13 @@ inline void renderStorage(const PointerPlan &plan, const std::string &name,
       }
     }
 
-    std::string value = "0";
-    if (field.target) {
-      std::string target = name + "_" + std::to_string(f);
-      renderStorage(*field.target, target, loopDims, indent, out);
-      std::string row = indexed(target, loopDims.size());
-      if (field.target->shape == PointerShape::CString)
-        value = "__havoc_cstring_fill(" + row + ", __HAVOC_STR_MAX)";
-      else if (field.target->shape == PointerShape::Opaque)
-        value = "(" + field.target->type.getAsString() + ")" + row;
-      else
-        value = row;
-    }
+    std::string storage = name + "_" + std::to_string(f);
+    renderStorage(field, storage, loopDims, indent, out);
+    std::string value = indexed(storage, loopDims.size());
+    if (field.shape == PointerShape::CString)
+      value = "__havoc_cstring_fill(" + value + ", __HAVOC_STR_MAX)";
+    else if (field.shape == PointerShape::Opaque)
+      value = "(" + field.type.getAsString() + ")" + value;
     for (size_t i = 0; i < loopDims.size(); ++i)
       out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
              " < " + loopDims[i] + "; ++" + loopVar(i) + ")\n";

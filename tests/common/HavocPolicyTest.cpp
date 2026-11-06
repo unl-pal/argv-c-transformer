@@ -49,7 +49,7 @@ Parsed planFirstParam(const std::string &code, unsigned depth = 1,
   return p;
 }
 
-std::vector<std::string> memberNames(const PointerField &field) {
+std::vector<std::string> memberNames(const PointerPlan &field) {
   std::vector<std::string> names;
   for (const clang::FieldDecl *member : field.path)
     names.push_back(member->getName().str());
@@ -136,8 +136,7 @@ TEST(PlanPointer, PointerToPointerGetsStringsAtDepthTwo) {
   auto p = planFirstParam("void f(char **argv) {}", 2);
   EXPECT_TRUE(p.plan.viable);
   ASSERT_EQ(p.plan.fields.size(), 1u);
-  ASSERT_NE(p.plan.fields[0].target, nullptr);
-  EXPECT_EQ(p.plan.fields[0].target->shape, PointerShape::CString);
+  EXPECT_EQ(p.plan.fields[0].shape, PointerShape::CString);
 }
 
 TEST(PlanPointer, RecordWithPointerFieldIsDroppedAtDepthOne) {
@@ -162,8 +161,7 @@ TEST(PlanPointer, NestedRecordFieldPathsThroughTheMember) {
   EXPECT_TRUE(p.plan.viable);
   ASSERT_EQ(p.plan.fields.size(), 1u);
   EXPECT_EQ(memberNames(p.plan.fields[0]), (std::vector<std::string>{"inner", "name"}));
-  ASSERT_NE(p.plan.fields[0].target, nullptr);
-  EXPECT_EQ(p.plan.fields[0].target->shape, PointerShape::CString);
+  EXPECT_EQ(p.plan.fields[0].shape, PointerShape::CString);
 }
 
 TEST(PlanPointer, PointerArrayFieldPathsToTheArrayMember) {
@@ -282,6 +280,14 @@ TEST(PlanPointer, AnonymousRecordPointerIsNotViable) {
     auto p = planFirstParam("void f(struct { int x; } *p) {}", depth);
     EXPECT_FALSE(p.plan.viable) << "depth " << depth;
   }
+}
+
+TEST(PlanPointer, FieldToAnonymousRecordIsNotViable) {
+  // No spelling for the pointee, so the field can't be given storage.
+  auto p = planFirstParam("struct Outer { int id; struct { int x; } *inner; };\n"
+                          "void f(struct Outer *o) {}",
+                          2);
+  EXPECT_FALSE(p.plan.viable);
 }
 
 TEST(PlanPointer, TypedefedAnonymousRecordIsViable) {
