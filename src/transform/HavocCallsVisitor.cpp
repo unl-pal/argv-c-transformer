@@ -98,8 +98,8 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
       return std::nullopt;
     if (callee->isImplicit() && callee->getBuiltinID() != 0) // e.g. __builtin_expect: no header
       return std::nullopt;
-    if (!callee->isImplicit() &&
-        !mgr.isInMainFile(callee->getLocation()) && mgr.isInSystemHeader(callee->getLocation()))
+    if (!callee->isImplicit() && !mgr.isInMainFile(callee->getLocation()) &&
+        mgr.isInSystemHeader(callee->getLocation()))
       return std::nullopt;
   }
 
@@ -113,7 +113,8 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
     action.mode = HavocAction::Mode::Inline;
     action.replacement = "__VERIFIER_nondet_" + *suffix + "()";
   } else if (returnType->isAnyPointerType()) {
-    PointerPlan plan = planPointer(returnType, mgr, havoc); // storage/placement are the caller's job
+    PointerPlan plan =
+        planPointer(returnType, mgr, havoc); // storage/placement are the caller's job
     if (plan.viable) {
       action.mode = HavocAction::Mode::Pointer;
       action.plan = plan;
@@ -304,11 +305,9 @@ const clang::FunctionDecl *HavocCallsVisitor::enclosingFunction(const clang::Cal
   clang::DynTypedNode node = clang::DynTypedNode::create(*E);
   while (true) {
     clang::DynTypedNodeList parents = _C->getParents(node);
-    if (parents.empty())
-      return nullptr;
+    if (parents.empty()) return nullptr;
     const clang::DynTypedNode &parent = parents[0];
-    if (const auto *func = parent.get<clang::FunctionDecl>())
-      return func;
+    if (const auto *func = parent.get<clang::FunctionDecl>()) return func;
     node = parent;
   }
 }
@@ -373,7 +372,8 @@ void HavocCallsVisitor::dropMacroSpelledCall(const clang::CallExpr *E,
   _Rewriter.RemoveText(text);
   const char *after = mgr.getCharacterData(text.getEnd());
   unsigned skip = 0;
-  while (after[skip] == ' ' || after[skip] == '\t') ++skip;
+  while (after[skip] == ' ' || after[skip] == '\t')
+    ++skip;
   if (after[skip] == ';') _Rewriter.RemoveText(text.getEnd().getLocWithOffset(skip), 1);
 }
 

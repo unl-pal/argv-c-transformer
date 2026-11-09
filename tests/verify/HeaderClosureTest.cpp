@@ -156,7 +156,6 @@ TEST_F(HeaderClosureTest, MacroFromSurvivingSystemIncludeIsNotReEmitted) {
 
 // --- declaration closure ---------------------------------------------------
 
-
 TEST_F(HeaderClosureTest, HeaderStructIsInlinedAndSizedExactly) {
   // The payoff. Before closure, a header-defined struct was havocked as a flat
   // __HAVOC_BLOCK_MAX byte block, because planPointer tests isInMainFile and
@@ -172,7 +171,8 @@ TEST_F(HeaderClosureTest, HeaderStructIsInlinedAndSizedExactly) {
   EXPECT_NE(out.find("struct Point { int x; int y; };"), std::string::npos) << out;
   EXPECT_NE(out.find("struct Point __h"), std::string::npos) << out;
   EXPECT_EQ(out.find("unsigned char __h"), std::string::npos)
-      << "sized Point storage should not fall back to the opaque byte block:\n" << out;
+      << "sized Point storage should not fall back to the opaque byte block:\n"
+      << out;
   EXPECT_TRUE(fs::exists(benchmarkDir / "area__area.i"));
 }
 
@@ -194,7 +194,8 @@ TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
   // than falling back to the opaque byte block.
   EXPECT_NE(out.find("Buf __h"), std::string::npos) << out;
   EXPECT_EQ(out.find("unsigned char __h"), std::string::npos)
-      << "sized Buf storage should not fall back to the opaque byte block:\n" << out;
+      << "sized Buf storage should not fall back to the opaque byte block:\n"
+      << out;
 }
 
 TEST_F(HeaderClosureTest, ClimbNeverSettlesOnAPrivateSystemHeader) {
@@ -350,16 +351,15 @@ TEST_F(HeaderClosureTest, RejectedFunctionBodyIsNotARoot) {
   std::ofstream(configPath, std::ios::app) << "IfStmt = 1\n";
   writeRepoFile("shapes.h", "struct Kept { int a; };\n"
                             "struct BodyOnly { int b; };\n");
-  writeRepoFile("gate.c",
-                "#include \"shapes.h\"\n"
-                // No if statement: rejected, body stripped to ';'.
-                "int plain(struct Kept *k) {\n"
-                "  struct BodyOnly local;\n"
-                "  local.b = k->a;\n"
-                "  return local.b;\n"
-                "}\n"
-                // Has an if: survives, so it keeps the harness alive.
-                "int branchy(struct Kept *k) { if (k->a > 0) return 1; return 0; }\n");
+  writeRepoFile("gate.c", "#include \"shapes.h\"\n"
+                          // No if statement: rejected, body stripped to ';'.
+                          "int plain(struct Kept *k) {\n"
+                          "  struct BodyOnly local;\n"
+                          "  local.b = k->a;\n"
+                          "  return local.b;\n"
+                          "}\n"
+                          // Has an if: survives, so it keeps the harness alive.
+                          "int branchy(struct Kept *k) { if (k->a > 0) return 1; return 0; }\n");
 
   std::string out = runPipeline("gate.c", "branchy");
 
@@ -369,4 +369,3 @@ TEST_F(HeaderClosureTest, RejectedFunctionBodyIsNotARoot) {
   // Reached only from the stripped body: not a root, so not inlined.
   EXPECT_EQ(out.find("struct BodyOnly"), std::string::npos) << out;
 }
-

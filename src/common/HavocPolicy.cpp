@@ -79,8 +79,8 @@ bool isSpellable(clang::QualType type) {
   return true;
 }
 
-bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
-                     unsigned depth, PointerPlan &plan);
+bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr, unsigned depth,
+                     PointerPlan &plan);
 
 /**
  * @brief Plans the pointer of @p type at @p path in each element of @p parent
@@ -90,8 +90,8 @@ bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
  * @return False if it can't be given storage: a function pointer, an
  * unspellable pointee, or past the depth bound.
  */
-bool addField(PointerPlan &parent, std::vector<const clang::FieldDecl *> path,
-              clang::QualType type, const clang::SourceManager &mgr, unsigned depth) {
+bool addField(PointerPlan &parent, std::vector<const clang::FieldDecl *> path, clang::QualType type,
+              const clang::SourceManager &mgr, unsigned depth) {
   if (type->isFunctionPointerType() || depth == 1 || !isSpellable(type)) return false;
   PointerPlan field;
   field.type = type;
@@ -145,7 +145,8 @@ void addMemoryFill(PointerPlan &plan, std::vector<const clang::FieldDecl *> path
     path.pop_back();
   // The enclosing record is still being walked, so its fills run from here to the end.
   auto first = std::find_if(fills.begin(), fills.end(), [&](const FieldFill &fill) {
-    return fill.path.size() >= path.size() && std::equal(path.begin(), path.end(), fill.path.begin());
+    return fill.path.size() >= path.size() &&
+           std::equal(path.begin(), path.end(), fill.path.begin());
   });
   if (first != fills.end() && first->path == path && !first->suffix) return; // already filled whole
   fills.insert(first, {std::move(path), std::nullopt});
@@ -173,7 +174,8 @@ bool collectFields(const clang::RecordDecl *record,
     addMemoryFill(plan, path);
     return true;
   }
-  if (def->hasFlexibleArrayMember()) return false; // the tail is outside sizeof, so outside every element
+  if (def->hasFlexibleArrayMember())
+    return false; // the tail is outside sizeof, so outside every element
   // Error recovery can leave a record containing itself by value.
   if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) {
     addMemoryFill(plan, path);
@@ -198,7 +200,8 @@ bool collectFields(const clang::RecordDecl *record,
     } else {
       std::optional<std::string> suffix = scalarFieldSuffix(type, fieldReadOnly);
       if (!suffix && field->isBitField()) fillWhole = true;
-      else plan.fieldwiseFill->push_back({std::move(fieldPath), std::move(suffix)});
+      else
+        plan.fieldwiseFill->push_back({std::move(fieldPath), std::move(suffix)});
     }
   }
   if (fillWhole) { // the whole-record fill covers every fill already collected inside it
@@ -219,8 +222,8 @@ bool collectFields(const clang::RecordDecl *record,
  * @return False if no storage can be built, including when an element holds a
  * pointer past the depth bound.
  */
-bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
-                     unsigned depth, PointerPlan &plan) {
+bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr, unsigned depth,
+                     PointerPlan &plan) {
   if (pointee->isAnyCharacterType()) {
     plan.shape = PointerShape::CString;
     return true;
@@ -255,8 +258,9 @@ void useBulkFill(PointerPlan &plan) {
 std::string elementCount(const PointerPlan &plan) {
   switch (plan.shape) {
   case PointerShape::Array:
-    return std::to_string(
-        llvm::cast<clang::ConstantArrayType>(plan.type->getAsArrayTypeUnsafe())->getSize().getZExtValue());
+    return std::to_string(llvm::cast<clang::ConstantArrayType>(plan.type->getAsArrayTypeUnsafe())
+                              ->getSize()
+                              .getZExtValue());
   case PointerShape::CString:
     return "__HAVOC_STR_MAX";
   case PointerShape::Opaque:
@@ -338,10 +342,11 @@ void fillFieldwise(const std::vector<FieldFill> &fills, const std::string &name,
     std::string lhs = indexed(name, dims.size());
     std::vector<std::string> loopDims = dims;
     appendMemberAccess(fill.path, lhs, loopDims);
-    std::string stmt = fill.suffix
-        ? lhs + " = __VERIFIER_nondet_" + *fill.suffix + "()"
-        // the cast drops a const member's qualifier, which nondet_memory's void * can't take
-        : "__VERIFIER_nondet_memory((void *)&" + lhs + ", sizeof(" + lhs + "))";
+    std::string stmt =
+        fill.suffix
+            ? lhs + " = __VERIFIER_nondet_" + *fill.suffix + "()"
+            // the cast drops a const member's qualifier, which nondet_memory's void * can't take
+            : "__VERIFIER_nondet_memory((void *)&" + lhs + ", sizeof(" + lhs + "))";
     emitLooped(stmt, loopDims, indent, out, dims.size());
   }
   if (fills.size() == 1) return;
@@ -362,16 +367,16 @@ void renderStorage(const PointerPlan &plan, const std::string &name,
   for (const std::string &dim : outer)
     decl += "[" + dim + "]";
   decl += "[" + count + "]";
-  if (plan.shape == PointerShape::Opaque) decl = "unsigned char " + decl; // alignment potentially an issue
-  else // appends an n-dimensional element's own bounds after ours
+  if (plan.shape == PointerShape::Opaque)
+    decl = "unsigned char " + decl; // alignment potentially an issue
+  else                              // appends an n-dimensional element's own bounds after ours
     elementType(plan).getUnqualifiedType().getAsStringInternal(decl, clang::LangOptions());
   out += indent + decl + ";\n";
   if (plan.shape == PointerShape::CString) return; // filled where it is referenced
 
   std::vector<std::string> dims = outer;
   dims.push_back(count);
-  if (plan.fieldwiseFill)
-    fillFieldwise(*plan.fieldwiseFill, name, dims, indent, out);
+  if (plan.fieldwiseFill) fillFieldwise(*plan.fieldwiseFill, name, dims, indent, out);
   else
     out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
   for (size_t f = 0; f < plan.fields.size(); ++f) {
@@ -424,7 +429,8 @@ PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr,
       plan.shape = PointerShape::Opaque;
       plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
     } else if (const clang::RecordDecl *record = pointee->getAsRecordDecl()) {
-      if (record->getDefinition()->hasFlexibleArrayMember()) return plan; // the tail is outside every element
+      if (record->getDefinition()->hasFlexibleArrayMember())
+        return plan; // the tail is outside every element
       if (plan.shape != PointerShape::Array) plan.shape = PointerShape::Record;
     }
     plan.viable = true;

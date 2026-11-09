@@ -49,9 +49,8 @@ struct PipelineConfig {
 
   /** File-level integer settings (booleans are stored as 0/1). */
   std::map<std::string, int> fileSettings = {
-      {"debugLevel", 0},       {"minFileLoC", 0},       {"maxFileLoC", 9999},
-      {"fileTimeoutSecs", 60}, {"keepCompilesOnly", 1}, {"nproc", 0},
-      {"cleanOutput", 0},      {"fileMemoryMB", 0},
+      {"debugLevel", 0},       {"minFileLoC", 0}, {"maxFileLoC", 9999}, {"fileTimeoutSecs", 60},
+      {"keepCompilesOnly", 1}, {"nproc", 0},      {"cleanOutput", 0},   {"fileMemoryMB", 0},
   };
 
   /**

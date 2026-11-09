@@ -30,7 +30,7 @@
 
 /** @brief One macro defined in a project-local header, captured verbatim. */
 struct MacroRecord {
-  std::string text; // definition
+  std::string text;   // definition
   unsigned order = 0; // Raw SourceLocation to restore source order
 };
 
@@ -42,7 +42,7 @@ struct MacroRecord {
 struct IncludeInfo {
   std::string spelling; // FileName as written in the #include
   bool isAngled = false;
-  bool isSystem = false;              // this file's own FileType
+  bool isSystem = false;                    // this file's own FileType
   const clang::FileEntry *parent = nullptr; // file containing the #include
 };
 
@@ -87,7 +87,8 @@ public:
                           const clang::Module *SuggestedModule, bool ModuleImported,
                           clang::SrcMgr::CharacteristicKind FileType) override;
 
-  /** @brief Override that captures, during PP, the exact spelling of every macro defined in a local header. */
+  /** @brief Override that captures, during PP, the exact spelling of every macro defined in a local
+   * header. */
   void MacroDefined(const clang::Token &MacroNameTok, const clang::MacroDirective *MD) override;
 
   /** @brief Override that records main-file expansions of local-header macros. */
