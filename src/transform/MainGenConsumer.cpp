@@ -98,6 +98,39 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   _Rewriter.InsertTextBefore(mgr.translateLineCol(mgr.getMainFileID(), 1, 1), prelude + "\n");
 }
 
+namespace {
+
+/**
+ * @brief The bound integer params are clamped to: the fewest elements in any
+ * viable pointer param's storage.
+ *
+ * A declared @c T[N] contributes N; every other shape contributes
+ * @c __HAVOC_ARRAY_ELEMS, kept as the macro so the benchmark stays retunable.
+ */
+std::string clampBound(const std::vector<PointerPlan> &plans) {
+  std::optional<uint64_t> fewest;
+  bool unbounded = false;
+  for (const PointerPlan &plan : plans) {
+    if (!plan.viable) continue;
+    const auto *array =
+        plan.shape == PointerShape::Array
+            ? llvm::dyn_cast<clang::ConstantArrayType>(plan.type->getAsArrayTypeUnsafe())
+            : nullptr;
+    if (!array) {
+      unbounded = true;
+      continue;
+    }
+    uint64_t size = array->getSize().getZExtValue();
+    if (!fewest || size < *fewest) fewest = size;
+  }
+  if (!fewest) return "__HAVOC_ARRAY_ELEMS";
+  std::string n = std::to_string(*fewest);
+  if (!unbounded) return n;
+  return "(" + n + " < __HAVOC_ARRAY_ELEMS ? " + n + " : __HAVOC_ARRAY_ELEMS)";
+}
+
+} // namespace
+
 MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::FunctionDecl *func,
                                                              clang::ASTContext &Context) {
   const clang::SourceManager &mgr = Context.getSourceManager();
@@ -117,6 +150,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
   }
 
   unsigned counter = _LocalCounter;
+  std::string bound = clampBound(plans);
   for (size_t i = 0; i < plans.size(); ++i) {
     const clang::ParmVarDecl *parm = func->parameters()[i];
     clang::QualType declared = parm->getOriginalType();
@@ -140,7 +174,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
       call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
                        " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
       if (declared->isSignedIntegerType()) call.prologue += local + " < 0 || ";
-      call.prologue += local + " > __HAVOC_ARRAY_ELEMS) abort();\n";
+      call.prologue += local + " > " + bound + ") abort();\n";
       call.args += local;
       continue;
     }
