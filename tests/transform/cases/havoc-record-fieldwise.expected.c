@@ -69,12 +69,18 @@ int main(void) {
   }
   {
     struct Tagged __h2[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h2, sizeof(__h2));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {
+      __h2[__i0].kind = __VERIFIER_nondet_int();
+      __VERIFIER_nondet_memory((void *)&__h2[__i0].as, sizeof(__h2[__i0].as));
+    }
     tagged(__h2);
   }
   {
     struct Fixed __h3[__HAVOC_ARRAY_ELEMS];
-    __VERIFIER_nondet_memory(__h3, sizeof(__h3));
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {
+      __VERIFIER_nondet_memory((void *)&__h3[__i0].id, sizeof(__h3[__i0].id));
+      __h3[__i0].value = __VERIFIER_nondet_int();
+    }
     fixed(__h3);
   }
   {

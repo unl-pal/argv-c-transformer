@@ -21,10 +21,9 @@
  * level deeper. Any rejection (past the depth bound, unspellable, unassignable)
  * propagates up and makes the whole plan non-viable.
  *
- * Rendering: @c renderStorage declares a plan's storage, fills it (a typed nondet
- * per scalar when the plan is fieldwise, else one @c __VERIFIER_nondet_memory), then
- * recursively declares each field's storage and assigns the field to it, one row per
- * parent element.
+ * Rendering: @c renderStorage declares a plan's storage, fills it (field by field
+ * when the plan is fieldwise, else one @c __VERIFIER_nondet_memory), then
+ * recursively declares each field's storage and assigns the field to it.
  */
 
 namespace {
@@ -121,7 +120,7 @@ bool holdsPointer(clang::QualType type, unsigned depth = 0) {
 
 /**
  * @brief The nondet suffix a storage element or record field of @p type is
- * assigned from, or nullopt if it has none and the storage must be bulk-filled instead.
+ * assigned from, or nullopt if it must be filled with @c __VERIFIER_nondet_memory.
  */
 std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool readOnly) {
   if (readOnly) return std::nullopt; // only nondet_memory can write a const member
@@ -131,9 +130,9 @@ std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool readOnly
 }
 
 /**
- * @brief Appends a field for every pointer and a scalar for every
- * nondet-assignable scalar reachable by value inside @p record, resetting
- * @c plan.fieldwiseFill if some field is neither.
+ * @brief Appends a field for every pointer reachable by value inside @p record,
+ * and a fill for every other member to @c plan.fieldwiseFill. A member with no
+ * typed nondet gets a @c __VERIFIER_nondet_memory fill.
  *
  * @param readOnly The record is reached through a const member.
  * @param enclosing Records being walked above this one.
@@ -146,19 +145,20 @@ bool collectFields(const clang::RecordDecl *record,
                    std::vector<const clang::RecordDecl *> enclosing = {}) {
   const clang::RecordDecl *def = record->getDefinition();
   if (!def || def->isUnion()) { // assigning one member would clobber its siblings
-    plan.fieldwiseFill.reset();
     if (def)
       for (const clang::FieldDecl *field : def->fields())
         if (holdsPointer(field->getType())) return false; // a member pointer is never initialized
+    plan.fieldwiseFill->push_back({path, std::nullopt});
     return true;
   }
   if (def->hasFlexibleArrayMember()) return false; // the tail is outside sizeof, so outside every element
   // Error recovery can leave a record containing itself by value.
   if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) {
-    plan.fieldwiseFill.reset();
+    plan.fieldwiseFill->push_back({path, std::nullopt});
     return true;
   }
   enclosing.push_back(def);
+  bool fillWhole = false;
   for (const clang::FieldDecl *field : def->fields()) {
     if (field->isInvalidDecl() || field->isUnnamedBitField()) continue; // padding, not addressable
     std::vector<const clang::FieldDecl *> fieldPath = path;
@@ -173,11 +173,18 @@ bool collectFields(const clang::RecordDecl *record,
     } else if (const clang::RecordDecl *nested = type->getAsRecordDecl()) {
       if (!collectFields(nested, fieldPath, fieldReadOnly, mgr, depth, plan, enclosing))
         return false;
-    } else if (std::optional<std::string> suffix = scalarFieldSuffix(type, fieldReadOnly)) {
-      if (plan.fieldwiseFill) plan.fieldwiseFill->push_back({fieldPath, *suffix});
     } else {
-      plan.fieldwiseFill.reset(); // keep walking: later pointers still need planning
+      std::optional<std::string> suffix = scalarFieldSuffix(type, fieldReadOnly);
+      if (!suffix && field->isBitField()) fillWhole = true;
+      else plan.fieldwiseFill->push_back({std::move(fieldPath), std::move(suffix)});
     }
+  }
+  if (fillWhole) { // the whole-record fill covers every fill already collected inside it
+    std::erase_if(*plan.fieldwiseFill, [&](const FieldFill &fill) {
+      return fill.path.size() >= path.size() &&
+             std::equal(path.begin(), path.end(), fill.path.begin());
+    });
+    plan.fieldwiseFill->push_back({path, std::nullopt});
   }
   return true;
 }
@@ -210,8 +217,7 @@ bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
     plan.fieldwiseFill.emplace();
     return collectFields(record, {}, false, mgr, depth, plan);
   }
-  if (std::optional<std::string> suffix = scalarFieldSuffix(pointee, false))
-    plan.fieldwiseFill.emplace().push_back({{}, *suffix});
+  plan.fieldwiseFill.emplace().push_back({{}, scalarFieldSuffix(pointee, false)});
   return true;
 }
 
@@ -278,47 +284,53 @@ void appendMemberAccess(const std::vector<const clang::FieldDecl *> &path, std::
 }
 
 /**
- * @brief Emits loops over @p dims then @c lhs = value; innermost.
+ * @brief Emits loops over @p dims then @p stmt innermost.
  *
  * @param looped Leading entries of @p dims the caller has already opened loops for.
  */
-void emitAssign(const std::string &lhs, const std::vector<std::string> &dims,
-                const std::string &value, const std::string &indent, std::string &out,
-                size_t looped = 0) {
+void emitLooped(const std::string &stmt, const std::vector<std::string> &dims,
+                const std::string &indent, std::string &out, size_t looped = 0) {
   for (size_t i = looped; i < dims.size(); ++i)
     out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
            " < " + dims[i] + "; ++" + loopVar(i) + ")\n";
-  out += indent + std::string(2 * dims.size(), ' ') + lhs + " = " + value + ";\n";
+  out += indent + std::string(2 * dims.size(), ' ') + stmt + ";\n";
 }
 
 /**
- * @brief Assigns every scalar of every element of @p name a nondet value, one
- * loop nest over @p dims building each element whole.
+ * @brief Fills every element of @p name per @p fills in one loop nest over
+ * @p dims, or with one bulk fill if no fill has a typed nondet.
  */
-void fillFieldwise(const std::vector<ScalarField> &scalars, const std::string &name,
+void fillFieldwise(const std::vector<FieldFill> &fills, const std::string &name,
                    const std::vector<std::string> &dims, const std::string &indent,
                    std::string &out) {
-  if (scalars.empty()) return;
-  const char *open = scalars.size() > 1 ? " {\n" : "\n";
+  if (fills.empty()) return;
+  if (std::none_of(fills.begin(), fills.end(), [](const FieldFill &f) { return f.suffix; })) {
+    out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
+    return;
+  }
+  const char *open = fills.size() > 1 ? " {\n" : "\n";
   for (size_t i = 0; i < dims.size(); ++i)
     out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
            " < " + dims[i] + "; ++" + loopVar(i) + ")" + open;
-  for (const ScalarField &scalar : scalars) {
+  for (const FieldFill &fill : fills) {
     std::string lhs = indexed(name, dims.size());
     std::vector<std::string> loopDims = dims;
-    appendMemberAccess(scalar.path, lhs, loopDims);
-    emitAssign(lhs, loopDims, "__VERIFIER_nondet_" + scalar.suffix + "()", indent, out,
-               dims.size());
+    appendMemberAccess(fill.path, lhs, loopDims);
+    std::string stmt = fill.suffix
+        ? lhs + " = __VERIFIER_nondet_" + *fill.suffix + "()"
+        // the cast drops a const member's qualifier, which nondet_memory's void * can't take
+        : "__VERIFIER_nondet_memory((void *)&" + lhs + ", sizeof(" + lhs + "))";
+    emitLooped(stmt, loopDims, indent, out, dims.size());
   }
-  if (scalars.size() == 1) return;
+  if (fills.size() == 1) return;
   for (size_t i = dims.size(); i-- > 0;)
     out += indent + std::string(2 * i, ' ') + "}\n";
 }
 
 /**
  * @brief Emits @c name[outer...][count] storage for @p plan, fills it (field by
- * field when @c plan.fieldwise, else in bulk), and assigns every pointer field
- * in every element, recursing into fields first.
+ * field when @c plan.fieldwiseFill is set, else in bulk), and assigns every
+ * pointer field in every element, recursing into fields first.
  */
 void renderStorage(const PointerPlan &plan, const std::string &name,
                    const std::vector<std::string> &outer, const std::string &indent,
@@ -353,7 +365,7 @@ void renderStorage(const PointerPlan &plan, const std::string &name,
       value = "__havoc_cstring_fill(" + value + ", __HAVOC_STR_MAX)";
     else if (field.shape == PointerShape::Opaque)
       value = "(" + field.type.getAsString() + ")" + value;
-    emitAssign(lhs, loopDims, value, indent, out);
+    emitLooped(lhs + " = " + value, loopDims, indent, out);
   }
 }
 
