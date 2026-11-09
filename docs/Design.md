@@ -72,7 +72,7 @@ on the same classifier the transform uses, so a pointer-param function survives 
 exactly when the harness can call it.
 
 An integer parameter alongside a pointer parameter is clamped rather than left as a raw
-nondet value: `MainGenConsumer::genCallHarness` bounds it with `if (n < 0 || n > K)
+nondet value: `MainGenConsumer::genCallHarness` bounds it with `if (n < 0 || n >= K)
 abort();` (the signedness check dropped for unsigned types), where `K` is the fewest
 elements in any pointer parameter's storage: `N` for a declared `T[N]`, else
 `__HAVOC_ARRAY_ELEMS` (a mix emits `(N < __HAVOC_ARRAY_ELEMS ? N : __HAVOC_ARRAY_ELEMS)`
