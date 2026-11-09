@@ -58,7 +58,8 @@ inline std::optional<std::string> verifierSuffixForType(clang::QualType QT) {
   // params built from undefined macros when headers are missing).
   if (QT.isNull()) return std::nullopt;
   if (const auto *enumDecl = llvm::dyn_cast_or_null<clang::EnumDecl>(QT->getAsTagDecl())) {
-    const clang::EnumDecl *def = enumDecl->getDefinition(); // the type may name a forward declaration
+    const clang::EnumDecl *def =
+        enumDecl->getDefinition(); // the type may name a forward declaration
     if (!def || def->getIntegerType().isNull()) return std::nullopt;
     QT = def->getIntegerType();
   }

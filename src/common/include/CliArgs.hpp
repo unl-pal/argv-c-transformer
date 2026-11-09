@@ -141,8 +141,7 @@ inline void checkOutputDirOverlap(const std::string &dir,
  * @param cleanOutput   If set, wipes existing contents instead of erroring.
  */
 inline void checkOrCleanOutputDir(const std::string &dir,
-                                  const std::vector<std::string> &protectedDirs,
-                                  bool cleanOutput) {
+                                  const std::vector<std::string> &protectedDirs, bool cleanOutput) {
   std::filesystem::path path(dir);
   checkOutputDirOverlap(dir, protectedDirs);
   if (std::filesystem::exists(path) && !std::filesystem::is_empty(path)) {

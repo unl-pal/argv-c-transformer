@@ -333,7 +333,8 @@ const std::vector<std::regex> &knownNoiseTypedefs() {
 // parser rejects. Only noise while nothing else names __cfloat128 (<complex.h> prototypes do under
 // _GNU_SOURCE); dropping it then would leave the type undeclared for every frontend.
 const std::regex &cfloat128Typedef() {
-  static const std::regex pattern(R"(^\s*typedef\s+_Complex\s+float\s+__cfloat128\s+__attribute__.*;\s*$)");
+  static const std::regex pattern(
+      R"(^\s*typedef\s+_Complex\s+float\s+__cfloat128\s+__attribute__.*;\s*$)");
   return pattern;
 }
 
@@ -360,8 +361,7 @@ void stripNoiseTypedefs(const std::filesystem::path &iPath) {
       continue;
     }
     if (line.find("__cfloat128") != std::string::npos) {
-      if (std::regex_match(line, cfloat128Typedef()))
-        hasCfloat128Typedef = true;
+      if (std::regex_match(line, cfloat128Typedef())) hasCfloat128Typedef = true;
       else
         usesCfloat128 = true;
     }
@@ -369,7 +369,8 @@ void stripNoiseTypedefs(const std::filesystem::path &iPath) {
   }
   in.close();
   if (hasCfloat128Typedef && !usesCfloat128) {
-    std::erase_if(kept, [](const std::string &l) { return std::regex_match(l, cfloat128Typedef()); });
+    std::erase_if(kept,
+                  [](const std::string &l) { return std::regex_match(l, cfloat128Typedef()); });
     changed = true;
   }
   if (!changed) return;

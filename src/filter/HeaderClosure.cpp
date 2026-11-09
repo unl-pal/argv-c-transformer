@@ -31,8 +31,7 @@ namespace {
 
 /** @brief True if `loc` sits in a real file that is neither the main file nor a system header. */
 bool isLocalHeaderLoc(const clang::SourceManager &mgr, clang::SourceLocation loc) {
-  if (loc.isInvalid())
-    return false;
+  if (loc.isInvalid()) return false;
   clang::SourceLocation fileLoc = mgr.getFileLoc(loc);
   if (fileLoc.isInvalid() || mgr.isInMainFile(fileLoc) || mgr.isInSystemHeader(fileLoc))
     return false;
@@ -80,18 +79,15 @@ public:
   const std::vector<const clang::Decl *> &fromSystem() const { return _FromSystem; }
 
   void addDecl(const clang::Decl *decl) {
-    if (!decl)
-      return;
+    if (!decl) return;
 
     // get a record's actual definition
     if (const auto *record = llvm::dyn_cast<clang::RecordDecl>(decl))
-      if (const clang::RecordDecl *def = record->getDefinition())
-        decl = def;
+      if (const clang::RecordDecl *def = record->getDefinition()) decl = def;
     if (const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl))
       decl = func->getCanonicalDecl();
 
-    if (!_SeenDecls.insert(decl).second)
-      return;
+    if (!_SeenDecls.insert(decl).second) return;
 
     if (isLocalHeaderLoc(_Mgr, decl->getLocation())) {
       if (const clang::Decl *system = systemRedecl(decl)) { // local shim of a system typedef
@@ -110,11 +106,9 @@ public:
 private:
   /** @brief A system-header redeclaration of typedef `decl`, or null if it has none. */
   const clang::Decl *systemRedecl(const clang::Decl *decl) const {
-    if (!llvm::isa<clang::TypedefNameDecl>(decl))
-      return nullptr;
+    if (!llvm::isa<clang::TypedefNameDecl>(decl)) return nullptr;
     for (const clang::Decl *redecl : decl->redecls())
-      if (_Mgr.isInSystemHeader(_Mgr.getFileLoc(redecl->getLocation())))
-        return redecl;
+      if (_Mgr.isInSystemHeader(_Mgr.getFileLoc(redecl->getLocation()))) return redecl;
     return nullptr;
   }
 
@@ -135,8 +129,7 @@ private:
         addType(parm->getOriginalType());
     } else if (const auto *var = llvm::dyn_cast<clang::VarDecl>(decl)) {
       addType(var->getType());
-      if (const clang::Expr *init = var->getInit())
-        TraverseStmt(const_cast<clang::Expr *>(init));
+      if (const clang::Expr *init = var->getInit()) TraverseStmt(const_cast<clang::Expr *>(init));
     } else if (const auto *field = llvm::dyn_cast<clang::FieldDecl>(decl)) {
       addDecl(field->getParent());
       addType(field->getType());
@@ -146,11 +139,9 @@ private:
   }
 
   void addType(clang::QualType type) {
-    if (type.isNull())
-      return;
+    if (type.isNull()) return;
     const clang::Type *ptr = type.getTypePtrOrNull();
-    if (!ptr || !_SeenTypes.insert(ptr).second)
-      return;
+    if (!ptr || !_SeenTypes.insert(ptr).second) return;
 
     // Typedefs need to be checked before records because either is gettable but a typedef
     // can recurse into a record, and otherwise we'd lose the typedef identifier
@@ -216,28 +207,22 @@ std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::Sour
       clang::Lexer::makeFileCharRange(isDefinition ? clang::CharSourceRange::getCharRange(range)
                                                    : clang::CharSourceRange::getTokenRange(range),
                                       mgr, langOpts);
-  if (chars.isInvalid())
-    return std::nullopt;
+  if (chars.isInvalid()) return std::nullopt;
 
   bool invalid = false;
   llvm::StringRef text = clang::Lexer::getSourceText(chars, mgr, langOpts, &invalid);
-  if (invalid || text.trim().empty())
-    return std::nullopt;
+  if (invalid || text.trim().empty()) return std::nullopt;
 
   std::string body = text.str();
 
   size_t firstChar = body.find_first_not_of(" \t\r\n");
   // remove whitespace
-  if (firstChar != std::string::npos)
-    body.erase(0, firstChar);
+  if (firstChar != std::string::npos) body.erase(0, firstChar);
   // Trailing ';' is outside every one of these declarations' source ranges.
   size_t lastChar = body.find_last_not_of(" \t\r\n");
-  if (lastChar != std::string::npos)
-    body.erase(lastChar + 1);
-  if (body.empty())
-    return std::nullopt;
-  if (body.back() != ';')
-    body += ";";
+  if (lastChar != std::string::npos) body.erase(lastChar + 1);
+  if (body.empty()) return std::nullopt;
+  if (body.back() != ';') body += ";";
 
   EmittedDecl emitted;
   emitted.begin = chars.getBegin().getRawEncoding();
@@ -252,7 +237,7 @@ std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::Sour
  */
 bool isKernelUapiHeader(llvm::StringRef spelling) {
   return spelling.starts_with("linux/") || spelling.starts_with("asm/") ||
-        spelling.starts_with("asm-generic/");
+         spelling.starts_with("asm-generic/");
 }
 
 /**
@@ -276,8 +261,7 @@ std::optional<std::string> climbToPublicHeader(const clang::Decl *decl,
                                                const HeaderClosureState &state) {
   clang::OptionalFileEntryRef file =
       mgr.getFileEntryRefForID(mgr.getFileID(mgr.getFileLoc(decl->getLocation())));
-  if (!file)
-    return std::nullopt;
+  if (!file) return std::nullopt;
 
   const clang::FileEntry *current = &file->getFileEntry();
   std::optional<std::string> best;
@@ -285,12 +269,9 @@ std::optional<std::string> climbToPublicHeader(const clang::Decl *decl,
   // so this only guards against an unexpected cycle in the recorded state.
   for (int hop = 0; hop < 64; ++hop) {
     auto it = state.includedFrom.find(current);
-    if (it == state.includedFrom.end() || !it->second.isSystem)
-      break;
-    if (it->second.isAngled && !isPrivateHeader(it->second.spelling))
-      best = it->second.spelling;
-    if (!it->second.parent)
-      break;
+    if (it == state.includedFrom.end() || !it->second.isSystem) break;
+    if (it->second.isAngled && !isPrivateHeader(it->second.spelling)) best = it->second.spelling;
+    if (!it->second.parent) break;
     current = it->second.parent;
   }
   return best;
@@ -305,18 +286,14 @@ bool alreadyResolvable(const clang::Decl *decl, const clang::SourceManager &mgr,
                        const HeaderClosureState &state, const std::set<std::string> &kept) {
   clang::OptionalFileEntryRef file =
       mgr.getFileEntryRefForID(mgr.getFileID(mgr.getFileLoc(decl->getLocation())));
-  if (!file)
-    return false;
+  if (!file) return false;
 
   const clang::FileEntry *current = &file->getFileEntry();
   for (int hop = 0; hop < 64; ++hop) {
     auto it = state.includedFrom.find(current);
-    if (it == state.includedFrom.end())
-      break;
-    if (kept.count(it->second.spelling))
-      return true;
-    if (!it->second.parent)
-      break;
+    if (it == state.includedFrom.end()) break;
+    if (kept.count(it->second.spelling)) return true;
+    if (!it->second.parent) break;
     current = it->second.parent;
   }
   return false;
@@ -325,11 +302,9 @@ bool alreadyResolvable(const clang::Decl *decl, const clang::SourceManager &mgr,
 /**
  * @brief Gets the `#include <...>` that supplies a declaration reached in a system header.
  */
-std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
-                                           const clang::SourceManager &mgr,
+std::optional<std::string> systemHeaderFor(const clang::Decl *decl, const clang::SourceManager &mgr,
                                            const HeaderClosureState &state) {
-  if (std::optional<std::string> climbed = climbToPublicHeader(decl, mgr, state))
-    return climbed;
+  if (std::optional<std::string> climbed = climbToPublicHeader(decl, mgr, state)) return climbed;
 
   llvm::StringRef path = mgr.getFilename(mgr.getFileLoc(decl->getLocation()));
   if (!path.empty()) {
@@ -339,16 +314,14 @@ std::optional<std::string> systemHeaderFor(const clang::Decl *decl,
     // exceptions for sys, arpa, and netinet because e.g sys/types.h is a valid/portable include
     bool topLevel = !spelling.contains('/') || spelling.starts_with("sys/") ||
                     spelling.starts_with("arpa/") || spelling.starts_with("netinet/");
-    if (topLevel && !spelling.empty() && !isPrivateHeader(spelling))
-      return spelling.str();
+    if (topLevel && !spelling.empty() && !isPrivateHeader(spelling)) return spelling.str();
   }
 
   // fallback to the hardcoded map of known std headers
   const auto *named = llvm::dyn_cast<clang::NamedDecl>(decl);
   if (named) {
     auto it = StdHeaders.find(named->getNameAsString());
-    if (it != StdHeaders.end())
-      return it->second;
+    if (it != StdHeaders.end()) return it->second;
   }
   return std::nullopt;
 }
@@ -393,12 +366,11 @@ void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clan
   // Record how every included file was reached. Only use the first
   // occurence of an include
   if (File) {
-    clang::OptionalFileEntryRef parent =
-        _Mgr.getFileEntryRefForID(_Mgr.getFileID(HashLoc));
-    _State->includedFrom.try_emplace(
-        &File->getFileEntry(),
-        IncludeInfo{FileName.str(), IsAngled, FileType != clang::SrcMgr::C_User,
-                    parent ? &parent->getFileEntry() : nullptr});
+    clang::OptionalFileEntryRef parent = _Mgr.getFileEntryRefForID(_Mgr.getFileID(HashLoc));
+    _State->includedFrom.try_emplace(&File->getFileEntry(),
+                                     IncludeInfo{FileName.str(), IsAngled,
+                                                 FileType != clang::SrcMgr::C_User,
+                                                 parent ? &parent->getFileEntry() : nullptr});
   }
 
   // A quoted include is project-local by convention regardless of FileType.
@@ -425,22 +397,18 @@ void LocalHeaderPP::InclusionDirective(clang::SourceLocation HashLoc, const clan
 void LocalHeaderPP::MacroDefined(const clang::Token &MacroNameTok,
                                  const clang::MacroDirective *MD) {
   const clang::MacroInfo *info = MD ? MD->getMacroInfo() : nullptr;
-  if (!info || info->isBuiltinMacro())
-    return;
+  if (!info || info->isBuiltinMacro()) return;
   clang::SourceLocation defLoc = info->getDefinitionLoc();
-  if (!isLocalHeaderLoc(_Mgr, defLoc))
-    return;
+  if (!isLocalHeaderLoc(_Mgr, defLoc)) return;
 
   clang::CharSourceRange range =
       clang::CharSourceRange::getTokenRange(defLoc, info->getDefinitionEndLoc());
   bool invalid = false;
   llvm::StringRef text = clang::Lexer::getSourceText(range, _Mgr, _LangOpts, &invalid);
-  if (invalid || text.empty())
-    return;
+  if (invalid || text.empty()) return;
 
   const clang::IdentifierInfo *id = MacroNameTok.getIdentifierInfo();
-  if (!id)
-    return;
+  if (!id) return;
 
   MacroRecord record;
   record.text = "#define " + text.str();
@@ -452,12 +420,10 @@ void LocalHeaderPP::MacroExpands(const clang::Token &MacroNameTok, const clang::
                                  clang::SourceRange Range, const clang::MacroArgs *) {
   const clang::IdentifierInfo *id = MacroNameTok.getIdentifierInfo();
   const clang::MacroInfo *info = MD.getMacroInfo();
-  if (!id || !info || !isLocalHeaderLoc(_Mgr, info->getDefinitionLoc()))
-    return;
+  if (!id || !info || !isLocalHeaderLoc(_Mgr, info->getDefinitionLoc())) return;
 
   clang::SourceLocation expansion = _Mgr.getExpansionLoc(Range.getBegin());
-  if (!expansion.isValid() || !_Mgr.isInMainFile(expansion))
-    return;
+  if (!expansion.isValid() || !_Mgr.isInMainFile(expansion)) return;
   _State->macroUses.emplace_back(id->getName().str(), expansion);
 }
 
@@ -472,8 +438,7 @@ HeaderClosureConsumer::HeaderClosureConsumer(clang::Rewriter &rewriter,
 
 void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   // No local include means nothing was deleted, so there is nothing to inline.
-  if (!_State->strippedLocalInclude)
-    return;
+  if (!_State->strippedLocalInclude) return;
 
   clang::SourceManager &mgr = context.getSourceManager();
   const clang::LangOptions &langOpts = context.getLangOpts();
@@ -485,17 +450,16 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   ClosureCollector collector(context);
   std::vector<std::pair<unsigned, unsigned>> rejectedBodies;
   for (clang::Decl *decl : context.getTranslationUnitDecl()->decls()) {
-    if (!mgr.isInMainFile(mgr.getFileLoc(decl->getLocation())))
-      continue;
+    if (!mgr.isInMainFile(mgr.getFileLoc(decl->getLocation()))) continue;
     auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!func) {
       collector.TraverseDecl(decl);
       continue;
     }
     collector.addDecl(func);
-    if (!func->doesThisDeclarationHaveABody() || !func->getBody())
-      continue;
-    // RemoveVisitor can't strip a macro-expanded body, so a rejected one still ships and needs its deps
+    if (!func->doesThisDeclarationHaveABody() || !func->getBody()) continue;
+    // RemoveVisitor can't strip a macro-expanded body, so a rejected one still ships and needs its
+    // deps
     if (!rejected.count(func->getNameAsString()) || func->getLocation().isMacroID()) {
       collector.TraverseStmt(func->getBody());
       continue;
@@ -527,7 +491,8 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
                             ";");
   }
 
-  // order declarations by their source location (tie break for overlapping decl types when same code range has multiple)
+  // order declarations by their source location (tie break for overlapping decl types when same
+  // code range has multiple)
   std::sort(emitted.begin(), emitted.end(), [](const EmittedDecl &a, const EmittedDecl &b) {
     return a.begin != b.begin ? a.begin < b.begin : a.end > b.end;
   });
@@ -537,8 +502,7 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   for (const EmittedDecl &decl : emitted) {
     // A "typedef struct { ... } X;" yields both a RecordDecl and a TypedefDecl
     // skip a typedef it its record was already emitted
-    if (decl.begin < lastRange)
-      continue;
+    if (decl.begin < lastRange) continue;
     lastRange = decl.end;
     declText += decl.text + "\n";
   }
@@ -549,22 +513,18 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
   std::set<std::string> neededMacros;
   auto require = [&](const std::string &name) {
     // if not local header Macro or already in needed skip
-    if (!_State->localMacros.count(name) || !neededMacros.insert(name).second)
-      return;
+    if (!_State->localMacros.count(name) || !neededMacros.insert(name).second) return;
     pending.push_back(name);
   };
 
   // validate macro uses aren't in bodies that are being removed
   for (const std::pair<std::string, clang::SourceLocation> &use : _State->macroUses) {
-    if (!mgr.isInMainFile(use.second))
-      continue;
+    if (!mgr.isInMainFile(use.second)) continue;
     unsigned offset = mgr.getFileOffset(use.second);
     bool inRejected = false;
     for (const std::pair<unsigned, unsigned> &body : rejectedBodies)
-      if (offset >= body.first && offset <= body.second)
-        inRejected = true;
-    if (!inRejected)
-      require(use.first); // add to pending
+      if (offset >= body.first && offset <= body.second) inRejected = true;
+    if (!inRejected) require(use.first); // add to pending
   }
 
   // check emitted declaration for macro references
@@ -611,8 +571,7 @@ void HeaderClosureConsumer::HandleTranslationUnit(clang::ASTContext &context) {
     block += fwd + "\n";
   block += declText;
 
-  if (block.empty())
-    return;
+  if (block.empty()) return;
 
   debugLog(2, "[filter] header closure: " + std::to_string(includes.size()) + " include(s), " +
                   std::to_string(macros.size()) + " macro(s), " + std::to_string(emitted.size()) +

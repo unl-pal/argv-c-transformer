@@ -150,8 +150,7 @@ TEST_F(TransformStageTest, PathComponentsWithUnsafeCharactersAreSanitized) {
   // are legal in a path but not in the output filename we build by joining
   // components with '_' (a literal ':' or space would otherwise land in the
   // flattened name unescaped).
-  writeFile(filterDir / "weird dir:name" / "file.c",
-            "int identity(int x) { return x; }\n");
+  writeFile(filterDir / "weird dir:name" / "file.c", "int identity(int x) { return x; }\n");
 
   Transformer t(configPath.string());
   int count = t.run();

@@ -88,8 +88,7 @@ TEST(IncludeIndex, FollowsTransitiveQuotedIncludeChain) {
   // pre-fix behavior) would miss the -I dir c.h needs.
   tree.writeFile("libA/a.h", "#include \"nested/c.h\"\ntypedef int a_t;\n");
   tree.writeFile("otherlib/nested/c.h", "typedef int c_t;\n");
-  tree.writeFile("src/main.c",
-                 "#include \"a.h\"\nint use(a_t x, c_t y) { return x + y; }\n");
+  tree.writeFile("src/main.c", "#include \"a.h\"\nint use(a_t x, c_t y) { return x + y; }\n");
 
   HeaderIndex index(tree.root);
   std::vector<std::string> dirs = collectLocalIncludeDirs(tree.root / "src/main.c", index);

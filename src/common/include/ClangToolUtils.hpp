@@ -302,7 +302,8 @@ inline bool harnessIsEmpty(std::filesystem::path path) {
   std::stringstream buffer;
   buffer << in.rdbuf();
   std::string content = buffer.str();
-  return content.find("int main(void) {\n  if (0) reach_error();\n  return 0;\n}") != std::string::npos;
+  return content.find("int main(void) {\n  if (0) reach_error();\n  return 0;\n}") !=
+         std::string::npos;
 }
 
 /** @brief Formats a duration as "Xm YY.Ys" (minutes elided under 60s), for stage summary output. */

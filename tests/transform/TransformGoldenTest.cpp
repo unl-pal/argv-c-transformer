@@ -114,8 +114,8 @@ TEST_P(TransformGolden, MatchesExpected) {
   std::string out;
   llvm::raw_string_ostream os(out);
   bool ok = clang::tooling::runToolOnCodeWithArgs(
-      std::make_unique<TransformAction>(os, havoc), code, args, testCase.input.string(), "transform-test",
-      std::make_shared<clang::PCHContainerOperations>());
+      std::make_unique<TransformAction>(os, havoc), code, args, testCase.input.string(),
+      "transform-test", std::make_shared<clang::PCHContainerOperations>());
   ASSERT_TRUE(ok) << "transform tool failed for " << testCase.input;
 
   if (std::getenv("UPDATE_GOLDENS")) {

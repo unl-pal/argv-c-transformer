@@ -305,8 +305,8 @@ TEST_F(VerifyStageTest, PreprocessKeepsDifferingTypedefsOfSameName) {
   // it - this is not something Verifier::preprocess should ever "fix" (the
   // compile check upstream is what should have caught it).
   writeFile(filterDir / "conflict.c", "typedef unsigned int myuint;\n"
-                                       "typedef int myuint;\n"
-                                       "int identity(int x) { return x; }\n");
+                                      "typedef int myuint;\n"
+                                      "int identity(int x) { return x; }\n");
 
   transformAndVerify();
 

@@ -79,7 +79,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   }
 
   // unreach-call stub: every benchmark names reach_error
-  std::string mainFn = "\nint main(void) {\n" + harness + "  if (0) reach_error();\n  return 0;\n}\n";
+  std::string mainFn =
+      "\nint main(void) {\n" + harness + "  if (0) reach_error();\n  return 0;\n}\n";
   _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainFn);
 
   // emitted here, not the shared header, so bounds survive hand-editing of the .c
@@ -160,8 +161,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
     std::optional<std::string> suffix = verifierSuffixForType(declared);
     if (!suffix) {
       std::string local = "__h" + std::to_string(counter++);
-      PointerStorage store =
-          renderPointerStorage(plans[i], local, parm->getType().getAsString());
+      PointerStorage store = renderPointerStorage(plans[i], local, parm->getType().getAsString());
       call.prologue += store.decls;
       call.args += store.arg;
       if (!plans[i].fwdDecl.empty()) _NeededFwdDecls->insert(plans[i].fwdDecl);

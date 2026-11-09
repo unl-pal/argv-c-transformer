@@ -41,7 +41,8 @@ enum class PointerShape {
  * own under a fieldwise fill.
  */
 struct FieldFill {
-  std::vector<const clang::FieldDecl *> path; ///< Members from the element; empty for the element itself.
+  std::vector<const clang::FieldDecl *>
+      path; ///< Members from the element; empty for the element itself.
   /// Assigned @c __VERIFIER_nondet_<suffix>(); nullopt to fill with @c __VERIFIER_nondet_memory.
   std::optional<std::string> suffix;
 };
@@ -52,12 +53,15 @@ struct FieldFill {
  */
 struct PointerPlan {
   clang::QualType type; ///< The pointer or constant-array type planned.
-  std::vector<const clang::FieldDecl *> path; ///< Members from the parent's element to this pointer.
+  std::vector<const clang::FieldDecl *>
+      path; ///< Members from the parent's element to this pointer.
   PointerShape shape = PointerShape::Opaque;
   bool viable = false;
   std::string fwdDecl; ///< For an opaque pointee.
-  std::vector<PointerPlan> fields; ///< Pointers inside each element, assigned after the nondet fill.
-  /// Fills that, with @c fields, cover every element; nullopt to fill in bulk with @c __VERIFIER_nondet_memory.
+  std::vector<PointerPlan>
+      fields; ///< Pointers inside each element, assigned after the nondet fill.
+  /// Fills that, with @c fields, cover every element; nullopt to fill in bulk with @c
+  /// __VERIFIER_nondet_memory.
   std::optional<std::vector<FieldFill>> fieldwiseFill;
 };
 
