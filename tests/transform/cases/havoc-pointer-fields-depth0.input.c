@@ -9,7 +9,8 @@ struct Named {
   char *aliases[2];
 };
 
-// At depth 0 every pointer is an opaque block, recursive types included.
+// At depth 0 storage is typed but pointers inside it are left as nondet bytes,
+// so recursive types are harnessed.
 int second_value(struct Node *head) {
   if (head->next == 0) return head->value;
   return head->next->value;
@@ -30,6 +31,13 @@ int via_return(void) {
   return n->value;
 }
 
-// Array declarators nest, so the sizeof floor is spelled by clang.
+// Array params keep their declared bound; declarators nest inside it.
 int grid(int g[3][4]) { return g[2][3]; }
 int any_op(int (*fs[2])(int)) { return fs[0] != 0; }
+
+// The clamp bound matches the element count of the typed storage.
+int sum_values(struct Node *nodes, int n) {
+  int s = 0;
+  for (int i = 0; i < n; i++) s += nodes[i].value;
+  return s;
+}

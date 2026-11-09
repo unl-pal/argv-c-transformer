@@ -132,8 +132,8 @@ std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool readOnly
 
 /**
  * @brief Appends a field for every pointer and a scalar for every
- * nondet-assignable scalar reachable by value inside @p record, clearing
- * @c plan.fieldwise if some field is neither.
+ * nondet-assignable scalar reachable by value inside @p record, resetting
+ * @c plan.fieldwiseFill if some field is neither.
  *
  * @param readOnly The record is reached through a const member.
  * @param enclosing Records being walked above this one.
@@ -146,7 +146,7 @@ bool collectFields(const clang::RecordDecl *record,
                    std::vector<const clang::RecordDecl *> enclosing = {}) {
   const clang::RecordDecl *def = record->getDefinition();
   if (!def || def->isUnion()) { // assigning one member would clobber its siblings
-    plan.fieldwise = false;
+    plan.fieldwiseFill.reset();
     if (def)
       for (const clang::FieldDecl *field : def->fields())
         if (holdsPointer(field->getType())) return false; // a member pointer is never initialized
@@ -155,7 +155,7 @@ bool collectFields(const clang::RecordDecl *record,
   if (def->hasFlexibleArrayMember()) return false; // the tail is outside sizeof, so outside every element
   // Error recovery can leave a record containing itself by value.
   if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) {
-    plan.fieldwise = false;
+    plan.fieldwiseFill.reset();
     return true;
   }
   enclosing.push_back(def);
@@ -174,9 +174,9 @@ bool collectFields(const clang::RecordDecl *record,
       if (!collectFields(nested, fieldPath, fieldReadOnly, mgr, depth, plan, enclosing))
         return false;
     } else if (std::optional<std::string> suffix = scalarFieldSuffix(type, fieldReadOnly)) {
-      plan.scalars.push_back({fieldPath, *suffix});
+      if (plan.fieldwiseFill) plan.fieldwiseFill->push_back({fieldPath, *suffix});
     } else {
-      plan.fieldwise = false;
+      plan.fieldwiseFill.reset(); // keep walking: later pointers still need planning
     }
   }
   return true;
@@ -197,7 +197,7 @@ bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
     return true;
   }
   if (pointee->isAnyPointerType()) { // storage is unqualified, so a const element still assigns
-    plan.fieldwise = true;
+    plan.fieldwiseFill.emplace();
     return addField(plan, {}, pointee, mgr, depth);
   }
   if (!isSizedPointee(pointee, mgr)) {
@@ -207,15 +207,11 @@ bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
   }
   if (const clang::RecordDecl *record = pointee->getAsRecordDecl()) {
     if (plan.shape != PointerShape::Array) plan.shape = PointerShape::Record;
-    plan.fieldwise = true;
-    if (!collectFields(record, {}, false, mgr, depth, plan)) return false;
-    if (!plan.fieldwise) plan.scalars.clear(); // the bulk fill covers them
-    return true;
+    plan.fieldwiseFill.emplace();
+    return collectFields(record, {}, false, mgr, depth, plan);
   }
-  if (std::optional<std::string> suffix = scalarFieldSuffix(pointee, false)) {
-    plan.scalars.push_back({{}, *suffix});
-    plan.fieldwise = true;
-  }
+  if (std::optional<std::string> suffix = scalarFieldSuffix(pointee, false))
+    plan.fieldwiseFill.emplace().push_back({{}, *suffix});
   return true;
 }
 
@@ -223,19 +219,9 @@ bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
  * @brief Drops the fieldwise fill from @p plan and every plan beneath it.
  */
 void useBulkFill(PointerPlan &plan) {
-  plan.fieldwise = false;
-  plan.scalars.clear();
+  plan.fieldwiseFill.reset();
   for (PointerPlan &field : plan.fields)
     useBulkFill(field);
-}
-
-/**
- * @brief The type whose sizeof floors an opaque block, or "" for none.
- */
-std::string opaqueSizeofType(const PointerPlan &plan) {
-  if (plan.shape != PointerShape::Opaque || !plan.opaqueSized) return "";
-  clang::QualType type = plan.type->isArrayType() ? plan.type : plan.type->getPointeeType();
-  return type.getUnqualifiedType().getAsString(); // clang nests array declarators, e.g. int (*[2])(int)
 }
 
 std::string elementCount(const PointerPlan &plan) {
@@ -245,11 +231,8 @@ std::string elementCount(const PointerPlan &plan) {
         llvm::cast<clang::ConstantArrayType>(plan.type->getAsArrayTypeUnsafe())->getSize().getZExtValue());
   case PointerShape::CString:
     return "__HAVOC_STR_MAX";
-  case PointerShape::Opaque: {
-    std::string sized = opaqueSizeofType(plan);
-    if (sized.empty()) return "__HAVOC_BLOCK_MAX";
-    return "sizeof(" + sized + ") > __HAVOC_BLOCK_MAX ? sizeof(" + sized + ") : __HAVOC_BLOCK_MAX";
-  }
+  case PointerShape::Opaque:
+    return "__HAVOC_BLOCK_MAX";
   default:
     return "__HAVOC_ARRAY_ELEMS";
   }
@@ -312,22 +295,22 @@ void emitAssign(const std::string &lhs, const std::vector<std::string> &dims,
  * @brief Assigns every scalar of every element of @p name a nondet value, one
  * loop nest over @p dims building each element whole.
  */
-void fillFieldwise(const PointerPlan &plan, const std::string &name,
+void fillFieldwise(const std::vector<ScalarField> &scalars, const std::string &name,
                    const std::vector<std::string> &dims, const std::string &indent,
                    std::string &out) {
-  if (plan.scalars.empty()) return;
-  const char *open = plan.scalars.size() > 1 ? " {\n" : "\n";
+  if (scalars.empty()) return;
+  const char *open = scalars.size() > 1 ? " {\n" : "\n";
   for (size_t i = 0; i < dims.size(); ++i)
     out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
            " < " + dims[i] + "; ++" + loopVar(i) + ")" + open;
-  for (const ScalarField &scalar : plan.scalars) {
+  for (const ScalarField &scalar : scalars) {
     std::string lhs = indexed(name, dims.size());
     std::vector<std::string> loopDims = dims;
     appendMemberAccess(scalar.path, lhs, loopDims);
     emitAssign(lhs, loopDims, "__VERIFIER_nondet_" + scalar.suffix + "()", indent, out,
                dims.size());
   }
-  if (plan.scalars.size() == 1) return;
+  if (scalars.size() == 1) return;
   for (size_t i = dims.size(); i-- > 0;)
     out += indent + std::string(2 * i, ' ') + "}\n";
 }
@@ -353,8 +336,8 @@ void renderStorage(const PointerPlan &plan, const std::string &name,
 
   std::vector<std::string> dims = outer;
   dims.push_back(count);
-  if (plan.fieldwise)
-    fillFieldwise(plan, name, dims, indent, out);
+  if (plan.fieldwiseFill)
+    fillFieldwise(*plan.fieldwiseFill, name, dims, indent, out);
   else
     out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
   for (size_t f = 0; f < plan.fields.size(); ++f) {
@@ -400,13 +383,15 @@ PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr,
   }
   if (!isSpellable(QT)) return plan; // no name for the storage or the cast
 
-  if (havoc.pointerDepth == 0) {
+  if (havoc.pointerDepth == 0) { // typed storage, bulk-filled: pointers inside stay nondet bytes
     if (pointee->isAnyCharacterType()) {
       plan.shape = PointerShape::CString;
-    } else {
+    } else if (!isSizedPointee(pointee, mgr)) {
       plan.shape = PointerShape::Opaque;
       plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
-      plan.opaqueSized = isSizedPointee(pointee, mgr);
+    } else if (const clang::RecordDecl *record = pointee->getAsRecordDecl()) {
+      if (record->getDefinition()->hasFlexibleArrayMember()) return plan; // the tail is outside every element
+      if (plan.shape != PointerShape::Array) plan.shape = PointerShape::Record;
     }
     plan.viable = true;
     return plan;
