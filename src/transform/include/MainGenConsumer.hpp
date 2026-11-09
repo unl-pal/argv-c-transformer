@@ -43,7 +43,7 @@ public:
    */
   MainGenConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                   std::shared_ptr<std::set<std::string>> neededFwdDecls, clang::Rewriter &rewriter,
-                  const HavocBounds &havoc = {});
+                  const HavocBounds &havoc);
 
   /**
    * @brief Renames an existing {@code main} and appends the generated harness main.

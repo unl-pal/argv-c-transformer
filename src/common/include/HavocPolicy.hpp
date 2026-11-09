@@ -68,7 +68,7 @@ struct PointerPlan {
  * @return The plan; check @c viable before using it.
  */
 PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr,
-                        const HavocBounds &havoc = {});
+                        const HavocBounds &havoc);
 
 /**
  * @brief A pointer havocked in statement position: setup plus the argument.

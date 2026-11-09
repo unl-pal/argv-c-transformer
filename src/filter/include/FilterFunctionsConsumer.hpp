@@ -47,7 +47,7 @@ public:
       std::shared_ptr<std::unordered_map<std::string, CountingVisitor::attributes>> toFilter,
       std::shared_ptr<std::vector<std::string>> toRemove,
       std::map<std::string, std::pair<int, int>> *complexityConfig,
-      std::map<std::string, FeatureGate> *featureConfig, HavocBounds havoc = {});
+      std::map<std::string, FeatureGate> *featureConfig, HavocBounds havoc);
 
   void HandleTranslationUnit(clang::ASTContext &context) override;
 
