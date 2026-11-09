@@ -51,7 +51,7 @@ int main(void) {
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h0[__i0] = __VERIFIER_nondet_int();
     int __h1 = __VERIFIER_nondet_int();
-    if (__h1 < 0 || __h1 > __HAVOC_ARRAY_ELEMS) abort();
+    if (__h1 < 0 || __h1 >= __HAVOC_ARRAY_ELEMS) abort();
     sum(__h0, __h1);
   }
   {
@@ -85,7 +85,7 @@ int main(void) {
     for (int __i0 = 0; __i0 < 3; ++__i0)
       __h6[__i0] = __VERIFIER_nondet_int();
     int __h7 = __VERIFIER_nondet_int();
-    if (__h7 < 0 || __h7 > 3) abort();
+    if (__h7 < 0 || __h7 >= 3) abort();
     sum_fixed(__h6, __h7);
   }
   {
@@ -96,7 +96,7 @@ int main(void) {
     for (int __i0 = 0; __i0 < 2; ++__i0)
       __h9[__i0] = __VERIFIER_nondet_int();
     int __h10 = __VERIFIER_nondet_int();
-    if (__h10 < 0 || __h10 > 2) abort();
+    if (__h10 < 0 || __h10 >= 2) abort();
     pick_smaller(__h8, __h9, __h10);
   }
   {
@@ -107,7 +107,7 @@ int main(void) {
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h12[__i0] = __VERIFIER_nondet_int();
     int __h13 = __VERIFIER_nondet_int();
-    if (__h13 < 0 || __h13 > (3 < __HAVOC_ARRAY_ELEMS ? 3 : __HAVOC_ARRAY_ELEMS)) abort();
+    if (__h13 < 0 || __h13 >= (3 < __HAVOC_ARRAY_ELEMS ? 3 : __HAVOC_ARRAY_ELEMS)) abort();
     with_block(__h11, __h12, __h13);
   }
   return 0;

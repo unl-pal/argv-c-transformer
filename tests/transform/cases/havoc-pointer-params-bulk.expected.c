@@ -39,7 +39,7 @@ int main(void) {
     int __h0[__HAVOC_ARRAY_ELEMS];
     __VERIFIER_nondet_memory(__h0, sizeof(__h0));
     int __h1 = __VERIFIER_nondet_int();
-    if (__h1 < 0 || __h1 > __HAVOC_ARRAY_ELEMS) abort();
+    if (__h1 < 0 || __h1 >= __HAVOC_ARRAY_ELEMS) abort();
     sum(__h0, __h1);
   }
   {

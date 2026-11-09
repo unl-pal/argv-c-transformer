@@ -174,7 +174,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
       call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
                        " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
       if (declared->isSignedIntegerType()) call.prologue += local + " < 0 || ";
-      call.prologue += local + " > " + bound + ") abort();\n";
+      call.prologue += local + " >= " + bound + ") abort();\n";
       call.args += local;
       continue;
     }
