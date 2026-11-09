@@ -72,8 +72,11 @@ on the same classifier the transform uses, so a pointer-param function survives 
 exactly when the harness can call it.
 
 An integer parameter alongside a pointer parameter is clamped rather than left as a raw
-nondet value: `MainGenConsumer::genCallHarness` bounds it with `if (n < 0 || n >
-__HAVOC_ARRAY_ELEMS) abort();` (the signedness check dropped for unsigned types). This
+nondet value: `MainGenConsumer::genCallHarness` bounds it with `if (n < 0 || n > K)
+abort();` (the signedness check dropped for unsigned types), where `K` is the fewest
+elements in any pointer parameter's storage: `N` for a declared `T[N]`, else
+`__HAVOC_ARRAY_ELEMS` (a mix emits `(N < __HAVOC_ARRAY_ELEMS ? N : __HAVOC_ARRAY_ELEMS)`
+so the macro stays retunable). This
 sidesteps guessing which parameter is "the length" from its name — every integer is
 bounded by the element count of the storage that was actually declared for the pointer
 parameters, so a genuinely-undersized block can't be indexed out of bounds regardless of
@@ -167,7 +170,7 @@ which `__VERIFIER_nondet_*` variant to use.
   the values come from `[Havoc Settings]` in the config, falling back to the constants in
   `src/common/include/HavocPolicy.hpp`.
 - `argc` has its own bound rather than sharing `havocArrayElems`, for the same reason
-  any other integer is clamped to `__HAVOC_ARRAY_ELEMS`: an integer is bounded by the
+  any other integer is clamped to its pointers' element count: an integer is bounded by the
   storage it indexes, and argv's rows are sized `__HAVOC_ARGC_MAX × __HAVOC_STR_MAX`, not
   by the generic block size. The two also scale differently. An extra array element is
   usually one scalar, but an extra argument is a whole symbolic string, typically fed
