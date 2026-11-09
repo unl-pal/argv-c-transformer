@@ -457,6 +457,46 @@ TEST(RenderPointerStorage, UnaddressableBitfieldMemoryFillsItsRecord) {
             "  }\n");
 }
 
+TEST(RenderPointerStorage, AnonymousMemberFillPrecedesItsRecordsTypedFills) {
+  for (const char *member : {"union { int i; float f; }", "struct { const int ro : 3; int rw; }"}) {
+    auto p = planFirstParam(std::string("struct T { int k; ") + member + "; short z; };\n" +
+                            "void f(struct T *t) {}");
+    PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+    EXPECT_EQ(s.decls,
+              "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+              "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+              "    __VERIFIER_nondet_memory((void *)&__h0[__i0], sizeof(__h0[__i0]));\n"
+              "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
+              "    __h0[__i0].z = __VERIFIER_nondet_short();\n"
+              "  }\n")
+        << member;
+  }
+}
+
+TEST(RenderPointerStorage, AnonymousMemberFillStaysInsideANestedRecord) {
+  auto p = planFirstParam("struct In { int a; union { int i; float f; }; union { char c; short s; }; };\n"
+                          "struct T { int k; struct In in; };\n"
+                          "void f(struct T *t) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+  EXPECT_EQ(s.decls,
+            "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+            "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+            "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
+            "    __VERIFIER_nondet_memory((void *)&__h0[__i0].in, sizeof(__h0[__i0].in));\n"
+            "    __h0[__i0].in.a = __VERIFIER_nondet_int();\n"
+            "  }\n");
+}
+
+TEST(RenderPointerStorage, EnumFieldNamedThroughAForwardDeclarationIsTyped) {
+  auto p = planFirstParam("enum E;\ntypedef enum E ET;\nenum E { A, B };\n"
+                          "struct T { ET e; };\n"
+                          "void f(struct T *t) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+  EXPECT_EQ(s.decls, "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    __h0[__i0].e = __VERIFIER_nondet_uint();\n");
+}
+
 TEST(RenderPointerStorage, NoTypedFieldIsBulkFilled) {
   auto p = planFirstParam("struct T { long double x; const int k; };\n"
                           "void f(struct T *t) {}");
