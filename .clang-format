@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+#
+# SPDX-License-Identifier: Apache-2.0
+
+BasedOnStyle: LLVM
+ColumnLimit: 100
+PointerAlignment: Right
+IndentWidth: 2
+AccessModifierOffset: -2
+SortIncludes: false
+AllowShortIfStatementsOnASingleLine: Always
