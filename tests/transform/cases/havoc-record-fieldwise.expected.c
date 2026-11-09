@@ -88,5 +88,6 @@ int main(void) {
     __VERIFIER_nondet_memory(__h4, sizeof(__h4));
     wide(__h4);
   }
+  if (0) reach_error();
   return 0;
 }

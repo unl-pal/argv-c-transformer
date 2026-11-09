@@ -87,5 +87,6 @@ int main(void) {
     if (__h6 < 0 || __h6 >= __HAVOC_ARRAY_ELEMS) abort();
     sum_values(__h5, __h6);
   }
+  if (0) reach_error();
   return 0;
 }
