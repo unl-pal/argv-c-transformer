@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (C) 2026 The ARG-V Project
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Golden outputs are compared byte for byte against what the transform emits.
+tests/transform/cases/*
+tests/smoke/samples/*
