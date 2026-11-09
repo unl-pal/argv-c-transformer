@@ -112,7 +112,8 @@ bool holdsPointer(clang::QualType type, unsigned depth = 0) {
   if (type->isAnyPointerType()) return true;
   const clang::RecordDecl *record = type->getAsRecordDecl();
   const clang::RecordDecl *def = record ? record->getDefinition() : nullptr;
-  if (!def || depth > 8) return false;
+  if (!def) return false;
+  if (depth > 8) return true; // too deep to rule a pointer out
   for (const clang::FieldDecl *field : def->fields())
     if (holdsPointer(field->getType(), depth + 1)) return true;
   return false;
@@ -124,9 +125,33 @@ bool holdsPointer(clang::QualType type, unsigned depth = 0) {
  */
 std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool readOnly) {
   if (readOnly) return std::nullopt; // only nondet_memory can write a const member
-  if (const auto *enumType = type->getAs<clang::EnumType>())
-    return verifierSuffixForType(enumType->getDecl()->getIntegerType());
+  if (const auto *enumDecl = llvm::dyn_cast_or_null<clang::EnumDecl>(type->getAsTagDecl()))
+    if (const clang::EnumDecl *def = enumDecl->getDefinition()) // the type may name a forward declaration
+      return verifierSuffixForType(def->getIntegerType());
   return verifierSuffixForType(type);
+}
+
+/**
+ * @brief Adds a @c __VERIFIER_nondet_memory fill of the member at @p path to
+ * @c plan.fieldwiseFill.
+ *
+ * An anonymous member has no name to address, so its fill covers the record
+ * enclosing it and goes ahead of that record's other fills, which overwrite it.
+ */
+void addMemoryFill(PointerPlan &plan, std::vector<const clang::FieldDecl *> path) {
+  std::vector<FieldFill> &fills = *plan.fieldwiseFill;
+  if (path.empty() || !path.back()->isAnonymousStructOrUnion()) {
+    fills.push_back({std::move(path), std::nullopt});
+    return;
+  }
+  while (!path.empty() && path.back()->isAnonymousStructOrUnion())
+    path.pop_back();
+  // The enclosing record is still being walked, so its fills run from here to the end.
+  auto first = std::find_if(fills.begin(), fills.end(), [&](const FieldFill &fill) {
+    return fill.path.size() >= path.size() && std::equal(path.begin(), path.end(), fill.path.begin());
+  });
+  if (first != fills.end() && first->path == path && !first->suffix) return; // already filled whole
+  fills.insert(first, {std::move(path), std::nullopt});
 }
 
 /**
@@ -148,13 +173,13 @@ bool collectFields(const clang::RecordDecl *record,
     if (def)
       for (const clang::FieldDecl *field : def->fields())
         if (holdsPointer(field->getType())) return false; // a member pointer is never initialized
-    plan.fieldwiseFill->push_back({path, std::nullopt});
+    addMemoryFill(plan, path);
     return true;
   }
   if (def->hasFlexibleArrayMember()) return false; // the tail is outside sizeof, so outside every element
   // Error recovery can leave a record containing itself by value.
   if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) {
-    plan.fieldwiseFill->push_back({path, std::nullopt});
+    addMemoryFill(plan, path);
     return true;
   }
   enclosing.push_back(def);
@@ -184,7 +209,7 @@ bool collectFields(const clang::RecordDecl *record,
       return fill.path.size() >= path.size() &&
              std::equal(path.begin(), path.end(), fill.path.begin());
     });
-    plan.fieldwiseFill->push_back({path, std::nullopt});
+    addMemoryFill(plan, path);
   }
   return true;
 }
