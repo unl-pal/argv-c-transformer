@@ -318,13 +318,12 @@ emptied by repair collapses back to that same verbatim text.
 - **Function pointers, as a parameter or a return**: never viable (see "Pointer Shapes"),
   so a parameter of this kind is unsupported and a returning call is rejected
 - **Flexible array members** (`struct Buf { int len; int data[]; }`): a pointer to such a
-  record is not viable at depth >= 1, wherever the member sits (directly or in an embedded
-  record). Storage is an array of elements, `struct Buf b[N]`, and the tail is outside
+  record is not viable at any depth, wherever the member sits at depth >= 1 (directly or
+  in an embedded record). Storage is an array of elements, `struct Buf b[N]`, and the tail is outside
   `sizeof`, so no element has room for it; the callee's `b->data[i]` would read into the
   next element, an out-of-bounds access the harness planted. Supporting it needs a
   single-element, aligned byte buffer with a fixed tail (`sizeof(struct Buf) + K *
-  sizeof(int)`) plus a clamp on the in-struct length. At depth 0 the record is an `Opaque`
-  byte block like any other.
+  sizeof(int)`) plus a clamp on the in-struct length.
 - **`envp` (third `main` parameter)**: `int main(int, char**, char**)` is not explicitly
   handled; only the first two parameters (`argc`, `argv`) are synthesized
 - **Opaque definitions could introduce memsafety errors**: if for whatever reason some

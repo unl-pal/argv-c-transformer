@@ -9,6 +9,7 @@
 #include <clang/AST/Decl.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -54,10 +55,9 @@ struct PointerPlan {
   PointerShape shape = PointerShape::Opaque;
   bool viable = false;
   std::string fwdDecl; ///< For an opaque pointee.
-  bool opaqueSized = false; ///< An opaque block is floored at the planned type's sizeof.
   std::vector<PointerPlan> fields; ///< Pointers inside each element, assigned after the nondet fill.
-  std::vector<ScalarField> scalars;
-  bool fieldwise = false; ///< @c scalars and @c fields cover every field, so no bulk fill is needed.
+  /// Scalars that, with @c fields, cover every field; nullopt to fill with @c __VERIFIER_nondet_memory instead.
+  std::optional<std::vector<ScalarField>> fieldwiseFill;
 };
 
 /**
