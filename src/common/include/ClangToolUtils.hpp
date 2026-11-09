@@ -252,7 +252,9 @@ inline bool runFrontendActionCheckingErrors(const std::string &filePath,
     return false;
   }
 
-  std::vector<std::string> flags = {"-xc", "-resource-dir=" + *resourceDir, "-fparse-all-comments"};
+  // -fno-caret-diagnostics also stops clang printing "N errors generated." to stderr
+  std::vector<std::string> flags = {"-xc", "-resource-dir=" + *resourceDir, "-fparse-all-comments",
+                                    "-fno-caret-diagnostics"};
   if (std::optional<std::string> sysroot = getSysroot()) {
     flags.push_back("-isysroot");
     flags.push_back(*sysroot);
@@ -273,6 +275,7 @@ inline bool runFrontendActionCheckingErrors(const std::string &filePath,
   clang::TextDiagnosticPrinter diagPrinter(diagStream, diagOpts.get());
 #endif
   tool.setDiagnosticConsumer(&diagPrinter);
+  tool.setPrintErrorMessage(false); // the caller reports failures at its own debug level
 
   try {
     tool.run(&factory);
