@@ -78,7 +78,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
         harnessBlock(call.prologue + "  " + func->getNameAsString() + "(" + call.args + ");\n");
   }
 
-  std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
+  // unreach-call stub: every benchmark names reach_error
+  std::string mainFn = "\nint main(void) {\n" + harness + "  if (0) reach_error();\n  return 0;\n}\n";
   _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainFn);
 
   // emitted here, not the shared header, so bounds survive hand-editing of the .c

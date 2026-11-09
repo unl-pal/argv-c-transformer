@@ -16,5 +16,6 @@ int main(void) {
     char __h0[__HAVOC_STR_MAX];
     uses_stdlib(__havoc_cstring_fill(__h0, __HAVOC_STR_MAX));
   }
+  if (0) reach_error();
   return 0;
 }

@@ -27,5 +27,6 @@ int main(void) {
   {
     plain(__VERIFIER_nondet_int());
   }
+  if (0) reach_error();
   return 0;
 }

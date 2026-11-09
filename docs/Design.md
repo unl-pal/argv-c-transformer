@@ -317,7 +317,7 @@ to a verifier run.
 A benchmark whose generated `main` calls no functions is unconditionally deleted. Both
 Transform and Verify check for this with the same text-based `harnessIsEmpty`
 (`src/common/include/ClangToolUtils.hpp`): it looks for the exact verbatim empty main
-`int main(void) {\n  return 0;\n}` in the written output. This works after Verify's
+`int main(void) {\n  if (0) reach_error();\n  return 0;\n}` in the written output. This works after Verify's
 `HarnessRepairConsumer` too, because it erases a whole line per rejected call (indent,
 call, semicolon, trailing newline) rather than leaving a bare `;` behind, so a `main`
 emptied by repair collapses back to that same verbatim text.

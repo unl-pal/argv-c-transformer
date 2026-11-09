@@ -110,5 +110,6 @@ int main(void) {
     if (__h13 < 0 || __h13 >= (3 < __HAVOC_ARRAY_ELEMS ? 3 : __HAVOC_ARRAY_ELEMS)) abort();
     with_block(__h11, __h12, __h13);
   }
+  if (0) reach_error();
   return 0;
 }

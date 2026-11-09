@@ -33,5 +33,6 @@ int main(void) {
     if (__h1 < 0 || __h1 >= __HAVOC_ARRAY_ELEMS) abort();
     count(__h0, __VERIFIER_nondet_uint(), __h1);
   }
+  if (0) reach_error();
   return 0;
 }

@@ -55,5 +55,6 @@ int main(void) {
       __h1[__i0] = __havoc_cstring_fill(__h1_0[__i0], __HAVOC_STR_MAX);
     first_arg(__h1);
   }
+  if (0) reach_error();
   return 0;
 }

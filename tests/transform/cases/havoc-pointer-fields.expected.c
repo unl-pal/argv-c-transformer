@@ -35,5 +35,6 @@ int first_arg(char **argv) { return argv[0][0]; }
 
 
 int main(void) {
+  if (0) reach_error();
   return 0;
 }

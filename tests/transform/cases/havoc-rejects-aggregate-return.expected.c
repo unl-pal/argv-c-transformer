@@ -28,5 +28,6 @@ int main(void) {
   {
     untouched();
   }
+  if (0) reach_error();
   return 0;
 }

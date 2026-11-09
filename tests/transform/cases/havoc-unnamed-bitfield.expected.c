@@ -23,5 +23,6 @@ int main(void) {
     }
     is_opaque(__h0);
   }
+  if (0) reach_error();
   return 0;
 }
