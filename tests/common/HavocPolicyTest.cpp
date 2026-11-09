@@ -360,7 +360,6 @@ TEST(RenderPointerStorage, EnumElementUsesUnderlyingSuffix) {
 TEST(RenderPointerStorage, ElementWithoutSuffixIsBulkFilled) {
   for (const char *code : {"void f(long double *x) {}", "void f(int m[3][4]) {}"}) {
     auto p = planFirstParam(code);
-    EXPECT_FALSE(p.plan.fieldwiseFill) << code;
     PointerStorage s = renderPointerStorage(p.plan, "__h0", "");
     EXPECT_NE(s.decls.find("__VERIFIER_nondet_memory(__h0, sizeof(__h0));"), std::string::npos)
         << code;
@@ -430,10 +429,37 @@ TEST(RenderPointerStorage, NestedStringFieldIsFilledPerRow) {
             "      __h0[__i0].names[__i1] = __havoc_cstring_fill(__h0_0[__i0][__i1], __HAVOC_STR_MAX);\n");
 }
 
-TEST(RenderPointerStorage, RecordWithoutSuffixForAFieldIsBulkFilled) {
-  auto p = planFirstParam("struct T { int k; union { int i; float f; } u; };\n"
+TEST(RenderPointerStorage, FieldWithoutSuffixIsMemoryFilledAlone) {
+  for (const char *field : {"union { int i; float f; } u", "long double u", "const int u"}) {
+    auto p = planFirstParam(std::string("struct T { int k; ") + field + "; };\n" +
+                            "void f(struct T *t) {}");
+    PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+    EXPECT_EQ(s.decls,
+              "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+              "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+              "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
+              "    __VERIFIER_nondet_memory((void *)&__h0[__i0].u, sizeof(__h0[__i0].u));\n"
+              "  }\n")
+        << field;
+  }
+}
+
+TEST(RenderPointerStorage, UnaddressableBitfieldMemoryFillsItsRecord) {
+  auto p = planFirstParam("struct In { int a; const int b : 3; };\n"
+                          "struct T { int k; struct In in; };\n"
                           "void f(struct T *t) {}");
-  EXPECT_FALSE(p.plan.fieldwiseFill);
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+  EXPECT_EQ(s.decls,
+            "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+            "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+            "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
+            "    __VERIFIER_nondet_memory((void *)&__h0[__i0].in, sizeof(__h0[__i0].in));\n"
+            "  }\n");
+}
+
+TEST(RenderPointerStorage, NoTypedFieldIsBulkFilled) {
+  auto p = planFirstParam("struct T { long double x; const int k; };\n"
+                          "void f(struct T *t) {}");
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
   EXPECT_EQ(s.decls, "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
                      "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
@@ -450,7 +476,9 @@ TEST(PlanPointer, UnionWithoutPointersIsBulkFilled) {
   auto p = planFirstParam("union Num { int i; float f; };\n"
                           "void f(union Num *n) {}");
   EXPECT_TRUE(p.plan.viable);
-  EXPECT_FALSE(p.plan.fieldwiseFill);
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "union Num *");
+  EXPECT_EQ(s.decls, "  union Num __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }
 
 TEST(PlanPointer, FlexibleArrayIsNeverViable) {
