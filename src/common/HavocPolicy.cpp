@@ -125,9 +125,6 @@ bool holdsPointer(clang::QualType type, unsigned depth = 0) {
  */
 std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool readOnly) {
   if (readOnly) return std::nullopt; // only nondet_memory can write a const member
-  if (const auto *enumDecl = llvm::dyn_cast_or_null<clang::EnumDecl>(type->getAsTagDecl()))
-    if (const clang::EnumDecl *def = enumDecl->getDefinition()) // the type may name a forward declaration
-      return verifierSuffixForType(def->getIntegerType());
   return verifierSuffixForType(type);
 }
 

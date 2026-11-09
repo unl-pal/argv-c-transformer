@@ -169,7 +169,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
 
     // clamp every integer rather than guessing which one is "the length"
     if (_Havoc.clampIntegers && anyPointer && declared->isIntegerType() &&
-        !declared->isBooleanType()) {
+        !declared->isBooleanType() && !declared->isEnumeralType()) {
       std::string local = "__h" + std::to_string(counter++);
       call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
                        " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
