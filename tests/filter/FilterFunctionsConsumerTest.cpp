@@ -66,7 +66,8 @@ FilterResult runFilter(const std::string &code,
   CountingVisitor counter(&r.ast->getASTContext(), r.funcs);
   counter.TraverseTranslationUnitDecl(r.ast->getASTContext().getTranslationUnitDecl());
 
-  FilterFunctionsConsumer filterConsumer(r.funcs, r.toRemove, &complexityConfig, &featureConfig);
+  FilterFunctionsConsumer filterConsumer(r.funcs, r.toRemove, &complexityConfig, &featureConfig,
+                                         HavocBounds{});
   filterConsumer.FilterFunctions(r.ast->getASTContext());
 
   return r;

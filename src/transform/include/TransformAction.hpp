@@ -39,7 +39,7 @@ public:
    * @param havoc  Bounds MainGenConsumer emits as __HAVOC_* macros; defaults
    *               match a bare (config-free) transform run.
    */
-  TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc = {});
+  TransformAction(llvm::raw_ostream &output, const HavocBounds &havoc);
 
   /**
    * @brief Builds the multiplexed consumer chain for the transform pipeline.
@@ -93,7 +93,7 @@ public:
    * @param output Reference to the output stream for the transformed file.
    * @param havoc  Bounds forwarded to each TransformAction this factory creates.
    */
-  ArgsFrontendFactory(llvm::raw_ostream &output, const HavocBounds &havoc = {});
+  ArgsFrontendFactory(llvm::raw_ostream &output, const HavocBounds &havoc);
 
   /**
    * @brief Called by {@code ClangTool} once per source file to create the action.

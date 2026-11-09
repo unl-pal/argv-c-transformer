@@ -46,7 +46,7 @@ public:
    */
   HavocCallsConsumer(std::shared_ptr<std::set<std::string>> discardedFunctions,
                      std::shared_ptr<std::set<std::string>> neededFwdDecls,
-                     clang::Rewriter &rewriter, HavocBounds havoc = {});
+                     clang::Rewriter &rewriter, HavocBounds havoc);
 
   /**
    * @brief Launches {@code HavocCallsVisitor} and strips any function that
