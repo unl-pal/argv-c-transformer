@@ -110,6 +110,7 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
   EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
   EXPECT_NE(yml.find("language: C"), std::string::npos);
+  EXPECT_NE(yml.find("language_version: gnu99"), std::string::npos);
   EXPECT_NE(yml.find("data_model: LP64"), std::string::npos);
 }
 

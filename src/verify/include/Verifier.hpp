@@ -174,7 +174,7 @@ public:
    * @brief Preprocesses a finalized .c file into a .i file.
    *
    * Runs clang::PrintPreprocessedAction in-process via libTooling (the same
-   * class {@code clang -E -P -std=gnu11} selects), writing the preprocessed
+   * class {@code clang -E -P -std=gnu99} selects), writing the preprocessed
    * output alongside the source with a {@code .i} extension.
    *
    * @param cPath Path to the finalized .c benchmark file.

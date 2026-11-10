@@ -22,7 +22,7 @@ Otherwise the tool can be pointed to any local repositories as the user desires.
 
 - [Setup](#setup)
   - [Quick build and install (script)](#quick-build-and-install-script)
-  - [Prequisites](#build-prequisites)
+  - [Prerequisites](#prerequisites)
   - [Build](#build)
 - [Running](#running)
   - [Configuration](#configuration)
@@ -51,7 +51,7 @@ cd argv-c-transformer
 ./scripts/install.sh --prefix ~/.local   # or install elsewhere
 ```
 
-### Prequisites
+### Prerequisites
 
 The project requires clang/LLVM 20 or newer (`CMakeLists.txt` enforces this at
 configure time) - below are some examples for different platforms.
@@ -104,7 +104,7 @@ cmake --install build
 This installs `argv-c` to the standard CMake prefix (`/usr/local` by default).
 Pass `--prefix <dir>` to install elsewhere, e.g. `cmake --install build --prefix ~/.local`.
 
-# Running
+## Running
 
 `argv-c` takes up to two positional arguments: an input path (directory
 of C files, or a single `.c` file) and/or a config file, in either order.
@@ -115,6 +115,10 @@ benchmarks are generated.
 `argv-c` runs the pipeline and outputs final benchmarks in `<input>-benchmarks`.
 Intermediate `-filtered`/ `-transformed` directories are cleaned unless the
 config file explicitly names them under \[Stage Directories\].
+
+Each input file yields one benchmark per function the harness calls:
+`foo.c` with harnessed functions `bar` and `baz` becomes `foo__bar.c` and
+`foo__baz.c`, each with its own `.yml` task file and preprocessed `.i`.
 
 ```sh
 argv-c <config>              # dirs and thresholds from the config file
@@ -132,7 +136,7 @@ Users can run single stages if building from source.
 ./build/verify    <repo>-transformed  # verify stage only    → <repo>-benchmarks/
 ```
 
-## Configuration
+### Configuration
 
 Configuration allows the user to set thresholds for filtering and other choices
 that affect the generated benchmarks. Config files use INI syntax. Any
@@ -140,13 +144,13 @@ positional argument that isn't a directory or a `.c` file is treated as the
 config file, regardless of its name or extension. See `settings.config` for
 more info.
 
-- `[Complexity Requirements]` - per-function `min,max` thresholds: `ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`, `Operations`
+- `[Complexity Requirements]` - per-function `min,max` thresholds: `ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`, `Operations` (a bare value is a minimum with no upper bound; unset metrics default to `0,9999`)
 - `[Feature Requirements]` - per-function gates: `require` | `forbid` | `ignore` (default): `Concurrency`, `FloatingPoint`, `PointerOrArray`, `PointerDeref`, `MemAlloc`, `MemFree`
-- `[File Settings]` - `FileLoC`, `fileTimeoutSecs`, `fileMemoryMB` (per-file memory cap in MB, Linux only; 0 = auto, three quarters of RAM split across workers, at least 1024), `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores; higher values are capped at the core count), `keepCompilesOnly`, `debugLevel` (0–3)
-- `[Havoc Settings]` - bounds emitted as `__HAVOC_*` macros into each benchmark: `havocArgcMin`, `havocArgcMax`, `havocStrMax`, `havocBlockMax`, `havocArrayElems`, plus `clampIntegers` (default true: bound a pointer-taking function's integer params to `[0, K)`, K the fewest elements in any pointer param's storage: a declared `T[N]` gives N, anything else `havocArrayElems`), `havocPointerDepth`, `havocFieldwise` (default true: typed per-field nondets; false = bulk `__VERIFIER_nondet_memory`; ignored at `havocPointerDepth=0`, which always bulk-fills)
+- `[File Settings]` - `FileLoC` (whole-file line count, a `min,max` range like the complexity thresholds), `fileTimeoutSecs`, `fileMemoryMB` (per-file memory cap in MB, Linux only; 0 = auto, three quarters of RAM split across workers, at least 1024), `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores; higher values are capped at the core count), `keepCompilesOnly`, `debugLevel` (0–3)
+- `[Havoc Settings]` - bounds emitted as `__HAVOC_*` macros into each benchmark: `havocArgcMin`, `havocArgcMax`, `havocStrMax`, `havocBlockMax`, `havocArrayElems`, plus `clampIntegers` (default true: bound a pointer-taking function's integer params to `[0, K)`, K the fewest elements in any pointer param's storage: a declared `T[N]` gives N, anything else `havocArrayElems`), `havocPointerDepth` (default 1: how many levels of pointers inside havocked storage get storage of their own; a function needing more is not harnessed; 0 = generic model, inner pointers left nondet), `havocFieldwise` (default true: typed per-field nondets; false = bulk `__VERIFIER_nondet_memory`; ignored at `havocPointerDepth=0`, which always bulk-fills)
 - `[Stage Directories]` - `databaseDir`, `filterDir`, `transformDir`, `benchmarkDir`
 
-# Testing
+## Testing
 
 After building you can run the test suite (GoogleTest is fetched automatically by CMake):
 
@@ -163,11 +167,13 @@ Four suites run:
 - **`transform_tests`** - golden-file tests for the transform stage
   (`tests/transform/`). Each case is a pair of files in
   `tests/transform/cases/`: `<name>.input.c` is fed through the full transform
-  pipeline (include stripping → call havocking → main generation → runtime
-  header include) and the output must match `<name>.expected.c` exactly.
+  pipeline (include stripping → call havocking → main generation →
+  `argv_c_harness.h` include) and the output must match `<name>.expected.c`
+  exactly.
 - **`transform_stage_tests`** - end-to-end tests driving the transform stage
   entry point directly (`tests/transform/`).
-- **`verify_stage_tests`** - end-to-end tests for the verify stage, including
+- **`verify_stage_tests`** - end-to-end tests for the verify stage (threshold
+  re-check, per-function benchmark splitting, task files), plus the filter's
   header closure behavior (`tests/verify/`).
 
 To add a transform test, drop a new `<name>.input.c` into the cases directory
@@ -185,7 +191,7 @@ Note: test cases that include system headers are skipped (with an explanatory
 message) when the clang resource directory cannot be resolved. This usually
 means `clang` is not on `PATH`.
 
-# Downloader (optional)
+## Downloader (optional)
 
 The downloader fetches C source repositories from GitHub for use as pipeline
 input. First setup the environment and install the `GitPython` dependency:
@@ -224,12 +230,12 @@ This treats the file as a plain list of repos (its `repository` column) and
 downloads every row unconditionally, with no filtering, into the default
 `repos/` directory.
 
-# Repository Layout
+## Repository Layout
 
 - `src/` - the C++ pipeline (filter/transform/verify/full stages, plus shared
   headers under `src/common/`).
 - `scripts/` - standalone tooling that isn't part of the C++ build:
-  `install.sh` ([Quick install](#quick-install-script)) and
+  `install.sh` ([Quick build and install](#quick-build-and-install-script)) and
   `downloader.py`/`downloader.config` ([Downloader](#downloader-optional)).
 - `properties/` - SV-Comp property files (`.prp`, with a `.md` description
   each) that generated benchmarks' `.yml` task files point to, e.g.

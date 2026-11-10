@@ -28,7 +28,7 @@
  * @brief How a pointer type should be havocked.
  */
 enum class PointerShape {
-  CString,  ///< @c char* havocked bytes with a nondet-positioned terminator.
+  CString,  ///< @c char* havocked bytes, null-terminated at the last byte.
   Block,    ///< Pointer to a sized type, no known bound.
   Array,    ///< Constant Array parameter @c T[N], using the declared bound N.
   Record,   ///< Struct/union defined in the main file.
