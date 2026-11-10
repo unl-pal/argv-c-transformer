@@ -29,6 +29,20 @@ struct HavocAction {
   clang::CharSourceRange text; // Inline, and Erase inside a macro: the file text to replace.
 };
 
+// True if E's value is an operand of an enclosing expression (`c ? f() : 0`, `(f(), 1)`), where
+// erasing its text would leave the expression malformed.
+bool feedsExpression(const clang::Expr *E, clang::ASTContext &C) {
+  clang::DynTypedNode node = clang::DynTypedNode::create(*E);
+  while (true) {
+    clang::DynTypedNodeList parents = C.getParents(node);
+    if (parents.empty()) return false;
+    const auto *parent = parents[0].get<clang::Expr>();
+    if (!parent) return false;
+    if (!clang::isa<clang::ParenExpr, clang::ImplicitCastExpr>(parent)) return true;
+    node = parents[0];
+  }
+}
+
 // True if `text` is exactly one call: parens balanced and closing at the end, with no top-level
 // `,` or `;`, which would mean the range spans several macro arguments.
 bool isSingleCallText(llvm::StringRef text) {
@@ -293,6 +307,8 @@ bool HavocCallsVisitor::VisitCallExpr(clang::CallExpr *E) {
     debugLog(4, "[transform] " + where + ": dropped void call");
     if (E->getBeginLoc().isMacroID() || E->getEndLoc().isMacroID())
       dropMacroSpelledCall(E, action->text);
+    else if (feedsExpression(E, *_C))
+      _Rewriter.ReplaceText(E->getSourceRange(), "((void)0)");
     else
       eraseStmt(E);
     return true;
