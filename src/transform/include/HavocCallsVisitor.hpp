@@ -21,7 +21,7 @@
  * @brief Havocs every in-file function call so bodies become intraprocedural.
  *
  * Primitive returns -> {@code __VERIFIER_nondet_<type>()} inline; pointer
- * returns -> stack storage filled with {@code __VERIFIER_nondet_memory} (or,
+ * returns -> storage filled with {@code __VERIFIER_nondet_memory} (or,
  * for a C string, {@code __havoc_cstring_fill}), hoisted above the enclosing
  * statement (see {@code renderPointerStorage}); void and discarded pointer
  * returns dropped; aggregate returns left as-is. Dropped calls are marked
@@ -168,8 +168,10 @@ private:
   void pruneIfNoOp(clang::Stmt *S, clang::SourceLocation keyLoc);
 
   /**
-   * @brief Havocs a pointer-returning call by hoisting stack storage above the
-   *        enclosing statement and substituting it for the call.
+   * @brief Havocs a pointer-returning call by hoisting storage above the
+   *        enclosing statement and substituting it for the call. The storage is
+   *        heap memory when the function frees the result (see resultIsFreed),
+   *        else stack.
    *
    * Storage (@ref renderPointerStorage) is emitted as statements before the
    * call's enclosing statement, and the call is replaced by a reference to it.
@@ -182,6 +184,12 @@ private:
    * @return true to continue traversal.
    */
   bool havocPointerReturn(clang::CallExpr *E, const PointerPlan &plan, const std::string &where);
+
+  /**
+   * @brief True if the enclosing function passes the variable or member that stores E's value,
+   *        or a local copied from it, to library @c free or @c realloc.
+   */
+  bool resultIsFreed(const clang::CallExpr *E) const;
 
   /**
    * @brief The statement a pointer call's storage must be hoisted above.

@@ -19,6 +19,8 @@
 #include <clang/Lex/Lexer.h>
 #include <clang/Rewrite/Core/Rewriter.h>
 #include <optional>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -188,6 +190,55 @@ void eatTrailingSemicolon(clang::ASTContext *C, clang::Rewriter &rewriter, const
     rewriter.RemoveText(next->getLocation(), next->getLength());
 }
 
+// An lvalue naming a variable or a member chain within one (`v`, `s.a.b`, `s->buf`).
+struct StoreTarget {
+  const clang::VarDecl *base;
+  std::vector<const clang::FieldDecl *> fields;
+  bool operator==(const StoreTarget &) const = default;
+};
+
+std::optional<StoreTarget> lvalueTarget(const clang::Expr *E) {
+  if (!E) return std::nullopt;
+  E = E->IgnoreParenCasts();
+  std::vector<const clang::FieldDecl *> fields;
+  while (const auto *member = clang::dyn_cast<clang::MemberExpr>(E)) {
+    const auto *field = clang::dyn_cast<clang::FieldDecl>(member->getMemberDecl());
+    if (!field) return std::nullopt;
+    fields.insert(fields.begin(), field);
+    E = member->getBase()->IgnoreParenCasts();
+  }
+  const auto *ref = clang::dyn_cast<clang::DeclRefExpr>(E);
+  const auto *var = ref ? clang::dyn_cast<clang::VarDecl>(ref->getDecl()) : nullptr;
+  if (!var) return std::nullopt;
+  return StoreTarget{var->getCanonicalDecl(), std::move(fields)};
+}
+
+// Where call E's value is stored: the variable it initializes or the lvalue it is assigned to,
+// through parens, casts and the arms of a conditional.
+std::optional<StoreTarget> storeTarget(const clang::CallExpr *E, clang::ASTContext &C) {
+  clang::DynTypedNode node = clang::DynTypedNode::create(*E);
+  while (true) {
+    clang::DynTypedNodeList parents = C.getParents(node);
+    if (parents.empty()) return std::nullopt;
+    if (const auto *var = parents[0].get<clang::VarDecl>())
+      return StoreTarget{var->getCanonicalDecl(), {}};
+    const auto *parent = parents[0].get<clang::Expr>();
+    if (!parent) return std::nullopt;
+    if (const auto *assign = clang::dyn_cast<clang::BinaryOperator>(parent)) {
+      if (assign->getOpcode() != clang::BO_Assign || assign->getRHS() != node.get<clang::Expr>())
+        return std::nullopt;
+      return lvalueTarget(assign->getLHS());
+    }
+    if (const auto *cond = clang::dyn_cast<clang::ConditionalOperator>(parent)) {
+      if (cond->getCond() == node.get<clang::Expr>()) return std::nullopt;
+    } else if (!clang::isa<clang::ParenExpr, clang::ImplicitCastExpr, clang::CStyleCastExpr>(
+                   parent)) {
+      return std::nullopt;
+    }
+    node = parents[0];
+  }
+}
+
 std::string locString(clang::SourceManager &mgr, clang::SourceLocation loc) {
   clang::PresumedLoc presumed = mgr.getPresumedLoc(loc);
   if (!presumed.isValid()) return "<unknown>";
@@ -336,6 +387,51 @@ const clang::FunctionDecl *HavocCallsVisitor::enclosingFunction(const clang::Cal
   }
 }
 
+bool HavocCallsVisitor::resultIsFreed(const clang::CallExpr *E) const {
+  std::optional<StoreTarget> target = storeTarget(E, *_C);
+  const clang::FunctionDecl *func = enclosingFunction(E);
+  if (!target || !func || !func->getBody()) return false;
+
+  std::vector<const clang::Expr *> freed;
+  std::vector<std::pair<const clang::VarDecl *, const clang::Expr *>> copies; // local = expr
+  auto walk = [&](auto &self, const clang::Stmt *S) -> void {
+    if (!S) return;
+    if (const auto *call = clang::dyn_cast<clang::CallExpr>(S)) {
+      std::optional<HavocAction> action = classifyCall(call, *_C, _Havoc);
+      if (action && action->mode != HavocAction::Mode::Reject)
+        return; // replaced outright, arguments included
+      const clang::FunctionDecl *callee = call->getDirectCallee();
+      if (!action && callee && callee->getIdentifier() && call->getNumArgs() > 0 &&
+          (callee->getName() == "free" || callee->getName() == "realloc"))
+        freed.push_back(call->getArg(0));
+    } else if (const auto *assign = clang::dyn_cast<clang::BinaryOperator>(S)) {
+      std::optional<StoreTarget> lhs = lvalueTarget(assign->getLHS());
+      if (assign->getOpcode() == clang::BO_Assign && lhs && lhs->fields.empty() &&
+          lhs->base->hasLocalStorage())
+        copies.emplace_back(lhs->base, assign->getRHS());
+    } else if (const auto *declStmt = clang::dyn_cast<clang::DeclStmt>(S)) {
+      for (const clang::Decl *D : declStmt->decls())
+        if (const auto *var = clang::dyn_cast<clang::VarDecl>(D))
+          if (var->hasLocalStorage() && var->getInit())
+            copies.emplace_back(var->getCanonicalDecl(), var->getInit());
+    }
+    for (const clang::Stmt *child : S->children())
+      self(self, child);
+  };
+  walk(walk, func->getBody());
+
+  std::set<const clang::VarDecl *> aliases; // one step: `p = target; free(p);`
+  for (const auto &[var, value] : copies)
+    if (lvalueTarget(value) == target) aliases.insert(var);
+  for (const clang::Expr *arg : freed) {
+    std::optional<StoreTarget> released = lvalueTarget(arg);
+    if (!released) continue;
+    if (released == target || (released->fields.empty() && aliases.count(released->base)))
+      return true;
+  }
+  return false;
+}
+
 const clang::Stmt *HavocCallsVisitor::hoistAnchor(const clang::CallExpr *E, bool &discarded) const {
   discarded = false;
   clang::DynTypedNode node = clang::DynTypedNode::create(*E);
@@ -371,15 +467,17 @@ bool HavocCallsVisitor::havocPointerReturn(clang::CallExpr *E, const PointerPlan
 
   clang::QualType returnType = E->getCallReturnType(*_C);
   std::string stub = "__hret" + std::to_string(_StubCounter++);
+  bool heap = resultIsFreed(E); // owned memory the code frees; stack would be an invalid free
   PointerStorage store = renderPointerStorage(plan, stub, returnType.getAsString(),
-                                              /*indent=*/"");
+                                              /*indent=*/"", heap);
 
   _Rewriter.InsertText(anchor->getBeginLoc(), store.decls, /*InsertAfter=*/false,
                        /*indentNewLines=*/true);
   _Rewriter.ReplaceText(E->getSourceRange(), store.arg);
 
   if (!plan.fwdDecl.empty()) _NeededFwdDecls->insert(plan.fwdDecl);
-  debugLog(4, "[transform] " + where + ": havocked pointer call -> stack " + stub);
+  debugLog(4, "[transform] " + where + ": havocked pointer call -> " +
+                  (heap ? "heap (result freed) " : "stack ") + stub);
   return true;
 }
 

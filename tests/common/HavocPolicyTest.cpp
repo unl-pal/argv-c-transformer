@@ -398,6 +398,51 @@ TEST(RenderPointerStorage, PointerPastTheBoundRendersNothing) {
   EXPECT_TRUE(s.arg.empty());
 }
 
+// ---------------------------------------------------------------------------
+// Rendering with heap = true: top-level storage is malloc'd, sized from the
+// element type, since sizeof(name) would be the size of a pointer.
+// ---------------------------------------------------------------------------
+
+TEST(RenderPointerStorage, HeapBulkFillSpellsSizeFromElementType) {
+  auto p = planFirstParam("void f(long double *x) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "", "", true);
+  EXPECT_EQ(s.arg, "__h0");
+  EXPECT_EQ(s.decls,
+            "long double *__h0 = malloc(sizeof(long double) * __HAVOC_ARRAY_ELEMS);\n"
+            "__VERIFIER_nondet_memory(__h0, sizeof(long double) * __HAVOC_ARRAY_ELEMS);\n");
+}
+
+TEST(RenderPointerStorage, HeapMultiDimensionalElementPointsToRow) {
+  auto p = planFirstParam("void f(int (*m)[4]) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "", "", true);
+  EXPECT_EQ(s.decls,
+            "int (*__h0)[4] = malloc(sizeof(int[4]) * __HAVOC_ARRAY_ELEMS);\n"
+            "__VERIFIER_nondet_memory(__h0, sizeof(int[4]) * __HAVOC_ARRAY_ELEMS);\n");
+}
+
+TEST(RenderPointerStorage, HeapOpaqueAndCString) {
+  auto opaque = planFirstParam("void f(void *p) {}");
+  PointerStorage o = renderPointerStorage(opaque.plan, "__h0", "void *", "", true);
+  EXPECT_EQ(o.arg, "(void *)__h0");
+  EXPECT_EQ(o.decls,
+            "unsigned char *__h0 = malloc(sizeof(unsigned char) * __HAVOC_BLOCK_MAX);\n"
+            "__VERIFIER_nondet_memory(__h0, sizeof(unsigned char) * __HAVOC_BLOCK_MAX);\n");
+
+  auto str = planFirstParam("void f(const char *s) {}");
+  PointerStorage c = renderPointerStorage(str.plan, "__h0", "const char *", "", true);
+  EXPECT_EQ(c.arg, "__havoc_cstring_fill(__h0, __HAVOC_STR_MAX)");
+  EXPECT_EQ(c.decls, "char *__h0 = malloc(sizeof(char) * __HAVOC_STR_MAX);\n");
+}
+
+TEST(RenderPointerStorage, HeapKeepsNestedStorageOnStack) {
+  auto p = planFirstParam("void f(char **argv) {}", 2);
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "char **", "", true);
+  EXPECT_EQ(s.decls.substr(0, s.decls.find('\n')),
+            "char **__h0 = malloc(sizeof(char *) * __HAVOC_ARRAY_ELEMS);");
+  EXPECT_NE(s.decls.find("char __h0_0[__HAVOC_ARRAY_ELEMS][__HAVOC_STR_MAX];"), std::string::npos);
+  EXPECT_EQ(s.decls.find("sizeof(__h0)"), std::string::npos);
+}
+
 TEST(RenderPointerStorage, NestedRecordGetsARowPerElement) {
   auto p = planFirstParam("struct Leaf { int v; };\n"
                           "struct Node { int v; struct Leaf *next; };\n"

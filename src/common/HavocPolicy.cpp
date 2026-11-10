@@ -324,14 +324,14 @@ void emitLooped(const std::string &stmt, const std::vector<std::string> &dims,
 
 /**
  * @brief Fills every element of @p name per @p fills in one loop nest over
- * @p dims, or with one bulk fill if no fill has a typed nondet.
+ * @p dims, or with one bulk fill of @p bytes if no fill has a typed nondet.
  */
 void fillFieldwise(const std::vector<FieldFill> &fills, const std::string &name,
-                   const std::vector<std::string> &dims, const std::string &indent,
-                   std::string &out) {
+                   const std::string &bytes, const std::vector<std::string> &dims,
+                   const std::string &indent, std::string &out) {
   if (fills.empty()) return;
   if (std::none_of(fills.begin(), fills.end(), [](const FieldFill &f) { return f.suffix; })) {
-    out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
+    out += indent + "__VERIFIER_nondet_memory(" + name + ", " + bytes + ");\n";
     return;
   }
   const char *open = fills.size() > 1 ? " {\n" : "\n";
@@ -358,27 +358,34 @@ void fillFieldwise(const std::vector<FieldFill> &fills, const std::string &name,
  * @brief Emits @c name[outer...][count] storage for @p plan, fills it (field by
  * field when @c plan.fieldwiseFill is set, else in bulk), and assigns every
  * pointer field in every element, recursing into fields first.
+ *
+ * @param heap Declare @c name as a pointer to @c malloc'd storage instead; @p outer must be empty.
  */
 void renderStorage(const PointerPlan &plan, const std::string &name,
                    const std::vector<std::string> &outer, const std::string &indent,
-                   std::string &out) {
+                   std::string &out, bool heap = false) {
   std::string count = elementCount(plan);
-  std::string decl = name;
+  std::string element = plan.shape == PointerShape::Opaque
+                            ? "unsigned char" // alignment potentially an issue
+                            : elementType(plan).getUnqualifiedType().getAsString();
+  std::string bytes = heap ? "sizeof(" + element + ") * " + count : "sizeof(" + name + ")";
+  std::string decl = heap ? "*" + name : name;
   for (const std::string &dim : outer)
     decl += "[" + dim + "]";
-  decl += "[" + count + "]";
+  if (!heap) decl += "[" + count + "]";
   if (plan.shape == PointerShape::Opaque)
-    decl = "unsigned char " + decl; // alignment potentially an issue
-  else                              // appends an n-dimensional element's own bounds after ours
+    decl = "unsigned char " + decl;
+  else // appends an n-dimensional element's own bounds after ours
     elementType(plan).getUnqualifiedType().getAsStringInternal(decl, clang::LangOptions());
+  if (heap) decl += " = malloc(" + bytes + ")";
   out += indent + decl + ";\n";
   if (plan.shape == PointerShape::CString) return; // filled where it is referenced
 
   std::vector<std::string> dims = outer;
   dims.push_back(count);
-  if (plan.fieldwiseFill) fillFieldwise(*plan.fieldwiseFill, name, dims, indent, out);
+  if (plan.fieldwiseFill) fillFieldwise(*plan.fieldwiseFill, name, bytes, dims, indent, out);
   else
-    out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
+    out += indent + "__VERIFIER_nondet_memory(" + name + ", " + bytes + ");\n";
   for (size_t f = 0; f < plan.fields.size(); ++f) {
     const PointerPlan &field = plan.fields[f];
     std::vector<std::string> loopDims = dims;
@@ -443,12 +450,13 @@ PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr,
 }
 
 PointerStorage renderPointerStorage(const PointerPlan &plan, const std::string &name,
-                                    const std::string &castType, const std::string &indent) {
+                                    const std::string &castType, const std::string &indent,
+                                    bool heap) {
   PointerStorage out;
   if (!plan.viable) return out;
   if (plan.shape != PointerShape::Opaque && elementType(plan).isNull()) return out;
 
-  renderStorage(plan, name, {}, indent, out.decls);
+  renderStorage(plan, name, {}, indent, out.decls, heap);
   if (plan.shape == PointerShape::CString) {
     out.arg = "__havoc_cstring_fill(" + name + ", " + elementCount(plan) + ")";
   } else if (plan.shape == PointerShape::Opaque) {

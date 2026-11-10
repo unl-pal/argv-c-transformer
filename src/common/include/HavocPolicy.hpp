@@ -83,13 +83,16 @@ struct PointerStorage {
 };
 
 /**
- * @brief Declares stack storage for a viable pointer plan and fills it with
- * nondet values, for use in statement position.
+ * @brief Declares storage for a viable pointer plan and fills it with nondet
+ * values, for use in statement position.
  *
  * @param name     Unique local name for the storage; nested storage appends suffixes to it.
  * @param castType Cast applied only to the opaque byte buffer. Empty to omit.
  * @param indent   Leading whitespace for each emitted statement line.
+ * @param heap     Allocate the top-level storage with @c malloc rather than on the stack; nested
+ *                 storage stays on the stack.
  * @return The setup and argument; empty when the plan is not viable.
  */
 PointerStorage renderPointerStorage(const PointerPlan &plan, const std::string &name,
-                                    const std::string &castType, const std::string &indent = "  ");
+                                    const std::string &castType, const std::string &indent = "  ",
+                                    bool heap = false);
