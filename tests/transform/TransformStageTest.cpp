@@ -205,6 +205,22 @@ TEST_F(TransformStageTest, UntypeableCallTaintsItsFunction) {
   EXPECT_EQ(out.find("broken(__h"), std::string::npos);
 }
 
+TEST_F(TransformStageTest, ErasedVoidCallInsideExpressionLeavesVoidPlaceholder) {
+  writeFile(filterDir / "operand.c", "int g;\n"
+                                     "void note(int x) { g += x; }\n"
+                                     "int pick(int c) {\n"
+                                     "  c > 0 ? note(c) : (void)(g = 1);\n"
+                                     "  return (note(c), c);\n"
+                                     "}\n");
+
+  Transformer t(configPath.string());
+  ASSERT_GE(t.run(), 1);
+
+  std::string out = readFile(transformDir / "operand.c");
+  EXPECT_NE(out.find("c > 0 ? ((void)0) : (void)(g = 1);"), std::string::npos) << out;
+  EXPECT_NE(out.find("return (((void)0), c);"), std::string::npos) << out;
+}
+
 // Regression: Transformer::parseConfig used to drop the config's databaseDir,
 // so a standalone `transform` run built an empty HeaderIndex and passed no -I
 // paths. The quoted #include then failed to resolve and clang error-recovered
