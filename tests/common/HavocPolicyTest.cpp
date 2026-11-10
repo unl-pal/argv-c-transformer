@@ -180,7 +180,7 @@ TEST(PlanPointer, PointerArrayFieldPathsToTheArrayMember) {
 }
 
 TEST(PlanPointer, FunctionPointerFieldIsNotViable) {
-  // Nothing callable can be synthesized for it (see docs/FunctionPointerHavocking.md).
+  // Nothing callable can be synthesized for it.
   auto p = planFirstParam("struct Ops { int (*cb)(int); };\n"
                           "void f(struct Ops *o) {}",
                           3);

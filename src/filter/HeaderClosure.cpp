@@ -190,6 +190,41 @@ struct EmittedDecl {
 };
 
 /**
+ * @brief Location just past the `;` that ends the declaration whose text ends at `end`, raw-lexing
+ * so a macro spelled there (`} PACKED;`) is kept as written. Invalid if none is found before the
+ * enclosing scope closes.
+ */
+clang::SourceLocation findDeclTerminator(clang::SourceLocation end, const clang::SourceManager &mgr,
+                                         const clang::LangOptions &langOpts) {
+  std::pair<clang::FileID, unsigned> loc = mgr.getDecomposedLoc(end);
+  bool invalid = false;
+  llvm::StringRef buffer = mgr.getBufferData(loc.first, &invalid);
+  if (invalid) return {};
+  clang::Lexer lexer(mgr.getLocForStartOfFile(loc.first), langOpts, buffer.begin(),
+                     buffer.data() + loc.second, buffer.end());
+  int depth = 0;
+  clang::Token tok;
+  while (true) {
+    lexer.LexFromRawLexer(tok);
+    switch (tok.getKind()) {
+    case clang::tok::eof: return {};
+    case clang::tok::l_paren:
+    case clang::tok::l_square:
+    case clang::tok::l_brace: ++depth; break;
+    case clang::tok::r_paren:
+    case clang::tok::r_square:
+    case clang::tok::r_brace:
+      if (--depth < 0) return {};
+      break;
+    case clang::tok::semi:
+      if (depth == 0) return tok.getEndLoc();
+      break;
+    default: break;
+    }
+  }
+}
+
+/**
  * @brief Renders one declaration as EmittedDecl
  */
 std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::SourceManager &mgr,
@@ -208,6 +243,13 @@ std::optional<EmittedDecl> renderDecl(const clang::Decl *decl, const clang::Sour
                                                    : clang::CharSourceRange::getTokenRange(range),
                                       mgr, langOpts);
   if (chars.isInvalid()) return std::nullopt;
+
+  // Attributes after a record's `}` or a declarator lie outside the decl's range but change its
+  // layout or meaning
+  if (!isDefinition && decl->getDeclContext()->isFileContext())
+    if (clang::SourceLocation semi = findDeclTerminator(chars.getEnd(), mgr, langOpts);
+        semi.isValid())
+      chars.setEnd(semi);
 
   bool invalid = false;
   llvm::StringRef text = clang::Lexer::getSourceText(chars, mgr, langOpts, &invalid);
