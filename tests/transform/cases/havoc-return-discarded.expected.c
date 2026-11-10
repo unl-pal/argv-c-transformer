@@ -16,6 +16,8 @@ int discard(int n) {
 }
 
 int main(void) {
-  discard(__VERIFIER_nondet_int());
+  {
+    discard(__VERIFIER_nondet_int());
+  }
   return 0;
 }

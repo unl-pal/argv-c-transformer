@@ -14,6 +14,8 @@ int run(int n) {
 }
 
 int main(void) {
-  run(__VERIFIER_nondet_int());
+  {
+    run(__VERIFIER_nondet_int());
+  }
   return 0;
 }

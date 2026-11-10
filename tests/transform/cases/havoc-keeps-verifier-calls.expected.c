@@ -12,6 +12,8 @@ int pick(int n) {
 }
 
 int main(void) {
-  pick(__VERIFIER_nondet_int());
+  {
+    pick(__VERIFIER_nondet_int());
+  }
   return 0;
 }

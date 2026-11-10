@@ -11,10 +11,13 @@
 
 #include <clang/AST/Decl.h>
 #include <clang/AST/DeclBase.h>
+#include <clang/AST/Expr.h>
+#include <clang/AST/RecursiveASTVisitor.h>
 #include <clang/Basic/SourceManager.h>
 #include <clang/Lex/Lexer.h>
 #include <llvm/Support/Casting.h>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -27,6 +30,9 @@ MainGenConsumer::MainGenConsumer(std::shared_ptr<std::set<std::string>> discarde
 void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   clang::SourceManager &mgr = Context.getSourceManager();
 
+  std::set<const clang::FunctionDecl *> nonCallRefs =
+      collectNonCallReferences(Context, *_DiscardedFunctions);
+
   std::vector<const clang::FunctionDecl *> defined;
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
     const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
@@ -37,7 +43,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
       defined.push_back(func);
       continue;
     }
-    // remove functions stripped by filter stage
+    // Direct calls never survive havocking, so only a non-call reference needs the prototype.
+    if (nonCallRefs.count(func->getCanonicalDecl())) continue;
     clang::SourceLocation semiLoc = clang::Lexer::findLocationAfterToken(
         func->getEndLoc(), clang::tok::semi, mgr, Context.getLangOpts(), false);
     if (semiLoc.isValid()) _Rewriter.RemoveText(clang::SourceRange(func->getBeginLoc(), semiLoc));
@@ -46,13 +53,14 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   std::string harness;
   for (const clang::FunctionDecl *func : defined) {
     if (_DiscardedFunctions->count(func->getNameAsString())) {
-      //remove functions stripped by havoc stage
-      _Rewriter.RemoveText(func->getSourceRange());
+      // body is already `;`; keep that prototype if something still names the function
+      if (!nonCallRefs.count(func->getCanonicalDecl()))
+        _Rewriter.RemoveText(func->getSourceRange());
       debugLog(2, "[transform] " + func->getNameAsString() + " discarded; not harnessed");
       continue;
     }
     if (func->isMain()) {
-      harness += genMainHarness(func);
+      harness += harnessBlock(genMainHarness(func));
       continue;
     }
     if (func->isVariadic()) {
@@ -66,8 +74,8 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
                       " not harnessed");
       continue;
     }
-    harness += call.prologue;
-    harness += "  " + func->getNameAsString() + "(" + call.args + ");\n";
+    harness +=
+        harnessBlock(call.prologue + "  " + func->getNameAsString() + "(" + call.args + ");\n");
   }
 
   std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
@@ -126,7 +134,8 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
     }
 
     // clamp every integer rather than guessing which one is "the length"
-    if (anyPointer && declared->isIntegerType() && !declared->isBooleanType()) {
+    if (_Havoc.clampIntegers && anyPointer && declared->isIntegerType() &&
+        !declared->isBooleanType()) {
       std::string local = "__h" + std::to_string(counter++);
       call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
                        " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
@@ -152,4 +161,74 @@ std::string MainGenConsumer::genMainHarness(const clang::FunctionDecl *mainFn) {
   body += "  int argc = __HAVOC_ARGC();\n";
   body += "  original_main(argc, __havoc_argv_fill(argc));\n";
   return body;
+}
+
+std::string MainGenConsumer::harnessBlock(const std::string &statements) {
+  std::string block = "  {\n";
+  size_t start = 0;
+  while (start < statements.size()) {
+    size_t end = statements.find('\n', start);
+    if (end == std::string::npos) end = statements.size() - 1;
+    block += "  " + statements.substr(start, end - start + 1);
+    start = end + 1;
+  }
+  return block + "  }\n";
+}
+
+namespace {
+
+/**
+ * @brief Collects in-file functions named anywhere but a direct call, e.g. as a
+ * function pointer or a callback passed to a library call.
+ *
+ * Skips the whole subtree of a call to an in-file function, not just its callee:
+ * HavocCallsVisitor replaces or discards that call's entire text, arguments
+ * included. Also skips the bodies of discarded functions.
+ */
+class NonCallReferenceCollector : public clang::RecursiveASTVisitor<NonCallReferenceCollector> {
+public:
+  NonCallReferenceCollector(clang::SourceManager &mgr,
+                            const std::set<std::string> &discardedFunctions,
+                            std::set<const clang::FunctionDecl *> &referenced)
+      : _Mgr(mgr), _Discarded(discardedFunctions), _Referenced(referenced) {}
+
+  bool TraverseFunctionDecl(clang::FunctionDecl *decl) {
+    bool wasDiscarded = _InDiscardedBody;
+    _InDiscardedBody =
+        decl->doesThisDeclarationHaveABody() && _Discarded.count(decl->getNameAsString()) != 0;
+    bool result = RecursiveASTVisitor::TraverseFunctionDecl(decl);
+    _InDiscardedBody = wasDiscarded;
+    return result;
+  }
+
+  bool TraverseCallExpr(clang::CallExpr *call) {
+    const clang::FunctionDecl *callee = call->getDirectCallee();
+    if (callee && _Mgr.isInMainFile(_Mgr.getFileLoc(callee->getLocation())))
+      return true; // whole call is havocked or rejected away; nothing inside it survives
+    return RecursiveASTVisitor::TraverseCallExpr(call);
+  }
+
+  bool VisitDeclRefExpr(clang::DeclRefExpr *ref) {
+    if (_InDiscardedBody) return true;
+    if (const auto *func = llvm::dyn_cast<clang::FunctionDecl>(ref->getDecl()))
+      _Referenced.insert(func->getCanonicalDecl());
+    return true;
+  }
+
+private:
+  clang::SourceManager &_Mgr;
+  const std::set<std::string> &_Discarded;
+  std::set<const clang::FunctionDecl *> &_Referenced;
+  bool _InDiscardedBody = false;
+};
+
+} // namespace
+
+std::set<const clang::FunctionDecl *>
+MainGenConsumer::collectNonCallReferences(clang::ASTContext &Context,
+                                          const std::set<std::string> &discardedFunctions) {
+  std::set<const clang::FunctionDecl *> referenced;
+  NonCallReferenceCollector(Context.getSourceManager(), discardedFunctions, referenced)
+      .TraverseDecl(Context.getTranslationUnitDecl());
+  return referenced;
 }

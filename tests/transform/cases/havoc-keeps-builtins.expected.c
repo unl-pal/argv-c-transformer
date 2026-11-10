@@ -21,8 +21,14 @@ int via_macro(int v) {
 }
 
 int main(void) {
-  helper(__VERIFIER_nondet_int());
-  direct(__VERIFIER_nondet_int());
-  via_macro(__VERIFIER_nondet_int());
+  {
+    helper(__VERIFIER_nondet_int());
+  }
+  {
+    direct(__VERIFIER_nondet_int());
+  }
+  {
+    via_macro(__VERIFIER_nondet_int());
+  }
   return 0;
 }

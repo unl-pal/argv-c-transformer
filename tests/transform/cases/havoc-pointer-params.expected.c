@@ -35,22 +35,34 @@ int point_x(struct Point *p) { return p->x; }
 int unbounded(int n) { return n + 1; }
 
 int main(void) {
-  int __h0[__HAVOC_ARRAY_ELEMS];
-  __VERIFIER_nondet_memory(__h0, sizeof(__h0));
-  int __h1 = __VERIFIER_nondet_int();
-  if (__h1 < 0 || __h1 > __HAVOC_ARRAY_ELEMS) abort();
-  sum(__h0, __h1);
-  int __h2[3];
-  __VERIFIER_nondet_memory(__h2, sizeof(__h2));
-  third(__h2);
-  char __h3[__HAVOC_STR_MAX];
-  first_char(__havoc_cstring_fill(__h3, __HAVOC_STR_MAX));
-  unsigned char __h4[__HAVOC_BLOCK_MAX];
-  __VERIFIER_nondet_memory(__h4, sizeof(__h4));
-  opaque((void *)__h4);
-  struct Point __h5[__HAVOC_ARRAY_ELEMS];
-  __VERIFIER_nondet_memory(__h5, sizeof(__h5));
-  point_x(__h5);
-  unbounded(__VERIFIER_nondet_int());
+  {
+    int __h0[__HAVOC_ARRAY_ELEMS];
+    __VERIFIER_nondet_memory(__h0, sizeof(__h0));
+    int __h1 = __VERIFIER_nondet_int();
+    if (__h1 < 0 || __h1 > __HAVOC_ARRAY_ELEMS) abort();
+    sum(__h0, __h1);
+  }
+  {
+    int __h2[3];
+    __VERIFIER_nondet_memory(__h2, sizeof(__h2));
+    third(__h2);
+  }
+  {
+    char __h3[__HAVOC_STR_MAX];
+    first_char(__havoc_cstring_fill(__h3, __HAVOC_STR_MAX));
+  }
+  {
+    unsigned char __h4[__HAVOC_BLOCK_MAX];
+    __VERIFIER_nondet_memory(__h4, sizeof(__h4));
+    opaque((void *)__h4);
+  }
+  {
+    struct Point __h5[__HAVOC_ARRAY_ELEMS];
+    __VERIFIER_nondet_memory(__h5, sizeof(__h5));
+    point_x(__h5);
+  }
+  {
+    unbounded(__VERIFIER_nondet_int());
+  }
   return 0;
 }

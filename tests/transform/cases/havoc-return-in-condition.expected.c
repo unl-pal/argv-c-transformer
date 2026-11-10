@@ -27,7 +27,11 @@ int cond_while(void) {
 }
 
 int main(void) {
-  cond_if();
-  cond_while();
+  {
+    cond_if();
+  }
+  {
+    cond_while();
+  }
   return 0;
 }
