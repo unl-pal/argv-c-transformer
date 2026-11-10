@@ -104,9 +104,10 @@ the two call sites can't drift:
   main file → `unsigned char b[__HAVOC_BLOCK_MAX]`, cast to the declared pointer type.
 - **`Function`** : never viable; no value can be synthesized for a function pointer.
 
-Every shape (besides `Function`) fills its storage with `__VERIFIER_nondet_memory`, so
-there's no heap and no `free` obligation, and its declared element count bounds whatever
-indexing the callee does into it.
+Every shape (besides `Function`) fills its storage with `__VERIFIER_nondet_memory`, and
+its declared element count bounds whatever indexing the callee does into it. Storage is
+on the stack, except for the freed pointer returns described under "Memory Tracking"
+below.
 
 A struct or union tag first named inside a parameter list (`void f(struct Rect *r)`) has
 *prototype scope*, invisible outside that declaration, so a harness cast to it would
@@ -191,10 +192,73 @@ When havocking a call that returns a pointer, a raw nondet pointer value cannot 
 runs the return type through the same `planPointer`/`renderPointerStorage` pair the
 harness uses for parameters (see "Pointer Shapes" above), hoisting a uniquely-named stack
 buffer declaration above the call's enclosing statement so it outlives the call, and
-replacing the call with a plain-C reference to that storage. No heap, so no `free`
-obligation. A non-viable plan (function pointer, pointer-to-pointer, a record with
+replacing the call with a plain-C reference to that storage. The buffer is on the stack
+unless the function frees the result (see "Memory Tracking" below). A non-viable plan (function pointer, pointer-to-pointer, a record with
 pointer fields) can't be havocked, so the call is rejected and its enclosing function
 discarded (see "Rejected Calls" below); a pointer return whose value is discarded is dropped.
+
+### Memory Tracking
+
+Pointer storage is created in two places: the storage that replaces a havocked pointer
+return inside a function body, and the storage the generated `main` passes for each
+pointer parameter. Both are stack arrays by default. The memory-safety properties
+(`valid-free`, `valid-memtrack`, `valid-memcleanup`) depend on where that storage lives,
+so the choice of stack or heap decides which memory errors a benchmark can contain.
+
+The guiding rule is that the transform must not plant a memory error in a function's
+own code that the input program did not have. Hiding a real one is accepted for now.
+
+**Havocked returns.** When the enclosing function passes the stored result to library
+`free` or `realloc`, the code treats it as owned heap memory, so stack storage would
+turn a correct free into an invalid one. In that case the storage is allocated with
+`malloc` instead:
+
+```c
+// input                          // output
+char *buf = fetch();              char *__hret0 = malloc(sizeof(char) * __HAVOC_STR_MAX);
+...                               char *buf = __havoc_cstring_fill(__hret0, __HAVOC_STR_MAX);
+free(buf);                        ...
+                                  free(buf);
+```
+
+The check (`HavocCallsVisitor::resultIsFreed`) finds where the call's value is stored:
+the variable it initializes, or the variable or member chain (`s->buf`, `s.buf`) it is
+assigned to, through parentheses, casts and the arms of a conditional. It then looks
+for a library `free`/`realloc` in the same function whose argument names that location,
+or a local copied from it in one step (`p = buf; free(p);`). Declarations are compared,
+never names. A free inside another in-file function is ignored, since that call is
+havocked away. Only the top-level storage moves to the heap; storage for pointers
+inside it stays on the stack. SV-COMP assumes `malloc` never fails, so no NULL check is
+emitted.
+
+Every other return keeps stack storage. Always using the heap would plant leaks the
+input never had, for example for a callee that returns a pointer into a static buffer.
+Two gaps are accepted:
+
+- Heap storage freed on some paths and returned or kept on others leaks. The input
+  would have handed that memory to its caller.
+- A real callee that allocates its result, called by code that never frees it, is a
+  real leak in the input. Stack storage hides it. Exposing it requires knowing what the
+  callee does, which is interprocedural by definition. When that lands, the decision
+  gains a callee side (heap when the callee returns memory it allocated) next to the
+  caller-side free check.
+
+**The harness boundary.** The generated `main` stands in for an unknown caller, and no
+attempt is made to honor the ownership contract between a target and its callers:
+
+- A target that frees its pointer parameter (`void destroy(T *p) { free(p); }`) is
+  passed stack storage, so the verifier reports an invalid free.
+- A target that returns memory it allocated has that pointer discarded by `main`, so
+  the verifier reports a leak.
+
+Both are deliberate. Intraprocedurally, a benchmark is about the function alone, and
+the caller's half of the contract (passing heap memory, freeing the result) is not part
+of it. A verifier finding at that boundary is a fact about what the function does with
+arbitrary inputs, and the benchmark is valid. Fixing either case would also need
+knowledge the harness does not have: heap-allocating a parameter freed only on some
+paths makes the harness leak it on the others, and freeing a returned pointer is only
+sound when the target really returns owned heap memory rather than a static buffer or a
+pointer into its own argument.
 
 ### Rejected Calls
 
