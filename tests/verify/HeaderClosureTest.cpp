@@ -176,6 +176,42 @@ TEST_F(HeaderClosureTest, HeaderStructIsInlinedAndSizedExactly) {
   EXPECT_TRUE(fs::exists(benchmarkDir / "area__area.i"));
 }
 
+TEST_F(HeaderClosureTest, TrailingRecordAttributesSurviveInlining) {
+  // Attributes after `}` or after a typedef's declarator are outside the decl's source range. The
+  // static asserts fail the verify stage's compile check if either attribute is dropped.
+  writeRepoFile("wire.h", "#define PACKED __attribute__((packed))\n"
+                          "struct hdr { int len; char tag; } PACKED;\n"
+                          "#define ALIGNED __attribute__((aligned(16)))\n"
+                          "typedef int wide_t ALIGNED;\n");
+  writeRepoFile("wire.c", "#include \"wire.h\"\n"
+                          "_Static_assert(sizeof(struct hdr) == 5, \"hdr unpacked\");\n"
+                          "_Static_assert(_Alignof(wide_t) == 16, \"wide_t unaligned\");\n"
+                          "int tag_of(struct hdr *h, wide_t w) { return h->tag + w; }\n");
+
+  std::string out = runPipeline("wire.c", "tag_of");
+
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  EXPECT_NE(filtered().find("struct hdr { int len; char tag; } PACKED;"), std::string::npos)
+      << filtered();
+  EXPECT_NE(filtered().find("typedef int wide_t ALIGNED;"), std::string::npos) << filtered();
+  EXPECT_NE(out.find("#define PACKED __attribute__((packed))"), std::string::npos) << out;
+}
+
+TEST_F(HeaderClosureTest, RecordWithTrailingDeclaratorIsEmittedOnce) {
+  // `struct cfg {...} defaults;` yields a RecordDecl and a VarDecl over the same text; extending
+  // the record to its `;` must not emit the definition twice.
+  writeRepoFile("cfg.h", "struct cfg { int n; } defaults;\n");
+  writeRepoFile("use.c", "#include \"cfg.h\"\n"
+                         "int limit(int k) { return k < defaults.n ? k : defaults.n; }\n");
+
+  std::string out = runPipeline("use.c", "limit");
+
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  size_t first = filtered().find("struct cfg { int n; }");
+  ASSERT_NE(first, std::string::npos) << filtered();
+  EXPECT_EQ(filtered().find("struct cfg { int n; }", first + 1), std::string::npos) << filtered();
+}
+
 TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
   // An inlined decl can depend on a system type. size_t is reachable only via
   // types.h's own #include <stddef.h>, and that directive vanishes with the
