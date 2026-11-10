@@ -160,6 +160,20 @@ TEST_F(TransformStageTest, PathComponentsWithUnsafeCharactersAreSanitized) {
   EXPECT_FALSE(fs::exists(transformDir / "weird dir:name_file.c"));
 }
 
+TEST_F(TransformStageTest, CollidingFlattenedNamesGetOrderedVariants) {
+  writeFile(filterDir / "lib" / "a b.c", "int one(int x) { return x; }\n");
+  writeFile(filterDir / "lib" / "a_b.c", "int two(int x) { return x; }\n");
+  writeFile(filterDir / "lib_a" / "b.c", "int three(int x) { return x; }\n");
+
+  Transformer t(configPath.string());
+  int count = t.run();
+
+  EXPECT_EQ(count, 3);
+  EXPECT_NE(readFile(transformDir / "lib_a_b.c").find("one("), std::string::npos);
+  EXPECT_NE(readFile(transformDir / "lib_a_b.2.c").find("two("), std::string::npos);
+  EXPECT_NE(readFile(transformDir / "lib_a_b.3.c").find("three("), std::string::npos);
+}
+
 TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
   // Every function takes a struct by value, which has no nondet equivalent and
   // is not a pointer either → none can be harnessed → empty main. (A pointer
@@ -174,6 +188,21 @@ TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
 
   EXPECT_EQ(count, 0);
   EXPECT_FALSE(fs::exists(transformDir / "aggregates_only.c"));
+}
+
+TEST_F(TransformStageTest, UntypeableCallTaintsItsFunction) {
+  // `s->fn` names no member, so the call's callee is a RecoveryExpr with no function type.
+  writeFile(filterDir / "recovery.c", "struct S { int x; };\n"
+                                      "int twice(int v) { return v + v; }\n"
+                                      "int broken(struct S *s) { return s->fn(3); }\n");
+
+  Transformer t(configPath.string());
+  int count = t.run();
+
+  EXPECT_EQ(count, 1);
+  std::string out = readFile(transformDir / "recovery.c");
+  EXPECT_NE(out.find("twice(__VERIFIER_nondet_int())"), std::string::npos);
+  EXPECT_EQ(out.find("broken(__h"), std::string::npos);
 }
 
 // Regression: Transformer::parseConfig used to drop the config's databaseDir,

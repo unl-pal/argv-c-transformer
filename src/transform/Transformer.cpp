@@ -10,6 +10,7 @@
 #include "IncludeIndex.hpp"
 #include "WorkerPool.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <iostream>
@@ -59,6 +60,7 @@ std::string sanitizePathComponent(const std::string &part) {
 //   filtered-files/antirez/redis/src/endianconv.c
 //   -> transformed-files/antirez_redis_src_endianconv.c
 std::filesystem::path Transformer::flattenedOutputPath(std::filesystem::path path) {
+  if (auto it = _collisionPaths.find(path); it != _collisionPaths.end()) return it->second;
   std::filesystem::path relPath = std::filesystem::relative(path, configuration.filterDir);
   // relative() yields "." when the input path IS the file (single-file mode).
   if (relPath.empty() || *relPath.begin() == ".." || relPath == ".") relPath = path.filename();
@@ -113,6 +115,32 @@ bool Transformer::transformFile(std::filesystem::path path) {
   return true;
 }
 
+void Transformer::assignOutputPaths(const std::vector<std::filesystem::path> &files) {
+  _collisionPaths.clear();
+  std::map<std::filesystem::path, std::vector<std::filesystem::path>> byOutput;
+  for (const std::filesystem::path &file : files)
+    byOutput[flattenedOutputPath(file)].push_back(file);
+
+  for (auto &[out, inputs] : byOutput) {
+    if (inputs.size() < 2) continue;
+    std::sort(inputs.begin(), inputs.end());
+    std::string msg = "[transform] WARNING: " + std::to_string(inputs.size()) +
+                      " files flatten to " + out.filename().string() + ":";
+    msg += "\n  " + inputs[0].string() + " -> " + out.filename().string();
+    int variant = 2;
+    for (size_t i = 1; i < inputs.size(); ++i) {
+      std::filesystem::path candidate;
+      do { // skip a variant name some other input already flattens to
+        candidate = out.parent_path() / (out.stem().string() + "." + std::to_string(variant++) +
+                                         out.extension().string());
+      } while (byOutput.count(candidate));
+      _collisionPaths[inputs[i]] = candidate;
+      msg += "\n  " + inputs[i].string() + " -> " + candidate.filename().string();
+    }
+    debugLog(0, msg);
+  }
+}
+
 void Transformer::cleanupPartialOutput(std::filesystem::path path) {
   std::filesystem::path outPath = flattenedOutputPath(path);
   // A top-level file flattens to its own name, so filterDir == transformDir
@@ -150,6 +178,7 @@ WorkerPoolResult Transformer::transformAll(std::filesystem::path path) {
   std::vector<std::filesystem::path> files;
   collectCFiles(path, files);
   _totalProcessed = static_cast<int>(files.size());
+  assignOutputPaths(files);
 
   int workers = resolveWorkerCount(configuration.nproc);
   debugLog(1, "[transform] worker pool size: " + std::to_string(workers));
@@ -168,6 +197,7 @@ WorkerPoolResult Transformer::transformAll(std::filesystem::path path) {
   work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[transform] " + msg); };
   work.label = "transform";
 
+  getResourceDir(); // resolved here so forked workers inherit it
   return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work,
                        resolveMemoryLimitMB(configuration.fileMemoryMB, workers));
 }

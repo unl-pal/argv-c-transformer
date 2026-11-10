@@ -31,7 +31,8 @@ void HavocCallsConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
   for (clang::Decl *decl : Context.getTranslationUnitDecl()->decls()) {
     const auto *func = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!func || !mgr.isInMainFile(func->getLocation())) continue;
-    if (!func->isThisDeclarationADefinition()) continue;
+    if (!func->doesThisDeclarationHaveABody())
+      continue; // an alias/ifunc decl is a bodiless definition
     bool macroDefined = func->getLocation().isMacroID();
     bool tainted = Visitor.tainted().count(func) != 0;
     if (!tainted && (macroDefined || !Visitor.isNoOp(func->getBody()))) continue;
