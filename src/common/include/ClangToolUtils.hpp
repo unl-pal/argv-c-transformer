@@ -77,11 +77,11 @@ inline std::optional<int> getPathClangMajorVersion() {
 }
 
 /**
- * @brief Returns the clang resource directory (builtin headers), preferring
+ * @brief Finds the clang resource directory (builtin headers), preferring
  * CLANG_RESOURCES or PATH's clang if it matches CLANG_VERSION_MAJOR, else
  * falling back to whichever is available with a warning.
  */
-inline std::optional<std::string> getResourceDir() {
+inline std::optional<std::string> detectResourceDir() {
   const char *r = std::getenv("CLANG_RESOURCES");
   std::optional<std::string> envResourceDir =
       r ? std::optional<std::string>(std::string(r)) : std::nullopt;
@@ -126,6 +126,13 @@ inline std::optional<std::string> getResourceDir() {
   debugLog(0, "No `clang` found on PATH to supply the resource directory (builtin "
               "headers). Set CLANG_RESOURCES to point at one, or put a clang on PATH.");
   return std::nullopt;
+}
+
+/** @brief The result of {@code detectResourceDir}, computed on first use. Call it before forking
+ * workers so they inherit the result instead of each probing and warning again. */
+inline const std::optional<std::string> &getResourceDir() {
+  static const std::optional<std::string> resourceDir = detectResourceDir();
+  return resourceDir;
 }
 
 /**

@@ -226,6 +226,7 @@ int Filterer::run() {
 
   std::cout << "[filter] processing " << toProcess.size() << " file(s) with " << workers
             << " worker(s)" << std::endl;
+  getResourceDir(); // resolved here so forked workers inherit it
   WorkerPoolResult result =
       runWorkerPool(toProcess, workers, configuration.fileTimeoutSecs, work,
                     resolveMemoryLimitMB(configuration.fileMemoryMB, workers));

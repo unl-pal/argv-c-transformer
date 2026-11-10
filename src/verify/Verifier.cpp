@@ -213,6 +213,7 @@ WorkerPoolResult Verifier::verifyAll(std::filesystem::path path) {
   work.debugLog = [](int level, const std::string &msg) { debugLog(level, "[verify] " + msg); };
   work.label = "verify";
 
+  getResourceDir(); // resolved here so forked workers inherit it
   return runWorkerPool(files, workers, configuration.fileTimeoutSecs, work,
                        resolveMemoryLimitMB(configuration.fileMemoryMB, workers));
 }

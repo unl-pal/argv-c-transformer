@@ -103,6 +103,14 @@ std::optional<HavocAction> classifyCall(const clang::CallExpr *E, clang::ASTCont
       return std::nullopt;
   }
 
+  // A callee clang could not type (a RecoveryExpr, after a parse error) has no FunctionType, and
+  // getCallReturnType reads one unconditionally.
+  clang::QualType calleeType = E->getCallee()->getType();
+  if (calleeType.isNull() ||
+      !(calleeType->isFunctionType() || calleeType->isFunctionPointerType() ||
+        calleeType->isBlockPointerType()))
+    return HavocAction{HavocAction::Mode::Reject, "", {}, {}};
+
   clang::QualType returnType = E->getCallReturnType(C);
   if (returnType.isNull() || returnType.getTypePtrOrNull() == nullptr) return std::nullopt;
 
