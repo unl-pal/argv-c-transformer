@@ -54,6 +54,11 @@ cd argv-c-transformer
 ./scripts/install.sh --prefix ~/.local   # or install elsewhere
 ```
 
+Two optional flags pin the environment to SV-COMP's (see
+[Reproducibility](#reproducibility)): `--clang20` builds against exactly
+Clang 20, and `--sysroot` also fetches the pinned system headers. Neither is
+needed to generate benchmarks.
+
 ### Prerequisites
 
 The project requires clang/LLVM 20 or newer (`CMakeLists.txt` enforces this at
@@ -167,21 +172,24 @@ repeat across machines.
 
 The `.i` files inline whichever system headers clang finds (e.g. glibc 2.17's
 `<stdio.h>` adds `extern struct _IO_FILE_plus` declarations that newer glibc
-does not). To pin them, build a sysroot once and point every stage at it:
+does not). To pin them, fetch a sysroot once, either with the installer or
+directly:
 
 ```sh
-scripts/make-sysroot.sh                  # glibc 2.39 + Linux 6.8 headers (Ubuntu 24.04)
-                                         #   → sysroot/ubuntu-24.04-amd64 (~13 MB)
+./scripts/install.sh --sysroot           # → <prefix>/share/argv-c/sysroot/ubuntu-24.04-amd64
+scripts/make-sysroot.sh                  # → sysroot/ubuntu-24.04-amd64 (or pass a directory)
 ```
 
-The script downloads four Ubuntu 24.04 `-dev` packages, checks each against a
-pinned sha256, and keeps only their headers. It needs `curl`, `ar`,
-`sha256sum`, and a `tar` that reads zstd. The result does not depend on the
-machine that built it, so it can be copied to others.
+Both download four Ubuntu 24.04 `-dev` packages (glibc 2.39, Linux 6.8
+headers), check each against a pinned sha256, and keep only their headers
+(~13 MB). This needs `curl`, `ar`, `sha256sum` or `shasum`, and a `tar` that
+reads zstd. The result does not depend on the machine that built it, so it can
+be copied to others.
 
-Then set `sysroot=sysroot/ubuntu-24.04-amd64` under `[File Settings]`, or export
-`ARGV_SYSROOT` (the config key wins if both are set). Every clang invocation
-then gets `--sysroot` and `--target=x86_64-linux-gnu`:
+A sysroot is never used implicitly. Point a run at it by setting
+`sysroot=<dir>` under `[File Settings]`, or by exporting `ARGV_SYSROOT=<dir>`
+(the config key wins if both are set); the installer prints the exact line.
+Every clang invocation then gets `--sysroot` and `--target=x86_64-linux-gnu`:
 
 - The host's `/usr/include` is no longer searched, so sources that include
   headers the sysroot lacks (e.g. `<zlib.h>`) fail the compile check and are
@@ -198,11 +206,13 @@ which header root each stage used.
 ### Pinned Clang
 
 What `argv-c` accepts and how it parses is decided by the libclang it was
-**built** against, not by the `clang` on `PATH`. That `clang` only supplies the
-resource directory (builtin headers such as `stddef.h`), and it must have the
-same major version. Clang versions differ in ways that change output (Clang 21
+**built** against, not by the `clang` on `PATH`. It also takes its builtin
+headers (`stddef.h` and friends) from that same LLVM installation, so no
+particular `clang` needs to be on `PATH` at runtime. Clang versions differ in ways that change output (Clang 21
 reports GNU case ranges as a C2y extension, for example), so build against
-Clang 20 to pin it.
+Clang 20 to pin it. `./scripts/install.sh --clang20` does this on apt and
+Homebrew systems, installing Clang 20 unless the `clang` on `PATH` already is
+20. The manual equivalent:
 
 **Linux (Debian/Ubuntu)**
 
@@ -210,7 +220,6 @@ Clang 20 to pin it.
 sudo apt install cmake ninja-build \
   clang-20 libclang-20-dev libclang-cpp20-dev llvm-20-dev lld-20 \
   zlib1g-dev libzstd-dev libedit-dev
-export PATH="/usr/lib/llvm-20/bin:$PATH"   # so the resource dir is Clang 20's too
 cmake -B build -S . -G Ninja \
   -DCMAKE_C_COMPILER=clang-20 -DCMAKE_CXX_COMPILER=clang++-20 \
   -DLLVM_DIR="$(llvm-config-20 --cmakedir)"
@@ -222,17 +231,14 @@ ninja -C build
 ```sh
 brew install cmake ninja llvm@20 lld
 LLVM20="$(brew --prefix llvm@20)"
-export PATH="$LLVM20/bin:$PATH"
 cmake -B build -S . -G Ninja \
   -DCMAKE_C_COMPILER="$LLVM20/bin/clang" -DCMAKE_CXX_COMPILER="$LLVM20/bin/clang++" \
   -DLLVM_DIR="$LLVM20/lib/cmake/llvm" -DCMAKE_OSX_SYSROOT="$(xcrun --show-sdk-path)"
 ninja -C build
 ```
 
-`scripts/install.sh` installs Clang 20 through apt only when no Clang 20+ is
-already on `PATH`, and through Homebrew it installs the latest `llvm`, so use
-the steps above when the version matters. Keep the same `PATH` when running
-`argv-c`, so the resource directory it finds stays Clang 20's.
+Without `--clang20`, `scripts/install.sh` reuses any Clang 20+ already on
+`PATH`, and through Homebrew installs the latest `llvm`.
 
 ## Testing
 

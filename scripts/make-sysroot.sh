@@ -9,7 +9,7 @@
 #
 # Usage: scripts/make-sysroot.sh [outdir]   (default: sysroot/ubuntu-24.04-amd64)
 #
-# Needs curl, ar, sha256sum, and a tar that can read zstd (GNU tar >= 1.31, or
+# Needs curl, ar, sha256sum (or shasum), and a tar that can read zstd (GNU tar >= 1.31, or
 # the zstd binary). Run it anywhere with network access and copy the result to
 # the machines that generate benchmarks; the output is host-independent.
 
@@ -41,7 +41,13 @@ for entry in "${PACKAGES[@]}"; do
   deb="$WORK/$(basename "$path")"
   echo "fetching $(basename "$path")"
   curl -sfL "$MIRROR/$path" -o "$deb"
-  echo "$sha  $deb" | sha256sum -c --quiet -
+  if command -v sha256sum >/dev/null 2>&1; then
+    checker=(sha256sum)
+  else
+    checker=(shasum -a 256) # macOS ships shasum, not sha256sum
+  fi
+  echo "$sha  $deb" | "${checker[@]}" -c --status - ||
+    { echo "error: checksum mismatch for $(basename "$path")" >&2; exit 1; }
   (cd "$WORK" && ar x "$deb" data.tar.zst)
   if tar --zstd -tf "$WORK/data.tar.zst" >/dev/null 2>&1; then
     tar --zstd -xf "$WORK/data.tar.zst" -C "$WORK/root" ./usr/include
