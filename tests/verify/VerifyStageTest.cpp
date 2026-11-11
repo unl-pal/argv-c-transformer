@@ -110,8 +110,73 @@ TEST_F(VerifyStageTest, FlatFileProducesYml) {
   EXPECT_NE(yml.find("no-overflow.prp"), std::string::npos);
   EXPECT_EQ(yml.find("termination.prp"), std::string::npos);
   EXPECT_NE(yml.find("language: C"), std::string::npos);
-  EXPECT_NE(yml.find("language_version: gnu99"), std::string::npos);
+  EXPECT_NE(yml.find("language_version: c99"), std::string::npos);
   EXPECT_NE(yml.find("data_model: LP64"), std::string::npos);
+}
+
+TEST_F(VerifyStageTest, PosixDeclRaisesLanguageVersionToGnu99) {
+  // Strict c99 defines __STRICT_ANSI__, so glibc hides POSIX declarations like strdup.
+  writeFile(filterDir / "dup.c", "#include <string.h>\n#include <stdlib.h>\n"
+                                 "int ok(int n) { char *s = strdup(\"x\"); free(s); return n > 4; }\n");
+
+  ASSERT_GE(transformAndVerify(), 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "dup__ok.i"));
+  EXPECT_NE(readFile(benchmarkDir / "dup__ok.yml").find("language_version: gnu99"),
+            std::string::npos);
+}
+
+TEST_F(VerifyStageTest, GnuExtensionRaisesLanguageVersionToGnu99) {
+  // c99 accepts statement expressions silently as an extension; -Werror=gnu must reject them.
+  writeFile(filterDir / "se.c", "int inc(int n) { return ({ int t = n; t + 1; }); }\n");
+
+  ASSERT_GE(transformAndVerify(), 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "se__inc.i"));
+  EXPECT_NE(readFile(benchmarkDir / "se__inc.yml").find("language_version: gnu99"),
+            std::string::npos);
+}
+
+TEST_F(VerifyStageTest, C11FeatureRaisesLanguageVersion) {
+  // gnu99 accepts _Generic silently as an extension. Not _Static_assert: under
+  // strict c99 glibc's <sys/cdefs.h> emulates it with a C99-legal macro.
+  writeFile(filterDir / "gen.c", "int kind(int x) { return _Generic(x, int: 1, default: 0); }\n");
+
+  ASSERT_GE(transformAndVerify(), 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "gen__kind.i"));
+  EXPECT_NE(readFile(benchmarkDir / "gen__kind.yml").find("language_version: c11"),
+            std::string::npos);
+}
+
+TEST_F(VerifyStageTest, C11FeatureWithGnuExtensionGivesGnu11) {
+  writeFile(filterDir / "both.c", "int kind(int x) { return ({ int t = x; "
+                                  "_Generic(t, int: 1, default: 0); }); }\n");
+
+  ASSERT_GE(transformAndVerify(), 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "both__kind.i"));
+  EXPECT_NE(readFile(benchmarkDir / "both__kind.yml").find("language_version: gnu11"),
+            std::string::npos);
+}
+
+TEST_F(VerifyStageTest, StandardGatedLibraryDeclRaisesLanguageVersion) {
+  // glibc declares aligned_alloc only for __STDC_VERSION__ >= C11, so under
+  // gnu99 the call is an implicit declaration and the .i would not compile.
+  writeFile(filterDir / "al.c", "#include <stdlib.h>\n"
+                                "int ok(unsigned long n) { void *p = aligned_alloc(16, n);"
+                                " free(p); return n > 4; }\n");
+
+  ASSERT_GE(transformAndVerify(), 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "al__ok.i"));
+  EXPECT_NE(readFile(benchmarkDir / "al__ok.yml").find("language_version: c11"),
+            std::string::npos);
+  EXPECT_NE(readFile(benchmarkDir / "al__ok.i").find("aligned_alloc ("), std::string::npos);
+}
+
+TEST_F(VerifyStageTest, C23AttributeRaisesLanguageVersion) {
+  writeFile(filterDir / "attr.c", "int add([[maybe_unused]] int a, int b) { return b + 1; }\n");
+
+  ASSERT_GE(transformAndVerify(), 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "attr__add.i"));
+  EXPECT_NE(readFile(benchmarkDir / "attr__add.yml").find("language_version: gnu23"),
+            std::string::npos);
 }
 
 TEST_F(VerifyStageTest, HeaderDefinedStructIsOpaqueAndStillCompiles) {

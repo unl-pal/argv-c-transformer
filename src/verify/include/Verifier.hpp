@@ -9,6 +9,7 @@
 #include "WorkerPool.hpp"
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -111,18 +112,22 @@ public:
   void collectCFiles(std::filesystem::path path, std::vector<std::filesystem::path> &files);
 
   /**
-   * @brief Checks whether a verified file compiles without errors.
+   * @brief Finds the lowest C standard a verified file compiles under.
    *
    * Runs clang::SyntaxOnlyAction in-process via libTooling (the same class
-   * `clang -fsyntax-only` selects). No stub definitions are needed for
+   * `clang -fsyntax-only` selects) with newer-standard extensions as errors,
+   * so a standard passes only if the file genuinely is that standard (c99
+   * and c11 also reject GNU extensions). gnu11 gates: on failure only gnu23 is
+   * tried, and only if gnu11 rejected a C23 feature; on success c99, gnu99,
+   * then c11 are tried for a stricter answer. No stub definitions are needed for
    * `__VERIFIER_nondet_*`: syntax-only checking never links, and
    * argv_c_harness.h (which every benchmark unconditionally `#include`s)
    * already supplies the extern declarations.
    *
    * @param path Path to the C file to check.
-   * @return true if the file compiles with no errors.
+   * @return The first standard that compiles with no errors, or nullopt if none does.
    */
-  bool checkCompilable(std::filesystem::path path);
+  std::optional<std::string> checkCompilable(std::filesystem::path path);
 
   /**
    * @brief Main entry point - runs verifyAll over transformDir.
@@ -163,24 +168,27 @@ public:
    * The task file references the preprocessed {@code .i} form of the input.
    * Properties are selected via {@code selectProperties()}.
    *
-   * @param cPath  Path to the finalized .c benchmark file.
-   * @param counts Per-function counts, forwarded to selectProperties.
+   * @param cPath            Path to the finalized .c benchmark file.
+   * @param counts           Per-function counts, forwarded to selectProperties.
+   * @param languageStandard The -std= value checkCompilable chose, written as language_version.
    */
   void
   writeBenchmarkTask(std::filesystem::path cPath,
-                     const std::unordered_map<std::string, CountingVisitor::attributes> &counts);
+                     const std::unordered_map<std::string, CountingVisitor::attributes> &counts,
+                     const std::string &languageStandard);
 
   /**
    * @brief Preprocesses a finalized .c file into a .i file.
    *
    * Runs clang::PrintPreprocessedAction in-process via libTooling (the same
-   * class {@code clang -E -P -std=gnu99} selects), writing the preprocessed
-   * output alongside the source with a {@code .i} extension.
+   * class {@code clang -E -P -std=<languageStandard>} selects), writing the
+   * preprocessed output alongside the source with a {@code .i} extension.
    *
-   * @param cPath Path to the finalized .c benchmark file.
+   * @param cPath            Path to the finalized .c benchmark file.
+   * @param languageStandard The -std= value checkCompilable chose.
    * @return true if preprocessing succeeded, false otherwise.
    */
-  bool preprocess(std::filesystem::path cPath);
+  bool preprocess(std::filesystem::path cPath, const std::string &languageStandard);
 
 private:
   /**
