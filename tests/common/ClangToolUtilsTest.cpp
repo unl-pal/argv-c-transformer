@@ -54,6 +54,13 @@ TEST_F(SysrootTest, ConfiguredSysrootBecomesDriverFlag) {
                                                       "--target=x86_64-linux-gnu"}));
 }
 
+TEST(HostTargetWarning, OnlyNonX86HostWithoutSysrootWarns) {
+  EXPECT_TRUE(hostTargetWarning(false, false).has_value());
+  EXPECT_FALSE(hostTargetWarning(false, true).has_value());
+  EXPECT_FALSE(hostTargetWarning(true, false).has_value());
+  EXPECT_FALSE(hostTargetWarning(true, true).has_value());
+}
+
 TEST_F(SysrootTest, BuildClangArgsCarriesSysroot) {
   configureSysroot(dir.string());
   std::vector<std::string> args = buildClangArgs("file.c", "/res");

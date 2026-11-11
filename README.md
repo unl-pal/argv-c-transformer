@@ -26,6 +26,9 @@ Otherwise the tool can be pointed to any local repositories as the user desires.
   - [Build](#build)
 - [Running](#running)
   - [Configuration](#configuration)
+- [Reproducibility](#reproducibility)
+  - [Pinned system headers (sysroot)](#pinned-system-headers-sysroot)
+  - [Pinned Clang](#pinned-clang)
 - [Testing](#testing)
 - [Downloader (optional)](#downloader-optional)
 - [Repository Layout](#repository-layout)
@@ -146,32 +149,90 @@ more info.
 
 - `[Complexity Requirements]` - per-function `min,max` thresholds: `ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`, `Operations` (a bare value is a minimum with no upper bound; unset metrics default to `0,9999`)
 - `[Feature Requirements]` - per-function gates: `require` | `forbid` | `ignore` (default): `Concurrency`, `FloatingPoint`, `PointerOrArray`, `PointerDeref`, `MemAlloc`, `MemFree`
-- `[File Settings]` - `FileLoC` (whole-file line count, a `min,max` range like the complexity thresholds), `fileTimeoutSecs`, `fileMemoryMB` (per-file memory cap in MB, Linux only; 0 = auto, three quarters of RAM split across workers, at least 1024), `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores; higher values are capped at the core count), `keepCompilesOnly`, `debugLevel` (0–3), `sysroot` (see below)
+- `[File Settings]` - `FileLoC` (whole-file line count, a `min,max` range like the complexity thresholds), `fileTimeoutSecs`, `fileMemoryMB` (per-file memory cap in MB, Linux only; 0 = auto, three quarters of RAM split across workers, at least 1024), `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores; higher values are capped at the core count), `keepCompilesOnly`, `debugLevel` (0–3), `sysroot` (see [Reproducibility](#reproducibility))
 - `[Havoc Settings]` - bounds emitted as `__HAVOC_*` macros into each benchmark: `havocArgcMin`, `havocArgcMax`, `havocStrMax`, `havocBlockMax`, `havocArrayElems`, plus `clampIntegers` (default true: bound a pointer-taking function's integer params to `[0, K)`, K the fewest elements in any pointer param's storage: a declared `T[N]` gives N, anything else `havocArrayElems`), `havocPointerDepth` (default 1: how many levels of pointers inside havocked storage get storage of their own; a function needing more is not harnessed; 0 = generic model, inner pointers left nondet), `havocFieldwise` (default true: typed per-field nondets; false = bulk `__VERIFIER_nondet_memory`; ignored at `havocPointerDepth=0`, which always bulk-fills)
 - `[Stage Directories]` - `databaseDir`, `filterDir`, `transformDir`, `benchmarkDir`
 
-### Reproducible system headers
+## Reproducibility
 
-The `.i` files inline whichever system headers clang finds, so by default the
-same source yields different benchmarks on hosts with different glibc versions
-(e.g. glibc 2.17's `<stdio.h>` adds `extern struct _IO_FILE_plus` declarations
-that newer glibc does not). To pin them, build a sysroot and point every stage
-at it:
+Everything in this section is optional. By default `argv-c` parses with
+whichever Clang (20+) it was built against and the host's system headers, so
+two machines can turn the same input into different benchmarks: different
+`.i` text, different compile-check discards, even a different
+`language_version`. Pinning the system headers and the Clang version makes the
+output match SV-COMP's environment (x86_64 Ubuntu 24.04, glibc 2.39) and
+repeat across machines.
+
+### Pinned system headers (sysroot)
+
+The `.i` files inline whichever system headers clang finds (e.g. glibc 2.17's
+`<stdio.h>` adds `extern struct _IO_FILE_plus` declarations that newer glibc
+does not). To pin them, build a sysroot once and point every stage at it:
 
 ```sh
 scripts/make-sysroot.sh                  # glibc 2.39 + Linux 6.8 headers (Ubuntu 24.04)
-                                         #   → sysroot/ubuntu-24.04-amd64
+                                         #   → sysroot/ubuntu-24.04-amd64 (~13 MB)
 ```
 
-then set `sysroot=sysroot/ubuntu-24.04-amd64` under `[File Settings]`, or
-export `ARGV_SYSROOT` (the config key wins if both are set). It is passed to
-clang as `--sysroot` together with `--target=x86_64-linux-gnu`, so the host's
-`/usr/include` is no longer searched and benchmarks generated on any host
-(including an Apple Silicon Mac) parse as x86_64 Linux, the platform SV-COMP
-runs on. Sources that include headers the sysroot lacks (e.g. `<zlib.h>`) fail
-the compile check and are discarded. With neither set, macOS uses the Xcode SDK
-and Linux uses the host's headers. Run with `debugLevel=1` to see which header
-root each stage used. See `docs/SystemHeaders.md` for the design.
+The script downloads four Ubuntu 24.04 `-dev` packages, checks each against a
+pinned sha256, and keeps only their headers. It needs `curl`, `ar`,
+`sha256sum`, and a `tar` that reads zstd. The result does not depend on the
+machine that built it, so it can be copied to others.
+
+Then set `sysroot=sysroot/ubuntu-24.04-amd64` under `[File Settings]`, or export
+`ARGV_SYSROOT` (the config key wins if both are set). Every clang invocation
+then gets `--sysroot` and `--target=x86_64-linux-gnu`:
+
+- The host's `/usr/include` is no longer searched, so sources that include
+  headers the sysroot lacks (e.g. `<zlib.h>`) fail the compile check and are
+  discarded.
+- Benchmarks are parsed for x86_64 Linux, the platform SV-COMP runs on, which
+  fixes `char` signedness, `long double` and `va_list` regardless of the host.
+
+Leave `sysroot` unset to generate with the host's own headers instead: macOS
+uses the Xcode SDK, Linux uses `/usr/include`. On a non-x86_64 host that also
+means the host's target, and `argv-c` prints a warning, since `char` signedness
+and `long double` then differ from SV-COMP's. Run with `debugLevel=1` to see
+which header root each stage used.
+
+### Pinned Clang
+
+What `argv-c` accepts and how it parses is decided by the libclang it was
+**built** against, not by the `clang` on `PATH`. That `clang` only supplies the
+resource directory (builtin headers such as `stddef.h`), and it must have the
+same major version. Clang versions differ in ways that change output (Clang 21
+reports GNU case ranges as a C2y extension, for example), so build against
+Clang 20 to pin it.
+
+**Linux (Debian/Ubuntu)**
+
+```sh
+sudo apt install cmake ninja-build \
+  clang-20 libclang-20-dev libclang-cpp20-dev llvm-20-dev lld-20 \
+  zlib1g-dev libzstd-dev libedit-dev
+export PATH="/usr/lib/llvm-20/bin:$PATH"   # so the resource dir is Clang 20's too
+cmake -B build -S . -G Ninja \
+  -DCMAKE_C_COMPILER=clang-20 -DCMAKE_CXX_COMPILER=clang++-20 \
+  -DLLVM_DIR="$(llvm-config-20 --cmakedir)"
+ninja -C build
+```
+
+**macOS (Homebrew)**
+
+```sh
+brew install cmake ninja llvm@20 lld
+LLVM20="$(brew --prefix llvm@20)"
+export PATH="$LLVM20/bin:$PATH"
+cmake -B build -S . -G Ninja \
+  -DCMAKE_C_COMPILER="$LLVM20/bin/clang" -DCMAKE_CXX_COMPILER="$LLVM20/bin/clang++" \
+  -DLLVM_DIR="$LLVM20/lib/cmake/llvm" -DCMAKE_OSX_SYSROOT="$(xcrun --show-sdk-path)"
+ninja -C build
+```
+
+`scripts/install.sh` installs Clang 20 through apt only when no Clang 20+ is
+already on `PATH`, and through Homebrew it installs the latest `llvm`, so use
+the steps above when the version matters. Keep the same `PATH` when running
+`argv-c`, so the resource directory it finds stays Clang 20's.
 
 ## Testing
 

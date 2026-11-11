@@ -75,6 +75,15 @@ inline std::string &globalSysroot() {
  * @brief Sets {@code globalSysroot} from the config's {@code sysroot}, else {@code $ARGV_SYSROOT},
  * else clears it, and logs the header root in use. Exits if the chosen directory doesn't exist.
  */
+/** @brief The warning for a run whose benchmarks won't target x86_64 Linux, or nullopt: a
+ * configured sysroot pins the target, so only a non-x86_64 host without one warns. */
+inline std::optional<std::string> hostTargetWarning(bool hostIsX86_64, bool sysrootConfigured) {
+  if (hostIsX86_64 || sysrootConfigured) return std::nullopt;
+  return "Warning: not an x86_64 host and no sysroot configured, so benchmarks are parsed for "
+         "this host's target; char signedness, long double and system headers can differ from "
+         "SV-COMP's x86_64 Linux. Set sysroot (see scripts/make-sysroot.sh) to target x86_64.";
+}
+
 inline void configureSysroot(const std::string &fromConfig) {
   std::string chosen = fromConfig;
   if (chosen.empty())
@@ -93,6 +102,17 @@ inline void configureSysroot(const std::string &fromConfig) {
     debugLog(1, "System headers: host defaults (no sysroot configured)");
   }
   globalSysroot() = chosen;
+#if defined(__x86_64__) || defined(_M_X64)
+  constexpr bool hostIsX86_64 = true;
+#else
+  constexpr bool hostIsX86_64 = false;
+#endif
+  static bool warned = false; // each stage configures; a full run warns once
+  if (std::optional<std::string> w = hostTargetWarning(hostIsX86_64, !chosen.empty());
+      w && !warned) {
+    std::cerr << *w << std::endl;
+    warned = true;
+  }
 }
 
 /** @brief Target a configured sysroot is parsed for: SV-COMP's platform, which fixes char
