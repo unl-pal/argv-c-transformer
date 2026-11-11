@@ -192,11 +192,12 @@ void eatTrailingSemicolon(clang::ASTContext *C, clang::Rewriter &rewriter, const
 
 // An lvalue naming a variable or a member chain within one (`v`, `s.a.b`, `s->buf`).
 struct StoreTarget {
-  const clang::VarDecl *base;
-  std::vector<const clang::FieldDecl *> fields;
-  bool operator==(const StoreTarget &) const = default;
+  const clang::VarDecl *base;                           // variable being initialized or assigned to
+  std::vector<const clang::FieldDecl *> fields;         // members path from base to lvalue
+  bool operator==(const StoreTarget &) const = default; // equality is defined by members
 };
 
+// used to identify the thing being freed
 std::optional<StoreTarget> lvalueTarget(const clang::Expr *E) {
   if (!E) return std::nullopt;
   E = E->IgnoreParenCasts();
@@ -213,8 +214,7 @@ std::optional<StoreTarget> lvalueTarget(const clang::Expr *E) {
   return StoreTarget{var->getCanonicalDecl(), std::move(fields)};
 }
 
-// Where call E's value is stored: the variable it initializes or the lvalue it is assigned to,
-// through parens, casts and the arms of a conditional.
+// Where call E's value is stored: the variable it initializes or the lvalue it is assigned to
 std::optional<StoreTarget> storeTarget(const clang::CallExpr *E, clang::ASTContext &C) {
   clang::DynTypedNode node = clang::DynTypedNode::create(*E);
   while (true) {
@@ -387,6 +387,7 @@ const clang::FunctionDecl *HavocCallsVisitor::enclosingFunction(const clang::Cal
   }
 }
 
+// does the stored result of @p E get passed to free/realloc in the encolsing function
 bool HavocCallsVisitor::resultIsFreed(const clang::CallExpr *E) const {
   std::optional<StoreTarget> target = storeTarget(E, *_C);
   const clang::FunctionDecl *func = enclosingFunction(E);
@@ -394,12 +395,15 @@ bool HavocCallsVisitor::resultIsFreed(const clang::CallExpr *E) const {
 
   std::vector<const clang::Expr *> freed;
   std::vector<std::pair<const clang::VarDecl *, const clang::Expr *>> copies; // local = expr
-  auto walk = [&](auto &self, const clang::Stmt *S) -> void {
-    if (!S) return;
+  std::vector<const clang::Stmt *> work{func->getBody()};
+  while (!work.empty()) {
+    const clang::Stmt *S = work.back();
+    work.pop_back();
+    if (!S) continue;
     if (const auto *call = clang::dyn_cast<clang::CallExpr>(S)) {
       std::optional<HavocAction> action = classifyCall(call, *_C, _Havoc);
       if (action && action->mode != HavocAction::Mode::Reject)
-        return; // replaced outright, arguments included
+        continue; // replaced outright, arguments included
       const clang::FunctionDecl *callee = call->getDirectCallee();
       if (!action && callee && callee->getIdentifier() && call->getNumArgs() > 0 &&
           (callee->getName() == "free" || callee->getName() == "realloc"))
@@ -416,9 +420,8 @@ bool HavocCallsVisitor::resultIsFreed(const clang::CallExpr *E) const {
             copies.emplace_back(var->getCanonicalDecl(), var->getInit());
     }
     for (const clang::Stmt *child : S->children())
-      self(self, child);
-  };
-  walk(walk, func->getBody());
+      work.push_back(child);
+  }
 
   std::set<const clang::VarDecl *> aliases; // one step: `p = target; free(p);`
   for (const auto &[var, value] : copies)

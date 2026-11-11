@@ -415,9 +415,8 @@ TEST(RenderPointerStorage, HeapBulkFillSpellsSizeFromElementType) {
 TEST(RenderPointerStorage, HeapMultiDimensionalElementPointsToRow) {
   auto p = planFirstParam("void f(int (*m)[4]) {}");
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "", "", true);
-  EXPECT_EQ(s.decls,
-            "int (*__h0)[4] = malloc(sizeof(int[4]) * __HAVOC_ARRAY_ELEMS);\n"
-            "__VERIFIER_nondet_memory(__h0, sizeof(int[4]) * __HAVOC_ARRAY_ELEMS);\n");
+  EXPECT_EQ(s.decls, "int (*__h0)[4] = malloc(sizeof(int[4]) * __HAVOC_ARRAY_ELEMS);\n"
+                     "__VERIFIER_nondet_memory(__h0, sizeof(int[4]) * __HAVOC_ARRAY_ELEMS);\n");
 }
 
 TEST(RenderPointerStorage, HeapOpaqueAndCString) {

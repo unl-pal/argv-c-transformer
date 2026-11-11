@@ -207,10 +207,13 @@ clang::SourceLocation findDeclTerminator(clang::SourceLocation end, const clang:
   while (true) {
     lexer.LexFromRawLexer(tok);
     switch (tok.getKind()) {
-    case clang::tok::eof: return {};
+    case clang::tok::eof:
+      return {};
     case clang::tok::l_paren:
     case clang::tok::l_square:
-    case clang::tok::l_brace: ++depth; break;
+    case clang::tok::l_brace:
+      ++depth;
+      break;
     case clang::tok::r_paren:
     case clang::tok::r_square:
     case clang::tok::r_brace:
@@ -219,7 +222,8 @@ clang::SourceLocation findDeclTerminator(clang::SourceLocation end, const clang:
     case clang::tok::semi:
       if (depth == 0) return tok.getEndLoc();
       break;
-    default: break;
+    default:
+      break;
     }
   }
 }

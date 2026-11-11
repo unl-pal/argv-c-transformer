@@ -373,8 +373,7 @@ void renderStorage(const PointerPlan &plan, const std::string &name,
   for (const std::string &dim : outer)
     decl += "[" + dim + "]";
   if (!heap) decl += "[" + count + "]";
-  if (plan.shape == PointerShape::Opaque)
-    decl = "unsigned char " + decl;
+  if (plan.shape == PointerShape::Opaque) decl = "unsigned char " + decl;
   else // appends an n-dimensional element's own bounds after ours
     elementType(plan).getUnqualifiedType().getAsStringInternal(decl, clang::LangOptions());
   if (heap) decl += " = malloc(" + bytes + ")";
