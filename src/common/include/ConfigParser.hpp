@@ -67,6 +67,7 @@ struct PipelineConfig {
   std::string filterDir;    ///< Filter output / transform input ("" = unset).
   std::string transformDir; ///< Transform output / verify input ("" = unset).
   std::string benchmarkDir; ///< Verify output: the final benchmarks ("" = unset).
+  std::string sysroot;      ///< System-header root passed as --sysroot ("" = unset).
 };
 
 /**
@@ -265,6 +266,8 @@ inline PipelineConfig parsePipelineConfig(const std::string &configFile) {
       config.transformDir = value;
     } else if (key == "benchmarkDir") {
       config.benchmarkDir = value;
+    } else if (key == "sysroot") {
+      config.sysroot = value;
     } else {
       std::cerr << "Unknown config key: " << key << std::endl;
     }

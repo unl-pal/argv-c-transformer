@@ -146,9 +146,32 @@ more info.
 
 - `[Complexity Requirements]` - per-function `min,max` thresholds: `ForLoops`, `WhileLoops`, `IfStmt`, `CallFunc`, `Param`, `Operations` (a bare value is a minimum with no upper bound; unset metrics default to `0,9999`)
 - `[Feature Requirements]` - per-function gates: `require` | `forbid` | `ignore` (default): `Concurrency`, `FloatingPoint`, `PointerOrArray`, `PointerDeref`, `MemAlloc`, `MemFree`
-- `[File Settings]` - `FileLoC` (whole-file line count, a `min,max` range like the complexity thresholds), `fileTimeoutSecs`, `fileMemoryMB` (per-file memory cap in MB, Linux only; 0 = auto, three quarters of RAM split across workers, at least 1024), `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores; higher values are capped at the core count), `keepCompilesOnly`, `debugLevel` (0–3)
+- `[File Settings]` - `FileLoC` (whole-file line count, a `min,max` range like the complexity thresholds), `fileTimeoutSecs`, `fileMemoryMB` (per-file memory cap in MB, Linux only; 0 = auto, three quarters of RAM split across workers, at least 1024), `nproc` (files processed concurrently per stage; 0 = auto, three quarters of detected cores; higher values are capped at the core count), `keepCompilesOnly`, `debugLevel` (0–3), `sysroot` (see below)
 - `[Havoc Settings]` - bounds emitted as `__HAVOC_*` macros into each benchmark: `havocArgcMin`, `havocArgcMax`, `havocStrMax`, `havocBlockMax`, `havocArrayElems`, plus `clampIntegers` (default true: bound a pointer-taking function's integer params to `[0, K)`, K the fewest elements in any pointer param's storage: a declared `T[N]` gives N, anything else `havocArrayElems`), `havocPointerDepth` (default 1: how many levels of pointers inside havocked storage get storage of their own; a function needing more is not harnessed; 0 = generic model, inner pointers left nondet), `havocFieldwise` (default true: typed per-field nondets; false = bulk `__VERIFIER_nondet_memory`; ignored at `havocPointerDepth=0`, which always bulk-fills)
 - `[Stage Directories]` - `databaseDir`, `filterDir`, `transformDir`, `benchmarkDir`
+
+### Reproducible system headers
+
+The `.i` files inline whichever system headers clang finds, so by default the
+same source yields different benchmarks on hosts with different glibc versions
+(e.g. glibc 2.17's `<stdio.h>` adds `extern struct _IO_FILE_plus` declarations
+that newer glibc does not). To pin them, build a sysroot and point every stage
+at it:
+
+```sh
+scripts/make-sysroot.sh                  # glibc 2.39 + Linux 6.8 headers (Ubuntu 24.04)
+                                         #   → sysroot/ubuntu-24.04-amd64
+```
+
+then set `sysroot=sysroot/ubuntu-24.04-amd64` under `[File Settings]`, or
+export `ARGV_SYSROOT` (the config key wins if both are set). It is passed to
+clang as `--sysroot` together with `--target=x86_64-linux-gnu`, so the host's
+`/usr/include` is no longer searched and benchmarks generated on any host
+(including an Apple Silicon Mac) parse as x86_64 Linux, the platform SV-COMP
+runs on. Sources that include headers the sysroot lacks (e.g. `<zlib.h>`) fail
+the compile check and are discarded. With neither set, macOS uses the Xcode SDK
+and Linux uses the host's headers. Run with `debugLevel=1` to see which header
+root each stage used. See `docs/SystemHeaders.md` for the design.
 
 ## Testing
 

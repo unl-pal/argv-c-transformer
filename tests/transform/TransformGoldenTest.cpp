@@ -97,11 +97,8 @@ TEST_P(TransformGolden, MatchesExpected) {
 
   std::vector<std::string> args = {"-xc"};
   if (resourceDir) args.push_back("-resource-dir=" + *resourceDir);
-  std::optional<std::string> sysroot = getSysroot();
-  if (sysroot) {
-    args.push_back("-isysroot");
-    args.push_back(*sysroot);
-  }
+  std::vector<std::string> sysroot = sysrootArgs();
+  args.insert(args.end(), sysroot.begin(), sysroot.end());
 
   // The input's real path is used as the tool's file name so that quoted
   // includes resolve against the cases directory.

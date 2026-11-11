@@ -277,6 +277,39 @@ TEST_F(VerifyStageTest, PreprocessKeepsUsedCfloat128Typedef) {
   EXPECT_NE(i.find("typedef _Complex float __cfloat128"), std::string::npos) << i;
 }
 
+// A configured sysroot replaces the host's system headers in every clang
+// invocation, so the .i inlines the sysroot's <stdio.h> and nothing of glibc's.
+TEST_F(VerifyStageTest, PreprocessUsesConfiguredSysroot) {
+  fs::path sysroot = tmpDir / "sysroot";
+  writeFile(sysroot / "usr" / "include" / "stdio.h", "extern int argv_sysroot_marker;\n");
+  writeFile(sysroot / "usr" / "include" / "stdlib.h", "void abort(void);\n");
+  writeFile(sysroot / "usr" / "include" / "assert.h", "#define assert(e) ((void)0)\n");
+  writeConfig("sysroot = " + sysroot.string() + "\n");
+  writeFile(filterDir / "prints.c", "#include <stdio.h>\n"
+                                    "int identity(int x) { return x; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  ASSERT_TRUE(fs::exists(benchmarkDir / "prints__identity.i"));
+  std::string i = readFile(benchmarkDir / "prints__identity.i");
+  EXPECT_NE(i.find("argv_sysroot_marker"), std::string::npos);
+  EXPECT_EQ(i.find("FILE"), std::string::npos);
+}
+
+// The harness's assert() expands __FILE__; the .i must not bake in where this
+// machine happened to write the benchmark.
+TEST_F(VerifyStageTest, PreprocessOmitsOutputDirFromFileMacro) {
+  writeFile(filterDir / "plain.c", "int identity(int x) { return x; }\n");
+
+  int count = transformAndVerify();
+
+  ASSERT_GE(count, 1);
+  std::string i = readFile(benchmarkDir / "plain__identity.i");
+  EXPECT_NE(i.find("\"argv_c_harness.h\""), std::string::npos);
+  EXPECT_EQ(i.find(benchmarkDir.string()), std::string::npos);
+}
+
 TEST_F(VerifyStageTest, PreprocessDedupesExactDuplicateTypedefLines) {
   // A duplicate typedef is legal C (redeclaring to the same type is allowed
   // any number of times) and Transform never touches typedefs, so this

@@ -87,6 +87,16 @@ TEST_F(ParseIniFileTest, MissingFileYieldsEmptyMap) {
   EXPECT_TRUE(parseIniFile("/nonexistent/path/nowhere.config").empty());
 }
 
+TEST_F(ParseIniFileTest, PipelineConfigReadsSysroot) {
+  std::ofstream(iniPath) << "[File Settings]\nsysroot = /opt/sysroots/glibc-2.39 # pinned\n";
+  EXPECT_EQ(parsePipelineConfig(iniPath.string()).sysroot, "/opt/sysroots/glibc-2.39");
+}
+
+TEST_F(ParseIniFileTest, PipelineConfigSysrootDefaultsEmpty) {
+  std::ofstream(iniPath) << "debugLevel = 0\n";
+  EXPECT_TRUE(parsePipelineConfig(iniPath.string()).sysroot.empty());
+}
+
 // ---------------------------------------------------------------------------
 // Small string helpers
 // ---------------------------------------------------------------------------

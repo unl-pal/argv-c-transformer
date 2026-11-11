@@ -16,3 +16,4 @@ docs/tutorial/benchmark-files/
 # Local-only clang compatibility investigation (see docker/run.sh)
 /docker/
 /.dockerignore
+sysroot/

@@ -56,6 +56,7 @@ Verifier::Verifier(std::string configFile, std::string inputPath) : configuratio
                                    ? inputBaseName(configuration.transformDir) + "-benchmarks"
                                    : config.benchmarkDir;
   globalDebugLevel() = configuration.debugLevel;
+  configureSysroot(config.sysroot);
 }
 
 bool Verifier::verifyFile(std::filesystem::path path) {
@@ -415,8 +416,12 @@ bool Verifier::preprocess(std::filesystem::path cPath) {
 
   std::unique_ptr<clang::tooling::FrontendActionFactory> factory =
       clang::tooling::newFrontendActionFactory<clang::PrintPreprocessedAction>();
+  std::string outDir = std::filesystem::absolute(cPath).lexically_normal().parent_path().string();
   bool ok = runFrontendActionCheckingErrors(
-      cPath.string(), {"-E", "-P", "-std=" + languageStandard, "-o", iPath.string()}, *factory);
+      cPath.string(),
+      {"-E", "-P", "-std=" + languageStandard, "-fmacro-prefix-map=" + outDir + "/=", "-o",
+       iPath.string()},
+      *factory); // the prefix map keeps assert()'s __FILE__ free of this machine's output path
   if (!ok) return false;
   stripNoiseTypedefs(iPath);
   dedupeExactTypedefLines(iPath);

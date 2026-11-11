@@ -38,6 +38,7 @@ Filterer::Filterer(std::string configFile, std::string inputPath) {
     configuration.databaseDir = inputPath;
     configuration.filterDir = inputBaseName(inputPath) + "-filtered";
   }
+  configureSysroot(config.sysroot);
 };
 
 void Filterer::parseConfigFile(std::string configFile) {

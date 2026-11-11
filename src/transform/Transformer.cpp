@@ -41,6 +41,7 @@ Transformer::Transformer(std::string configFile, std::string inputPath) : config
     configuration.transformDir = inputBaseName(inputPath) + "-transformed";
   }
   globalDebugLevel() = configuration.debugLevel;
+  configureSysroot(configuration.sysroot);
 }
 
 namespace {
@@ -209,6 +210,7 @@ void Transformer::parseConfig(std::string configFile) {
   configuration.fileMemoryMB = config.fileSettings.at("fileMemoryMB");
   configuration.nproc = config.fileSettings.at("nproc");
   configuration.cleanOutput = config.fileSettings.at("cleanOutput") != 0;
+  configuration.sysroot = config.sysroot;
   if (!config.transformDir.empty()) {
     configuration.transformDir = config.transformDir;
   }

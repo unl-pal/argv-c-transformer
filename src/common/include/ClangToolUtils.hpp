@@ -54,14 +54,61 @@ inline std::optional<std::string> readCommandOutput(const char *cmd) {
   return result.empty() ? std::nullopt : std::optional<std::string>(result);
 }
 
-/** @brief Returns the macOS SDK sysroot (system C headers live inside the SDK there, not
+/** @brief Returns the macOS SDK path (system C headers live inside the SDK there, not
  * /usr/include), or nullopt on non-Apple platforms or if xcrun fails. */
-inline std::optional<std::string> getSysroot() {
+inline std::optional<std::string> getAppleSdkPath() {
 #ifndef __APPLE__
   return std::nullopt;
 #else
   return readCommandOutput("xcrun --show-sdk-path 2>/dev/null");
 #endif
+}
+
+/** @brief Process-global system-header root set by {@code configureSysroot} ("" = platform
+ * default). */
+inline std::string &globalSysroot() {
+  static std::string sysroot;
+  return sysroot;
+}
+
+/**
+ * @brief Sets {@code globalSysroot} from the config's {@code sysroot}, else {@code $ARGV_SYSROOT},
+ * else clears it, and logs the header root in use. Exits if the chosen directory doesn't exist.
+ */
+inline void configureSysroot(const std::string &fromConfig) {
+  std::string chosen = fromConfig;
+  if (chosen.empty())
+    if (const char *env = std::getenv("ARGV_SYSROOT")) chosen = env;
+  if (!chosen.empty()) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(chosen, ec)) {
+      std::cerr << "Error: sysroot '" << chosen << "' is not a directory" << std::endl;
+      std::exit(1);
+    }
+    chosen = std::filesystem::absolute(chosen).lexically_normal().string();
+    debugLog(1, "System headers: sysroot " + chosen);
+  } else if (std::optional<std::string> sdk = getAppleSdkPath()) {
+    debugLog(1, "System headers: macOS SDK " + *sdk);
+  } else {
+    debugLog(1, "System headers: host defaults (no sysroot configured)");
+  }
+  globalSysroot() = chosen;
+}
+
+/** @brief Target a configured sysroot is parsed for: SV-COMP's platform, which fixes char
+ * signedness, long double and va_list as well as the multiarch header path. */
+inline const std::string kSysrootTarget = "x86_64-linux-gnu";
+
+/**
+ * @brief Driver flags selecting the system-header root: {@code --sysroot} plus
+ * {@code --target=kSysrootTarget} for a configured one ({@code -isysroot} does not relocate
+ * /usr/include on Linux), else the macOS SDK, else none.
+ */
+inline std::vector<std::string> sysrootArgs() {
+  if (!globalSysroot().empty())
+    return {"--sysroot=" + globalSysroot(), "--target=" + kSysrootTarget};
+  if (std::optional<std::string> sdk = getAppleSdkPath()) return {"-isysroot", *sdk};
+  return {};
 }
 
 /** @brief Returns the major version of the clang on PATH, or nullopt if there isn't one or its
@@ -159,11 +206,8 @@ buildClangArgs(const std::string &filePath, const std::string &resourceDir,
   };
   for (const std::string &dir : extraIncludeDirs)
     args.push_back("-I" + dir);
-  std::optional<std::string> sysroot = getSysroot();
-  if (sysroot) {
-    args.push_back("-isysroot");
-    args.push_back(*sysroot);
-  }
+  std::vector<std::string> sysroot = sysrootArgs();
+  args.insert(args.end(), sysroot.begin(), sysroot.end());
   return args;
 }
 
@@ -243,7 +287,7 @@ inline bool runToolOnFile(const std::string &filePath,
  *
  * @param filePath      Path to the C source file to process.
  * @param extraArgs     Extra driver-style args appended after the standard
- *                      "-xc -resource-dir=... [-isysroot ...]" flags (e.g.
+ *                      "-xc -resource-dir=..." and {@code sysrootArgs} flags (e.g.
  *                      {"-E", "-P", "-o", iPath}).
  * @param factory       Factory producing the FrontendAction to run.
  * @param diagnosticsOut If non-null, filled with the formatted diagnostic text.
@@ -262,10 +306,8 @@ inline bool runFrontendActionCheckingErrors(const std::string &filePath,
   // -fno-caret-diagnostics also stops clang printing "N errors generated." to stderr
   std::vector<std::string> flags = {"-xc", "-resource-dir=" + *resourceDir, "-fparse-all-comments",
                                     "-fno-caret-diagnostics"};
-  if (std::optional<std::string> sysroot = getSysroot()) {
-    flags.push_back("-isysroot");
-    flags.push_back(*sysroot);
-  }
+  std::vector<std::string> sysroot = sysrootArgs();
+  flags.insert(flags.end(), sysroot.begin(), sysroot.end());
   flags.insert(flags.end(), extraArgs.begin(), extraArgs.end());
 
   clang::tooling::FixedCompilationDatabase compilations(".", flags);

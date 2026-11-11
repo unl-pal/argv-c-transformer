@@ -28,6 +28,7 @@ struct transformConfigs {
   int fileMemoryMB = 0;     ///< Per-child memory limit; 0 = auto.
   int nproc;                ///< Worker pool size (0 = auto, three quarters of detected cores).
   bool cleanOutput;         ///< If true, wipe a pre-populated transformDir instead of erroring.
+  std::string sysroot;      ///< Config's system-header root ("" = unset; see configureSysroot).
   /**
    * Original repo tree the filtered files came from, used only to resolve
    * quoted #includes to -I paths. Empty means no local-header resolution.
