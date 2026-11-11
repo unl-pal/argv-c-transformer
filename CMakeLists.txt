@@ -64,6 +64,10 @@ set(HEADERS_TRANSFORM src/transform/include)
 set(HEADERS_VERIFY src/verify/include)
 set(HEADERS_COMMON src/common/include)
 
+set(SOURCE_COMMON
+  src/common/HavocPolicy.cpp
+)
+
 set(SOURCE_FILTER
   src/filter/CountingConsumer.cpp
   src/filter/CountingVisitor.cpp
@@ -92,15 +96,19 @@ set(SOURCE_VERIFY
   src/verify/VerifyFunctionsConsumer.cpp
 )
 
+add_library(common_lib STATIC ${SOURCE_COMMON})
+target_include_directories(common_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_COMMON})
+target_link_libraries(common_lib PRIVATE ${LLVM_LIBS})
+
 # filter_lib / transform_lib / verify_lib let the test binaries link the
 # pipelines without pulling in main()
 add_library(filter_lib STATIC ${SOURCE_FILTER})
 target_include_directories(filter_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_FILTER} ${HEADERS_COMMON})
-target_link_libraries(filter_lib PRIVATE ${LLVM_LIBS})
+target_link_libraries(filter_lib PRIVATE common_lib ${LLVM_LIBS})
 
 add_library(transform_lib STATIC ${SOURCE_TRANSFORM})
 target_include_directories(transform_lib SYSTEM PRIVATE ${LLVM_INCLUDE_DIRS} ${HEADERS_TRANSFORM} ${HEADERS_COMMON})
-target_link_libraries(transform_lib PRIVATE ${LLVM_LIBS})
+target_link_libraries(transform_lib PRIVATE common_lib ${LLVM_LIBS})
 
 # verify reuses the filter's counting/removal consumers, hence HEADERS_FILTER
 # and the filter_lib link

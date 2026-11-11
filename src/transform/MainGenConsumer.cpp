@@ -109,7 +109,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
   for (const clang::ParmVarDecl *parm : func->parameters()) {
     PointerPlan plan;
     if (!verifierSuffixForType(parm->getOriginalType())) {
-      plan = planPointer(parm->getOriginalType(), mgr);
+      plan = planPointer(parm->getOriginalType(), mgr, _Havoc.pointerDepth);
       if (!plan.viable) return call;
       anyPointer = true;
     }
@@ -126,7 +126,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
     if (!suffix) {
       std::string local = "__h" + std::to_string(counter++);
       PointerStorage store =
-          renderPointerStorage(plans[i], declared, local, parm->getType().getAsString());
+          renderPointerStorage(plans[i], local, parm->getType().getAsString());
       call.prologue += store.decls;
       call.args += store.arg;
       if (!plans[i].fwdDecl.empty()) _NeededFwdDecls->insert(plans[i].fwdDecl);
