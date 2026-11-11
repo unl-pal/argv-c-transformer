@@ -54,6 +54,23 @@ TEST_F(SysrootTest, ConfiguredSysrootBecomesDriverFlag) {
                                                       "--target=x86_64-linux-gnu"}));
 }
 
+TEST(ResourceDir, FoundWithoutClangOnPath) {
+  std::optional<std::string> built = buildResourceDir();
+  if (!built) GTEST_SKIP() << "build LLVM's resource dir not present on this machine";
+  EXPECT_EQ(fs::path(*built).filename().string(), std::to_string(CLANG_VERSION_MAJOR));
+
+  const char *oldPath = std::getenv("PATH");
+  const char *oldRes = std::getenv("CLANG_RESOURCES");
+  std::string savedPath = oldPath ? oldPath : "", savedRes = oldRes ? oldRes : "";
+  setenv("PATH", "/nonexistent", 1);
+  unsetenv("CLANG_RESOURCES");
+  std::optional<std::string> found = detectResourceDir();
+  setenv("PATH", savedPath.c_str(), 1);
+  if (oldRes) setenv("CLANG_RESOURCES", savedRes.c_str(), 1);
+
+  EXPECT_EQ(found, built);
+}
+
 TEST(HostTargetWarning, OnlyNonX86HostWithoutSysrootWarns) {
   EXPECT_TRUE(hostTargetWarning(false, false).has_value());
   EXPECT_FALSE(hostTargetWarning(false, true).has_value());

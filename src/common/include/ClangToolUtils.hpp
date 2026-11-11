@@ -143,10 +143,21 @@ inline std::optional<int> getPathClangMajorVersion() {
   }
 }
 
+/** @brief The resource directory of the LLVM this was built against, if it still exists here. */
+inline std::optional<std::string> buildResourceDir() {
+#ifdef ARGV_C_BUILD_RESOURCE_DIR
+  std::error_code ec;
+  if (std::filesystem::exists(
+          std::filesystem::path(ARGV_C_BUILD_RESOURCE_DIR) / "include" / "stddef.h", ec))
+    return std::string(ARGV_C_BUILD_RESOURCE_DIR);
+#endif
+  return std::nullopt;
+}
+
 /**
  * @brief Finds the clang resource directory (builtin headers), preferring
- * CLANG_RESOURCES or PATH's clang if it matches CLANG_VERSION_MAJOR, else
- * falling back to whichever is available with a warning.
+ * CLANG_RESOURCES if it matches CLANG_VERSION_MAJOR, then the build LLVM's own,
+ * then PATH's clang, falling back to a mismatched one with a warning.
  */
 inline std::optional<std::string> detectResourceDir() {
   const char *r = std::getenv("CLANG_RESOURCES");
@@ -159,12 +170,14 @@ inline std::optional<std::string> detectResourceDir() {
       if (std::stoi(basename) == CLANG_VERSION_MAJOR) return envResourceDir;
       debugLog(0, "CLANG_RESOURCES (" + *envResourceDir + ") looks like Clang " + basename +
                       ", but this was built against Clang " + std::to_string(CLANG_VERSION_MAJOR) +
-                      ". Preferring a matching clang on PATH if one is found.");
+                      ". Preferring a matching resource directory if one is found.");
     } catch (...) {
       // Non-numeric basename; can't validate it, so trust it as given.
       return envResourceDir;
     }
   }
+
+  if (std::optional<std::string> built = buildResourceDir()) return built;
 
   std::optional<int> pathVersion = getPathClangMajorVersion();
   if (pathVersion) {

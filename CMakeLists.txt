@@ -56,6 +56,9 @@ if(LLVM_PACKAGE_VERSION VERSION_LESS "20")
 endif()
 
 link_directories(${LLVM_LIBRARY_DIRS})
+# The builtin headers matching the libclang linked below, so no clang on PATH is needed to find them
+add_compile_definitions(
+  ARGV_C_BUILD_RESOURCE_DIR="${LLVM_LIBRARY_DIR}/clang/${LLVM_VERSION_MAJOR}")
 
 set(LLVM_LIBS LLVM LLVMSupport clang-cpp clang)
 
