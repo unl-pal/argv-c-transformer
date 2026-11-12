@@ -21,5 +21,6 @@ int main(void) {
     int argc = __HAVOC_ARGC();
     original_main(argc, __havoc_argv_fill(argc));
   }
+  if (0) reach_error();
   return 0;
 }

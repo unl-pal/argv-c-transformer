@@ -44,13 +44,12 @@ void __VERIFIER_nondet_memory(void *mem, size_t size) {
 void reach_error(void) { assert(0); }
 
 /* Havocked C string storage: null-terminated nondet_memory.
- * Used for havocking argv and at char-pointer return call sites*/
+ * Used for havocking argv and at char-pointer return call sites.
+ * Terminating only the last byte still allows every length below cap,
+ * since any earlier nondet byte may be 0. */
 static inline char *__havoc_cstring_fill(char *buf, size_t cap) {
   __VERIFIER_nondet_memory(buf, cap);
-  size_t len = __VERIFIER_nondet_size_t();
-  if (len >= cap)
-    abort();
-  buf[len] = 0;
+  buf[cap - 1] = 0;
   return buf;
 }
 
@@ -61,8 +60,7 @@ static inline char *__havoc_cstring_fill(char *buf, size_t cap) {
 /* Havocked, bounded argc (macros defined within each benchmark) */
 static inline int __havoc_argc(void) {
   int argc = __VERIFIER_nondet_int();
-  if (argc < __HAVOC_ARGC_MIN || argc > __HAVOC_ARGC_MAX)
-    abort();
+  if (argc < __HAVOC_ARGC_MIN || argc > __HAVOC_ARGC_MAX) abort();
   return argc;
 }
 #define __HAVOC_ARGC() __havoc_argc()

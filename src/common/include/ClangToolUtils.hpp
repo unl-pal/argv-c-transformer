@@ -77,11 +77,11 @@ inline std::optional<int> getPathClangMajorVersion() {
 }
 
 /**
- * @brief Returns the clang resource directory (builtin headers), preferring
+ * @brief Finds the clang resource directory (builtin headers), preferring
  * CLANG_RESOURCES or PATH's clang if it matches CLANG_VERSION_MAJOR, else
  * falling back to whichever is available with a warning.
  */
-inline std::optional<std::string> getResourceDir() {
+inline std::optional<std::string> detectResourceDir() {
   const char *r = std::getenv("CLANG_RESOURCES");
   std::optional<std::string> envResourceDir =
       r ? std::optional<std::string>(std::string(r)) : std::nullopt;
@@ -126,6 +126,13 @@ inline std::optional<std::string> getResourceDir() {
   debugLog(0, "No `clang` found on PATH to supply the resource directory (builtin "
               "headers). Set CLANG_RESOURCES to point at one, or put a clang on PATH.");
   return std::nullopt;
+}
+
+/** @brief The result of {@code detectResourceDir}, computed on first use. Call it before forking
+ * workers so they inherit the result instead of each probing and warning again. */
+inline const std::optional<std::string> &getResourceDir() {
+  static const std::optional<std::string> resourceDir = detectResourceDir();
+  return resourceDir;
 }
 
 /**
@@ -252,7 +259,9 @@ inline bool runFrontendActionCheckingErrors(const std::string &filePath,
     return false;
   }
 
-  std::vector<std::string> flags = {"-xc", "-resource-dir=" + *resourceDir, "-fparse-all-comments"};
+  // -fno-caret-diagnostics also stops clang printing "N errors generated." to stderr
+  std::vector<std::string> flags = {"-xc", "-resource-dir=" + *resourceDir, "-fparse-all-comments",
+                                    "-fno-caret-diagnostics"};
   if (std::optional<std::string> sysroot = getSysroot()) {
     flags.push_back("-isysroot");
     flags.push_back(*sysroot);
@@ -273,6 +282,7 @@ inline bool runFrontendActionCheckingErrors(const std::string &filePath,
   clang::TextDiagnosticPrinter diagPrinter(diagStream, diagOpts.get());
 #endif
   tool.setDiagnosticConsumer(&diagPrinter);
+  tool.setPrintErrorMessage(false); // the caller reports failures at its own debug level
 
   try {
     tool.run(&factory);
@@ -299,7 +309,8 @@ inline bool harnessIsEmpty(std::filesystem::path path) {
   std::stringstream buffer;
   buffer << in.rdbuf();
   std::string content = buffer.str();
-  return content.find("int main(void) {\n  return 0;\n}") != std::string::npos;
+  return content.find("int main(void) {\n  if (0) reach_error();\n  return 0;\n}") !=
+         std::string::npos;
 }
 
 /** @brief Formats a duration as "Xm YY.Ys" (minutes elided under 60s), for stage summary output. */

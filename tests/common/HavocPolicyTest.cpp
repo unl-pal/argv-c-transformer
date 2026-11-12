@@ -31,8 +31,7 @@ struct Parsed {
 // classifies its declared (pre-decay) type. The ASTUnit is returned alongside
 // the plan because the plan's strings outlive nothing but the AST must stay
 // alive for the duration of the parse itself.
-Parsed planFirstParam(const std::string &code, unsigned depth = 1,
-                      const std::string &func = "f") {
+Parsed planFirstParam(const std::string &code, unsigned depth = 1, const std::string &func = "f") {
   Parsed p;
   p.ast = clang::tooling::buildASTFromCodeWithArgs(code, {"-xc"}, "test.c");
   EXPECT_NE(p.ast, nullptr) << "AST failed to build for:\n" << code;
@@ -181,7 +180,7 @@ TEST(PlanPointer, PointerArrayFieldPathsToTheArrayMember) {
 }
 
 TEST(PlanPointer, FunctionPointerFieldIsNotViable) {
-  // Nothing callable can be synthesized for it (see docs/FunctionPointerHavocking.md).
+  // Nothing callable can be synthesized for it.
   auto p = planFirstParam("struct Ops { int (*cb)(int); };\n"
                           "void f(struct Ops *o) {}",
                           3);
@@ -421,12 +420,12 @@ TEST(RenderPointerStorage, NestedStringFieldIsFilledPerRow) {
                           "void f(struct Names *n) {}",
                           2);
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct Names *");
-  EXPECT_EQ(s.decls,
-            "  struct Names __h0[__HAVOC_ARRAY_ELEMS];\n"
-            "  char __h0_0[__HAVOC_ARRAY_ELEMS][4][__HAVOC_STR_MAX];\n"
-            "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
-            "    for (int __i1 = 0; __i1 < 4; ++__i1)\n"
-            "      __h0[__i0].names[__i1] = __havoc_cstring_fill(__h0_0[__i0][__i1], __HAVOC_STR_MAX);\n");
+  EXPECT_EQ(s.decls, "  struct Names __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  char __h0_0[__HAVOC_ARRAY_ELEMS][4][__HAVOC_STR_MAX];\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    for (int __i1 = 0; __i1 < 4; ++__i1)\n"
+                     "      __h0[__i0].names[__i1] = __havoc_cstring_fill(__h0_0[__i0][__i1], "
+                     "__HAVOC_STR_MAX);\n");
 }
 
 TEST(RenderPointerStorage, FieldWithoutSuffixIsMemoryFilledAlone) {
@@ -462,21 +461,21 @@ TEST(RenderPointerStorage, AnonymousMemberFillPrecedesItsRecordsTypedFills) {
     auto p = planFirstParam(std::string("struct T { int k; ") + member + "; short z; };\n" +
                             "void f(struct T *t) {}");
     PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
-    EXPECT_EQ(s.decls,
-              "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
-              "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
-              "    __VERIFIER_nondet_memory((void *)&__h0[__i0], sizeof(__h0[__i0]));\n"
-              "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
-              "    __h0[__i0].z = __VERIFIER_nondet_short();\n"
-              "  }\n")
+    EXPECT_EQ(s.decls, "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+                       "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+                       "    __VERIFIER_nondet_memory((void *)&__h0[__i0], sizeof(__h0[__i0]));\n"
+                       "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
+                       "    __h0[__i0].z = __VERIFIER_nondet_short();\n"
+                       "  }\n")
         << member;
   }
 }
 
 TEST(RenderPointerStorage, AnonymousMemberFillStaysInsideANestedRecord) {
-  auto p = planFirstParam("struct In { int a; union { int i; float f; }; union { char c; short s; }; };\n"
-                          "struct T { int k; struct In in; };\n"
-                          "void f(struct T *t) {}");
+  auto p = planFirstParam(
+      "struct In { int a; union { int i; float f; }; union { char c; short s; }; };\n"
+      "struct T { int k; struct In in; };\n"
+      "void f(struct T *t) {}");
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
   EXPECT_EQ(s.decls,
             "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"

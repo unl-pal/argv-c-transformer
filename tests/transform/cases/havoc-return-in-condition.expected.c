@@ -35,5 +35,6 @@ int main(void) {
   {
     cond_while();
   }
+  if (0) reach_error();
   return 0;
 }

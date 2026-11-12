@@ -30,5 +30,6 @@ int main(void) {
     }
     kind_of(__h0);
   }
+  if (0) reach_error();
   return 0;
 }

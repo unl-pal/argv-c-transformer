@@ -41,7 +41,7 @@ public:
    */
   FilterAction(std::map<std::string, std::pair<int, int>> *complexityConfig,
                std::map<std::string, FeatureGate> *featureConfig, llvm::raw_fd_ostream &output,
-               HavocBounds havoc = {});
+               HavocBounds havoc);
 
   /**
    * @brief Builds a {@code MultiplexConsumer} containing all three filter passes.
@@ -108,7 +108,7 @@ public:
    */
   FrontendFactoryWithArgs(std::map<std::string, std::pair<int, int>> *complexityConfig,
                           std::map<std::string, FeatureGate> *featureConfig,
-                          llvm::raw_fd_ostream &output, HavocBounds havoc = {});
+                          llvm::raw_fd_ostream &output, HavocBounds havoc);
 
   /**
    * @brief Called by {@code ClangTool} once per source file to create the action.

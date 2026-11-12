@@ -33,5 +33,6 @@ int main(void) {
   {
     run();
   }
+  if (0) reach_error();
   return 0;
 }

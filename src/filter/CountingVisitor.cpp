@@ -122,7 +122,8 @@ bool CountingVisitor::VisitWhileStmt(clang::WhileStmt *W) {
 
 bool CountingVisitor::VisitDoStmt(clang::DoStmt *D) {
   std::optional<llvm::APSInt> cond = D->getCond()->getIntegerConstantExpr(*_C);
-  if (cond && cond->isZero()) return true; // do { } while (0) runs once: a macro wrapper, not a loop
+  if (cond && cond->isZero())
+    return true; // do { } while (0) runs once: a macro wrapper, not a loop
   if (_mgr->isInMainFile(_mgr->getExpansionLoc(D->getDoLoc())))
     _allFunctions->at(getStmtParentFuncName(*D)).Complexity.WhileLoops++;
   return true;

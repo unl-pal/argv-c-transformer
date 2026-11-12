@@ -84,8 +84,9 @@ int main(void) {
     struct Node __h5[__HAVOC_ARRAY_ELEMS];
     __VERIFIER_nondet_memory(__h5, sizeof(__h5));
     int __h6 = __VERIFIER_nondet_int();
-    if (__h6 < 0 || __h6 > __HAVOC_ARRAY_ELEMS) abort();
+    if (__h6 < 0 || __h6 >= __HAVOC_ARRAY_ELEMS) abort();
     sum_values(__h5, __h6);
   }
+  if (0) reach_error();
   return 0;
 }

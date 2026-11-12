@@ -4,7 +4,9 @@
 
 #pragma once
 
+#include <clang/AST/Decl.h>
 #include <clang/AST/Type.h>
+#include <llvm/Support/Casting.h>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -49,11 +51,18 @@ inline bool isVerifierGenerated(const std::string &name) {
  *
  * @param QT The type to resolve (e.g. `unsigned int`).
  * @return The suffix (e.g. "uint"), or std::nullopt if not a supported builtin.
+ * A defined enum gets the suffix of its underlying integer type.
  */
 inline std::optional<std::string> verifierSuffixForType(clang::QualType QT) {
   // A null type comes back from error-recovery AST nodes (e.g. calls or
   // params built from undefined macros when headers are missing).
   if (QT.isNull()) return std::nullopt;
+  if (const auto *enumDecl = llvm::dyn_cast_or_null<clang::EnumDecl>(QT->getAsTagDecl())) {
+    const clang::EnumDecl *def =
+        enumDecl->getDefinition(); // the type may name a forward declaration
+    if (!def || def->getIntegerType().isNull()) return std::nullopt;
+    QT = def->getIntegerType();
+  }
   const clang::BuiltinType *BT = QT->getAs<clang::BuiltinType>();
   if (!BT) return std::nullopt;
   auto it = kVerifierNames.find(BT->getKind());

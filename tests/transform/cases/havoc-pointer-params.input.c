@@ -26,3 +26,14 @@ int point_x(struct Point *p) { return p->x; }
 
 // No pointer in the list, so the integer stays unconstrained.
 int unbounded(int n) { return n + 1; }
+
+// Integers are clamped to the fewest elements any pointer param's storage holds.
+int sum_fixed(int a[3], int n) {
+  int s = 0;
+  for (int i = 0; i < n; i++) s += a[i];
+  return s;
+}
+
+int pick_smaller(int a[5], int b[2], int n) { return n < 2 ? a[n] + b[n] : 0; }
+
+int with_block(int a[3], int *b, int n) { return n < 3 ? a[n] + b[n] : 0; }

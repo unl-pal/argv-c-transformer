@@ -150,8 +150,7 @@ TEST_F(TransformStageTest, PathComponentsWithUnsafeCharactersAreSanitized) {
   // are legal in a path but not in the output filename we build by joining
   // components with '_' (a literal ':' or space would otherwise land in the
   // flattened name unescaped).
-  writeFile(filterDir / "weird dir:name" / "file.c",
-            "int identity(int x) { return x; }\n");
+  writeFile(filterDir / "weird dir:name" / "file.c", "int identity(int x) { return x; }\n");
 
   Transformer t(configPath.string());
   int count = t.run();
@@ -159,6 +158,20 @@ TEST_F(TransformStageTest, PathComponentsWithUnsafeCharactersAreSanitized) {
   EXPECT_GE(count, 1);
   EXPECT_TRUE(fs::exists(transformDir / "weird_dir_name_file.c"));
   EXPECT_FALSE(fs::exists(transformDir / "weird dir:name_file.c"));
+}
+
+TEST_F(TransformStageTest, CollidingFlattenedNamesGetOrderedVariants) {
+  writeFile(filterDir / "lib" / "a b.c", "int one(int x) { return x; }\n");
+  writeFile(filterDir / "lib" / "a_b.c", "int two(int x) { return x; }\n");
+  writeFile(filterDir / "lib_a" / "b.c", "int three(int x) { return x; }\n");
+
+  Transformer t(configPath.string());
+  int count = t.run();
+
+  EXPECT_EQ(count, 3);
+  EXPECT_NE(readFile(transformDir / "lib_a_b.c").find("one("), std::string::npos);
+  EXPECT_NE(readFile(transformDir / "lib_a_b.2.c").find("two("), std::string::npos);
+  EXPECT_NE(readFile(transformDir / "lib_a_b.3.c").find("three("), std::string::npos);
 }
 
 TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
@@ -175,6 +188,37 @@ TEST_F(TransformStageTest, EmptyHarnessDiscarded) {
 
   EXPECT_EQ(count, 0);
   EXPECT_FALSE(fs::exists(transformDir / "aggregates_only.c"));
+}
+
+TEST_F(TransformStageTest, UntypeableCallTaintsItsFunction) {
+  // `s->fn` names no member, so the call's callee is a RecoveryExpr with no function type.
+  writeFile(filterDir / "recovery.c", "struct S { int x; };\n"
+                                      "int twice(int v) { return v + v; }\n"
+                                      "int broken(struct S *s) { return s->fn(3); }\n");
+
+  Transformer t(configPath.string());
+  int count = t.run();
+
+  EXPECT_EQ(count, 1);
+  std::string out = readFile(transformDir / "recovery.c");
+  EXPECT_NE(out.find("twice(__VERIFIER_nondet_int())"), std::string::npos);
+  EXPECT_EQ(out.find("broken(__h"), std::string::npos);
+}
+
+TEST_F(TransformStageTest, ErasedVoidCallInsideExpressionLeavesVoidPlaceholder) {
+  writeFile(filterDir / "operand.c", "int g;\n"
+                                     "void note(int x) { g += x; }\n"
+                                     "int pick(int c) {\n"
+                                     "  c > 0 ? note(c) : (void)(g = 1);\n"
+                                     "  return (note(c), c);\n"
+                                     "}\n");
+
+  Transformer t(configPath.string());
+  ASSERT_GE(t.run(), 1);
+
+  std::string out = readFile(transformDir / "operand.c");
+  EXPECT_NE(out.find("c > 0 ? ((void)0) : (void)(g = 1);"), std::string::npos) << out;
+  EXPECT_NE(out.find("return (((void)0), c);"), std::string::npos) << out;
 }
 
 // Regression: Transformer::parseConfig used to drop the config's databaseDir,

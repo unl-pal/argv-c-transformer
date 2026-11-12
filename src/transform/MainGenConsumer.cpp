@@ -78,7 +78,9 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
         harnessBlock(call.prologue + "  " + func->getNameAsString() + "(" + call.args + ");\n");
   }
 
-  std::string mainFn = "\nint main(void) {\n" + harness + "  return 0;\n}\n";
+  // unreach-call stub: every benchmark names reach_error
+  std::string mainFn =
+      "\nint main(void) {\n" + harness + "  if (0) reach_error();\n  return 0;\n}\n";
   _Rewriter.InsertTextBefore(mgr.getLocForEndOfFile(mgr.getMainFileID()), mainFn);
 
   // emitted here, not the shared header, so bounds survive hand-editing of the .c
@@ -97,6 +99,39 @@ void MainGenConsumer::HandleTranslationUnit(clang::ASTContext &Context) {
 
   _Rewriter.InsertTextBefore(mgr.translateLineCol(mgr.getMainFileID(), 1, 1), prelude + "\n");
 }
+
+namespace {
+
+/**
+ * @brief The bound integer params are clamped to: the fewest elements in any
+ * viable pointer param's storage.
+ *
+ * A declared @c T[N] contributes N; every other shape contributes
+ * @c __HAVOC_ARRAY_ELEMS, kept as the macro so the benchmark stays retunable.
+ */
+std::string clampBound(const std::vector<PointerPlan> &plans) {
+  std::optional<uint64_t> fewest;
+  bool unbounded = false;
+  for (const PointerPlan &plan : plans) {
+    if (!plan.viable) continue;
+    const auto *array =
+        plan.shape == PointerShape::Array
+            ? llvm::dyn_cast<clang::ConstantArrayType>(plan.type->getAsArrayTypeUnsafe())
+            : nullptr;
+    if (!array) {
+      unbounded = true;
+      continue;
+    }
+    uint64_t size = array->getSize().getZExtValue();
+    if (!fewest || size < *fewest) fewest = size;
+  }
+  if (!fewest) return "__HAVOC_ARRAY_ELEMS";
+  std::string n = std::to_string(*fewest);
+  if (!unbounded) return n;
+  return "(" + n + " < __HAVOC_ARRAY_ELEMS ? " + n + " : __HAVOC_ARRAY_ELEMS)";
+}
+
+} // namespace
 
 MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::FunctionDecl *func,
                                                              clang::ASTContext &Context) {
@@ -117,6 +152,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
   }
 
   unsigned counter = _LocalCounter;
+  std::string bound = clampBound(plans);
   for (size_t i = 0; i < plans.size(); ++i) {
     const clang::ParmVarDecl *parm = func->parameters()[i];
     clang::QualType declared = parm->getOriginalType();
@@ -125,8 +161,7 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
     std::optional<std::string> suffix = verifierSuffixForType(declared);
     if (!suffix) {
       std::string local = "__h" + std::to_string(counter++);
-      PointerStorage store =
-          renderPointerStorage(plans[i], local, parm->getType().getAsString());
+      PointerStorage store = renderPointerStorage(plans[i], local, parm->getType().getAsString());
       call.prologue += store.decls;
       call.args += store.arg;
       if (!plans[i].fwdDecl.empty()) _NeededFwdDecls->insert(plans[i].fwdDecl);
@@ -135,12 +170,12 @@ MainGenConsumer::HarnessCall MainGenConsumer::genCallHarness(const clang::Functi
 
     // clamp every integer rather than guessing which one is "the length"
     if (_Havoc.clampIntegers && anyPointer && declared->isIntegerType() &&
-        !declared->isBooleanType()) {
+        !declared->isBooleanType() && !declared->isEnumeralType()) {
       std::string local = "__h" + std::to_string(counter++);
       call.prologue += "  " + declared.getUnqualifiedType().getAsString() + " " + local +
                        " = __VERIFIER_nondet_" + *suffix + "();\n  if (";
       if (declared->isSignedIntegerType()) call.prologue += local + " < 0 || ";
-      call.prologue += local + " > __HAVOC_ARRAY_ELEMS) abort();\n";
+      call.prologue += local + " >= " + bound + ") abort();\n";
       call.args += local;
       continue;
     }

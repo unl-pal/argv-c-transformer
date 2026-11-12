@@ -9,6 +9,7 @@
 #include "WorkerPool.hpp"
 
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -24,6 +25,7 @@ struct transformConfigs {
   std::string filterDir;    ///< Input directory containing filtered C files to transform.
   std::string transformDir; ///< Output directory for transformed files (verify-stage input).
   int fileTimeoutSecs;      ///< Wall-clock budget per file for the isolated transform child.
+  int fileMemoryMB = 0;     ///< Per-child memory limit; 0 = auto.
   int nproc;                ///< Worker pool size (0 = auto, three quarters of detected cores).
   bool cleanOutput;         ///< If true, wipe a pre-populated transformDir instead of erroring.
   /**
@@ -77,9 +79,19 @@ public:
    * @brief Computes the flattened transformDir output path for a filtered file.
    *
    * @param path Path to the filtered C source file.
-   * @return The {@code transformDir/<flattened>.c} path the transform writes to.
+   * @return The {@code transformDir/<flattened>.c} path the transform writes to, or the
+   *         variant {@code assignOutputPaths} gave it if its flattened name collides.
    */
   std::filesystem::path flattenedOutputPath(std::filesystem::path path);
+
+  /**
+   * @brief Gives every file a distinct output path. Files whose flattened names collide keep
+   * the name in sorted path order for the first and get {@code <stem>.2.c}, {@code <stem>.3.c},
+   * ... for the rest, with a warning naming each file.
+   *
+   * @param files Every file this run will transform.
+   */
+  void assignOutputPaths(const std::vector<std::filesystem::path> &files);
 
   /**
    * @brief Removes any .c a crashed or timed-out child left behind.
@@ -156,4 +168,6 @@ private:
    * and used to resolve each file's quoted #includes to -I search paths.
    */
   std::optional<HeaderIndex> headerIndex;
+  /** Input path → output path, for inputs whose flattened name collided. */
+  std::map<std::filesystem::path, std::filesystem::path> _collisionPaths;
 };

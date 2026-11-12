@@ -15,5 +15,6 @@ int main(void) {
   {
     set_mode();
   }
+  if (0) reach_error();
   return 0;
 }

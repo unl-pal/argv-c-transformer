@@ -72,8 +72,11 @@ on the same classifier the transform uses, so a pointer-param function survives 
 exactly when the harness can call it.
 
 An integer parameter alongside a pointer parameter is clamped rather than left as a raw
-nondet value: `MainGenConsumer::genCallHarness` bounds it with `if (n < 0 || n >
-__HAVOC_ARRAY_ELEMS) abort();` (the signedness check dropped for unsigned types). This
+nondet value: `MainGenConsumer::genCallHarness` bounds it with `if (n < 0 || n >= K)
+abort();` (the signedness check dropped for unsigned types), where `K` is the fewest
+elements in any pointer parameter's storage: `N` for a declared `T[N]`, else
+`__HAVOC_ARRAY_ELEMS` (a mix emits `(N < __HAVOC_ARRAY_ELEMS ? N : __HAVOC_ARRAY_ELEMS)`
+so the macro stays retunable). This
 sidesteps guessing which parameter is "the length" from its name — every integer is
 bounded by the element count of the storage that was actually declared for the pointer
 parameters, so a genuinely-undersized block can't be indexed out of bounds regardless of
@@ -166,6 +169,20 @@ which `__VERIFIER_nondet_*` variant to use.
   as literals, so a generated benchmark can be retuned without rerunning the pipeline;
   the values come from `[Havoc Settings]` in the config, falling back to the constants in
   `src/common/include/HavocPolicy.hpp`.
+- `argc` has its own bound rather than sharing `havocArrayElems`, for the same reason
+  any other integer is clamped to its pointers' element count: an integer is bounded by the
+  storage it indexes, and argv's rows are sized `__HAVOC_ARGC_MAX × __HAVOC_STR_MAX`, not
+  by the generic block size. The two also scale differently. An extra array element is
+  usually one scalar, but an extra argument is a whole symbolic string, typically fed
+  through `strcmp`/`getopt`/`atoi`. Tying them together would mean growing arrays to
+  explore array-heavy code also grows every `main(argc, argv)` benchmark's argv. Besides,
+  the right `argc` range follows from the program's CLI contract (how many arguments it
+  expects), which has nothing to do with its data structures.
+- Most programs reject unexpected argument counts early (`if (argc != 3) usage();`),
+  so a loose `argcMax` usually costs little, because the extra values die on a short
+  path. That changes for programs that check only a minimum, or that loop over every
+  argument (`for (i = 1; i < argc; i++)` over files or `getopt` options). There, each
+  extra argument is a full symbolic string the verifier has to parse.
 
 ### Pointer Returns in Havocking
 
@@ -300,7 +317,7 @@ to a verifier run.
 A benchmark whose generated `main` calls no functions is unconditionally deleted. Both
 Transform and Verify check for this with the same text-based `harnessIsEmpty`
 (`src/common/include/ClangToolUtils.hpp`): it looks for the exact verbatim empty main
-`int main(void) {\n  return 0;\n}` in the written output. This works after Verify's
+`int main(void) {\n  if (0) reach_error();\n  return 0;\n}` in the written output. This works after Verify's
 `HarnessRepairConsumer` too, because it erases a whole line per rejected call (indent,
 call, semicolon, trailing newline) rather than leaving a bare `;` behind, so a `main`
 emptied by repair collapses back to that same verbatim text.
@@ -401,3 +418,25 @@ flowchart TB
 Verifier nondet naming, suffix→C-type mappings, and the `isVerifierGenerated`
 generated-artifact check live in `src/common/include/VerifierNames.hpp`, shared by all
 stages.
+
+### Clang Version Portability
+
+The pipeline supports Clang 20 through the current release. `CMakeLists.txt` enforces
+only the floor, `scripts/install.sh` installs 20, and development happens on newer
+releases, so the same source has to produce the same benchmarks on every version in
+that range.
+
+The AST is where versions drift, specifically in *sugar*: the wrapper `Type` nodes that
+record how a type was spelled (`TypedefType`, `ParenType`, `AttributedType`, ...) without
+changing what it is. Clang 21 removed `ElaboratedType`, so `struct S` is a bare
+`RecordType` on 21+ but `ElaboratedType → RecordType` on 20. Code that tests the outermost
+node with `dyn_cast<RecordType>` therefore succeeds on one version and silently fails on
+the other — not a compile error, just a struct quietly misclassified.
+
+The rule is to inspect types only through accessors that desugar: `getAs<T>()`,
+`getAsTagDecl()`, `getAsArrayTypeUnsafe()`, `getPointeeType()`, `getCanonicalType()`.
+These step past whatever sugar a given version inserts and are stable across the range.
+Casting the *result* of one of them is fine; casting a raw `Type*` or a `TypeLoc` (whose
+`getAs<T>()`, unlike `Type`'s, does not desugar) is not. Version-specific classes such as
+`ElaboratedType` are not named at all; one that is genuinely unavoidable is fenced with
+`#if CLANG_VERSION_MAJOR`.

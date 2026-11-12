@@ -156,7 +156,6 @@ TEST_F(HeaderClosureTest, MacroFromSurvivingSystemIncludeIsNotReEmitted) {
 
 // --- declaration closure ---------------------------------------------------
 
-
 TEST_F(HeaderClosureTest, HeaderStructIsInlinedAndSizedExactly) {
   // The payoff. Before closure, a header-defined struct was havocked as a flat
   // __HAVOC_BLOCK_MAX byte block, because planPointer tests isInMainFile and
@@ -172,8 +171,45 @@ TEST_F(HeaderClosureTest, HeaderStructIsInlinedAndSizedExactly) {
   EXPECT_NE(out.find("struct Point { int x; int y; };"), std::string::npos) << out;
   EXPECT_NE(out.find("struct Point __h"), std::string::npos) << out;
   EXPECT_EQ(out.find("unsigned char __h"), std::string::npos)
-      << "sized Point storage should not fall back to the opaque byte block:\n" << out;
+      << "sized Point storage should not fall back to the opaque byte block:\n"
+      << out;
   EXPECT_TRUE(fs::exists(benchmarkDir / "area__area.i"));
+}
+
+TEST_F(HeaderClosureTest, TrailingRecordAttributesSurviveInlining) {
+  // Attributes after `}` or after a typedef's declarator are outside the decl's source range. The
+  // static asserts fail the verify stage's compile check if either attribute is dropped.
+  writeRepoFile("wire.h", "#define PACKED __attribute__((packed))\n"
+                          "struct hdr { int len; char tag; } PACKED;\n"
+                          "#define ALIGNED __attribute__((aligned(16)))\n"
+                          "typedef int wide_t ALIGNED;\n");
+  writeRepoFile("wire.c", "#include \"wire.h\"\n"
+                          "_Static_assert(sizeof(struct hdr) == 5, \"hdr unpacked\");\n"
+                          "_Static_assert(_Alignof(wide_t) == 16, \"wide_t unaligned\");\n"
+                          "int tag_of(struct hdr *h, wide_t w) { return h->tag + w; }\n");
+
+  std::string out = runPipeline("wire.c", "tag_of");
+
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  EXPECT_NE(filtered().find("struct hdr { int len; char tag; } PACKED;"), std::string::npos)
+      << filtered();
+  EXPECT_NE(filtered().find("typedef int wide_t ALIGNED;"), std::string::npos) << filtered();
+  EXPECT_NE(out.find("#define PACKED __attribute__((packed))"), std::string::npos) << out;
+}
+
+TEST_F(HeaderClosureTest, RecordWithTrailingDeclaratorIsEmittedOnce) {
+  // `struct cfg {...} defaults;` yields a RecordDecl and a VarDecl over the same text; extending
+  // the record to its `;` must not emit the definition twice.
+  writeRepoFile("cfg.h", "struct cfg { int n; } defaults;\n");
+  writeRepoFile("use.c", "#include \"cfg.h\"\n"
+                         "int limit(int k) { return k < defaults.n ? k : defaults.n; }\n");
+
+  std::string out = runPipeline("use.c", "limit");
+
+  ASSERT_GE(benchmarks(), 1) << "benchmark discarded; filtered output was:\n" << filtered();
+  size_t first = filtered().find("struct cfg { int n; }");
+  ASSERT_NE(first, std::string::npos) << filtered();
+  EXPECT_EQ(filtered().find("struct cfg { int n; }", first + 1), std::string::npos) << filtered();
 }
 
 TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
@@ -194,7 +230,8 @@ TEST_F(HeaderClosureTest, SystemIncludeReachedThroughLocalHeaderIsReEmitted) {
   // than falling back to the opaque byte block.
   EXPECT_NE(out.find("Buf __h"), std::string::npos) << out;
   EXPECT_EQ(out.find("unsigned char __h"), std::string::npos)
-      << "sized Buf storage should not fall back to the opaque byte block:\n" << out;
+      << "sized Buf storage should not fall back to the opaque byte block:\n"
+      << out;
 }
 
 TEST_F(HeaderClosureTest, ClimbNeverSettlesOnAPrivateSystemHeader) {
@@ -350,16 +387,15 @@ TEST_F(HeaderClosureTest, RejectedFunctionBodyIsNotARoot) {
   std::ofstream(configPath, std::ios::app) << "IfStmt = 1\n";
   writeRepoFile("shapes.h", "struct Kept { int a; };\n"
                             "struct BodyOnly { int b; };\n");
-  writeRepoFile("gate.c",
-                "#include \"shapes.h\"\n"
-                // No if statement: rejected, body stripped to ';'.
-                "int plain(struct Kept *k) {\n"
-                "  struct BodyOnly local;\n"
-                "  local.b = k->a;\n"
-                "  return local.b;\n"
-                "}\n"
-                // Has an if: survives, so it keeps the harness alive.
-                "int branchy(struct Kept *k) { if (k->a > 0) return 1; return 0; }\n");
+  writeRepoFile("gate.c", "#include \"shapes.h\"\n"
+                          // No if statement: rejected, body stripped to ';'.
+                          "int plain(struct Kept *k) {\n"
+                          "  struct BodyOnly local;\n"
+                          "  local.b = k->a;\n"
+                          "  return local.b;\n"
+                          "}\n"
+                          // Has an if: survives, so it keeps the harness alive.
+                          "int branchy(struct Kept *k) { if (k->a > 0) return 1; return 0; }\n");
 
   std::string out = runPipeline("gate.c", "branchy");
 
@@ -369,4 +405,3 @@ TEST_F(HeaderClosureTest, RejectedFunctionBodyIsNotARoot) {
   // Reached only from the stripped body: not a root, so not inlined.
   EXPECT_EQ(out.find("struct BodyOnly"), std::string::npos) << out;
 }
-

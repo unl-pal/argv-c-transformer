@@ -34,13 +34,24 @@ int point_x(struct Point *p) { return p->x; }
 // No pointer in the list, so the integer stays unconstrained.
 int unbounded(int n) { return n + 1; }
 
+// Integers are clamped to the fewest elements any pointer param's storage holds.
+int sum_fixed(int a[3], int n) {
+  int s = 0;
+  for (int i = 0; i < n; i++) s += a[i];
+  return s;
+}
+
+int pick_smaller(int a[5], int b[2], int n) { return n < 2 ? a[n] + b[n] : 0; }
+
+int with_block(int a[3], int *b, int n) { return n < 3 ? a[n] + b[n] : 0; }
+
 int main(void) {
   {
     int __h0[__HAVOC_ARRAY_ELEMS];
     for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
       __h0[__i0] = __VERIFIER_nondet_int();
     int __h1 = __VERIFIER_nondet_int();
-    if (__h1 < 0 || __h1 > __HAVOC_ARRAY_ELEMS) abort();
+    if (__h1 < 0 || __h1 >= __HAVOC_ARRAY_ELEMS) abort();
     sum(__h0, __h1);
   }
   {
@@ -69,5 +80,36 @@ int main(void) {
   {
     unbounded(__VERIFIER_nondet_int());
   }
+  {
+    int __h6[3];
+    for (int __i0 = 0; __i0 < 3; ++__i0)
+      __h6[__i0] = __VERIFIER_nondet_int();
+    int __h7 = __VERIFIER_nondet_int();
+    if (__h7 < 0 || __h7 >= 3) abort();
+    sum_fixed(__h6, __h7);
+  }
+  {
+    int __h8[5];
+    for (int __i0 = 0; __i0 < 5; ++__i0)
+      __h8[__i0] = __VERIFIER_nondet_int();
+    int __h9[2];
+    for (int __i0 = 0; __i0 < 2; ++__i0)
+      __h9[__i0] = __VERIFIER_nondet_int();
+    int __h10 = __VERIFIER_nondet_int();
+    if (__h10 < 0 || __h10 >= 2) abort();
+    pick_smaller(__h8, __h9, __h10);
+  }
+  {
+    int __h11[3];
+    for (int __i0 = 0; __i0 < 3; ++__i0)
+      __h11[__i0] = __VERIFIER_nondet_int();
+    int __h12[__HAVOC_ARRAY_ELEMS];
+    for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)
+      __h12[__i0] = __VERIFIER_nondet_int();
+    int __h13 = __VERIFIER_nondet_int();
+    if (__h13 < 0 || __h13 >= (3 < __HAVOC_ARRAY_ELEMS ? 3 : __HAVOC_ARRAY_ELEMS)) abort();
+    with_block(__h11, __h12, __h13);
+  }
+  if (0) reach_error();
   return 0;
 }

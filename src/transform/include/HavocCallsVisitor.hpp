@@ -38,7 +38,7 @@ public:
    * @param havoc           Passed to {@code planPointer} for pointer-returning calls.
    */
   HavocCallsVisitor(clang::ASTContext *C, std::shared_ptr<std::set<std::string>> neededFwdDecls,
-                    clang::Rewriter &rewriter, HavocBounds havoc = {});
+                    clang::Rewriter &rewriter, HavocBounds havoc);
 
   /**
    * @brief Havocs a call if it should be (in-file, non-library, non-verifier). A call inside a

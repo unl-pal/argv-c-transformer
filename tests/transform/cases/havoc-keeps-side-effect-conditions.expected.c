@@ -19,5 +19,6 @@ int main(void) {
   {
     drain(__VERIFIER_nondet_int());
   }
+  if (0) reach_error();
   return 0;
 }

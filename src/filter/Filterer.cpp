@@ -48,6 +48,7 @@ void Filterer::parseConfigFile(std::string configFile) {
 
   globalDebugLevel() = config.fileSettings.at("debugLevel");
   configuration.fileTimeoutSecs = config.fileSettings.at("fileTimeoutSecs");
+  configuration.fileMemoryMB = config.fileSettings.at("fileMemoryMB");
   configuration.nproc = config.fileSettings.at("nproc");
   configuration.cleanOutput = config.fileSettings.at("cleanOutput") != 0;
 
@@ -185,7 +186,8 @@ void Filterer::cleanupPartialOutput(std::filesystem::path oldPath) {
 
 int Filterer::run() {
   auto startTime = std::chrono::steady_clock::now();
-  checkOrCleanOutputDir(configuration.filterDir, {configuration.databaseDir}, configuration.cleanOutput);
+  checkOrCleanOutputDir(configuration.filterDir, {configuration.databaseDir},
+                        configuration.cleanOutput);
   std::filesystem::path pathObject(configuration.databaseDir);
   std::vector<std::string> filesToFilter;
 
@@ -224,7 +226,10 @@ int Filterer::run() {
 
   std::cout << "[filter] processing " << toProcess.size() << " file(s) with " << workers
             << " worker(s)" << std::endl;
-  WorkerPoolResult result = runWorkerPool(toProcess, workers, configuration.fileTimeoutSecs, work);
+  getResourceDir(); // resolved here so forked workers inherit it
+  WorkerPoolResult result =
+      runWorkerPool(toProcess, workers, configuration.fileTimeoutSecs, work,
+                    resolveMemoryLimitMB(configuration.fileMemoryMB, workers));
 
   std::cout << "\n=== Filter summary ===\n"
             << "  Files found:            " << filesFound << "\n"

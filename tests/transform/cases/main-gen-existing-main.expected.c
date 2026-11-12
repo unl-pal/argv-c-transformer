@@ -22,5 +22,6 @@ int main(void) {
   {
     original_main();
   }
+  if (0) reach_error();
   return 0;
 }
