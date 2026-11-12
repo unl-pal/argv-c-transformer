@@ -186,13 +186,7 @@ void Transformer::parseConfig(std::string configFile) {
   // argv-c injects this via setDatabaseDir(); a standalone `transform` run
   // only has the config.
   if (!config.databaseDir.empty()) configuration.databaseDir = config.databaseDir;
-  configuration.havoc.argcMin = config.havoc.at("havocArgcMin");
-  configuration.havoc.argcMax = config.havoc.at("havocArgcMax");
-  configuration.havoc.strMax = config.havoc.at("havocStrMax");
-  configuration.havoc.blockMax = config.havoc.at("havocBlockMax");
-  configuration.havoc.arrayElems = config.havoc.at("havocArrayElems");
-  configuration.havoc.pointerDepth = config.havoc.at("havocPointerDepth");
-  configuration.havoc.clampIntegers = config.havoc.at("clampIntegers") != 0;
+  configuration.havoc = havocBoundsFromConfig(config);
 }
 
 int Transformer::run() {

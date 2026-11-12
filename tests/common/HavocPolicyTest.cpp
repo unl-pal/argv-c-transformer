@@ -42,7 +42,9 @@ Parsed planFirstParam(const std::string &code, unsigned depth = 1,
   for (clang::Decl *decl : ctx.getTranslationUnitDecl()->decls()) {
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!fn || fn->getNameAsString() != func || fn->param_empty()) continue;
-    p.plan = planPointer(fn->getParamDecl(0)->getOriginalType(), ctx.getSourceManager(), depth);
+    HavocBounds havoc;
+    havoc.pointerDepth = depth;
+    p.plan = planPointer(fn->getParamDecl(0)->getOriginalType(), ctx.getSourceManager(), havoc);
     return p;
   }
   ADD_FAILURE() << "no function named " << func << " with a parameter";
@@ -53,11 +55,6 @@ Parsed planFirstParam(const std::string &code, unsigned depth = 1,
 std::string storageDecl(const PointerPlan &plan) {
   std::string decls = renderPointerStorage(plan, "__h0", "", "").decls;
   return decls.substr(0, decls.find('\n'));
-}
-
-std::string flooredDecl(const std::string &type) {
-  return "unsigned char __h0[sizeof(" + type + ") > __HAVOC_BLOCK_MAX ? sizeof(" + type +
-         ") : __HAVOC_BLOCK_MAX];";
 }
 
 std::vector<std::string> memberNames(const PointerPlan &field) {
@@ -208,8 +205,10 @@ TEST(PlanPointer, SelfContainingRecordFromErrorRecoveryTerminates) {
   for (clang::Decl *decl : ast->getASTContext().getTranslationUnitDecl()->decls()) {
     auto *fn = llvm::dyn_cast<clang::FunctionDecl>(decl);
     if (!fn || fn->getNameAsString() != "f") continue;
+    HavocBounds havoc;
+    havoc.pointerDepth = 2;
     planPointer(fn->getParamDecl(0)->getOriginalType(), ast->getASTContext().getSourceManager(),
-                2);
+                havoc);
     return; // reaching here at all is the assertion
   }
   ADD_FAILURE() << "no f";
@@ -223,61 +222,76 @@ TEST(PlanPointer, ConstPointerFieldIsNotViable) {
 }
 
 // ---------------------------------------------------------------------------
-// Depth 0: no structure modelled, everything but strings is opaque bytes.
+// Depth 0: typed storage with no structure modelled; pointers inside stay nondet bytes.
 // ---------------------------------------------------------------------------
 
 TEST(PlanPointerDepthZero, CharPointerStaysCString) {
   auto p = planFirstParam("void f(char *s) {}", 0);
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::CString);
+  EXPECT_EQ(storageDecl(p.plan), "char __h0[__HAVOC_STR_MAX];");
 }
 
-TEST(PlanPointerDepthZero, RecordWithPointersIsOpaqueFlooredBySizeof) {
+TEST(PlanPointerDepthZero, RecordWithPointersIsBulkFilledTypedStorage) {
   auto p = planFirstParam("struct Node { int v; struct Node *next; };\n"
                           "void f(struct Node *n) {}",
                           0);
   EXPECT_TRUE(p.plan.viable);
-  EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
-  EXPECT_EQ(storageDecl(p.plan), flooredDecl("struct Node"));
+  EXPECT_EQ(p.plan.shape, PointerShape::Record);
   EXPECT_TRUE(p.plan.fields.empty());
+  EXPECT_FALSE(p.plan.fieldwiseFill);
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct Node *");
+  EXPECT_EQ(s.decls, "  struct Node __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+  EXPECT_EQ(s.arg, "__h0");
 }
 
-TEST(PlanPointerDepthZero, PointerToPointerIsOpaque) {
+TEST(PlanPointerDepthZero, PointerToPointerIsTypedBlock) {
   auto p = planFirstParam("void f(char **argv) {}", 0);
   EXPECT_TRUE(p.plan.viable);
-  EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
+  EXPECT_EQ(p.plan.shape, PointerShape::Block);
+  EXPECT_TRUE(p.plan.fields.empty());
+  EXPECT_EQ(storageDecl(p.plan), "char *__h0[__HAVOC_ARRAY_ELEMS];");
 }
 
-TEST(PlanPointerDepthZero, ArrayParamFlooredByWholeArray) {
+TEST(PlanPointerDepthZero, ScalarPointeeIsBulkFilled) {
+  auto p = planFirstParam("void f(int *a) {}", 0);
+  EXPECT_FALSE(p.plan.fieldwiseFill);
+  EXPECT_EQ(storageDecl(p.plan), "int __h0[__HAVOC_ARRAY_ELEMS];");
+}
+
+TEST(PlanPointerDepthZero, ArrayParamUsesDeclaredBound) {
   auto p = planFirstParam("void f(int a[3]) {}", 0);
   EXPECT_TRUE(p.plan.viable);
-  EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
-  EXPECT_EQ(storageDecl(p.plan), flooredDecl("int[3]"));
+  EXPECT_EQ(p.plan.shape, PointerShape::Array);
+  EXPECT_EQ(storageDecl(p.plan), "int __h0[3];");
 }
 
-TEST(PlanPointerDepthZero, ArrayOfFunctionPointersSpellsItsSizeof) {
+TEST(PlanPointerDepthZero, ArrayOfFunctionPointersNestsTheDeclarator) {
   // The bound nests inside the declarator; appending it would name a function returning an array.
   auto p = planFirstParam("void f(int (*fs[2])(int)) {}", 0);
   EXPECT_TRUE(p.plan.viable);
-  EXPECT_EQ(storageDecl(p.plan), flooredDecl("int (*[2])(int)"));
+  EXPECT_EQ(storageDecl(p.plan), "int (*__h0[2])(int);");
 }
 
 TEST(PlanPointerDepthZero, MultiDimArrayKeepsBoundOrder) {
   auto p = planFirstParam("void f(int g[3][4]) {}", 0);
-  EXPECT_EQ(storageDecl(p.plan), flooredDecl("int[3][4]"));
+  EXPECT_EQ(storageDecl(p.plan), "int __h0[3][4];");
 }
 
-TEST(PlanPointerDepthZero, CStringHasNoSizeofFloor) {
-  auto p = planFirstParam("void f(char *s) {}", 0);
-  EXPECT_EQ(storageDecl(p.plan), "char __h0[__HAVOC_STR_MAX];");
-}
-
-TEST(PlanPointerDepthZero, IncompleteRecordHasNoSizeofFloor) {
+TEST(PlanPointerDepthZero, IncompleteRecordIsOpaque) {
   auto p = planFirstParam("struct Hidden; void f(struct Hidden *p) {}", 0);
   EXPECT_TRUE(p.plan.viable);
   EXPECT_EQ(p.plan.shape, PointerShape::Opaque);
   EXPECT_EQ(storageDecl(p.plan), "unsigned char __h0[__HAVOC_BLOCK_MAX];");
   EXPECT_EQ(p.plan.fwdDecl, "struct Hidden");
+}
+
+TEST(PlanPointerDepthZero, FlexibleArrayIsNotViable) {
+  auto p = planFirstParam("struct F { int n; int tail[]; };\n"
+                          "void f(struct F *p) {}",
+                          0);
+  EXPECT_FALSE(p.plan.viable);
 }
 
 TEST(PlanPointerDepthZero, FunctionPointerIsStillNotViable) {
@@ -322,14 +336,34 @@ TEST(RenderPointerStorage, BlockDeclaresTypedArrayAndPassesIt) {
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "int *");
   EXPECT_EQ(s.arg, "__h0");
   EXPECT_EQ(s.decls, "  int __h0[__HAVOC_ARRAY_ELEMS];\n"
-                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    __h0[__i0] = __VERIFIER_nondet_int();\n");
 }
 
 TEST(RenderPointerStorage, ArrayUsesDeclaredBound) {
   auto p = planFirstParam("void f(int a[3]) {}");
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "int *");
   EXPECT_EQ(s.decls, "  int __h0[3];\n"
-                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+                     "  for (int __i0 = 0; __i0 < 3; ++__i0)\n"
+                     "    __h0[__i0] = __VERIFIER_nondet_int();\n");
+}
+
+TEST(RenderPointerStorage, EnumElementUsesUnderlyingSuffix) {
+  auto p = planFirstParam("enum E { A, B };\n"
+                          "void f(enum E *e) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "enum E *");
+  EXPECT_EQ(s.decls, "  enum E __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    __h0[__i0] = __VERIFIER_nondet_uint();\n");
+}
+
+TEST(RenderPointerStorage, ElementWithoutSuffixIsBulkFilled) {
+  for (const char *code : {"void f(long double *x) {}", "void f(int m[3][4]) {}"}) {
+    auto p = planFirstParam(code);
+    PointerStorage s = renderPointerStorage(p.plan, "__h0", "");
+    EXPECT_NE(s.decls.find("__VERIFIER_nondet_memory(__h0, sizeof(__h0));"), std::string::npos)
+        << code;
+  }
 }
 
 TEST(RenderPointerStorage, CStringPlantsInBoundsTerminator) {
@@ -354,7 +388,8 @@ TEST(RenderPointerStorage, IndentParameterPrefixesEveryLine) {
   auto p = planFirstParam("void f(int *a) {}");
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "int *", "");
   EXPECT_EQ(s.decls, "int __h0[__HAVOC_ARRAY_ELEMS];\n"
-                     "__VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
+                     "for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "  __h0[__i0] = __VERIFIER_nondet_int();\n");
 }
 
 TEST(RenderPointerStorage, PointerPastTheBoundRendersNothing) {
@@ -371,9 +406,12 @@ TEST(RenderPointerStorage, NestedRecordGetsARowPerElement) {
                           2);
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct Node *");
   EXPECT_EQ(s.decls, "  struct Node __h0[__HAVOC_ARRAY_ELEMS];\n"
-                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    __h0[__i0].v = __VERIFIER_nondet_int();\n"
                      "  struct Leaf __h0_0[__HAVOC_ARRAY_ELEMS][__HAVOC_ARRAY_ELEMS];\n"
-                     "  __VERIFIER_nondet_memory(__h0_0, sizeof(__h0_0));\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    for (int __i1 = 0; __i1 < __HAVOC_ARRAY_ELEMS; ++__i1)\n"
+                     "      __h0_0[__i0][__i1].v = __VERIFIER_nondet_int();\n"
                      "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
                      "    __h0[__i0].next = __h0_0[__i0];\n");
 }
@@ -385,22 +423,85 @@ TEST(RenderPointerStorage, NestedStringFieldIsFilledPerRow) {
   PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct Names *");
   EXPECT_EQ(s.decls,
             "  struct Names __h0[__HAVOC_ARRAY_ELEMS];\n"
-            "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n"
             "  char __h0_0[__HAVOC_ARRAY_ELEMS][4][__HAVOC_STR_MAX];\n"
             "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
             "    for (int __i1 = 0; __i1 < 4; ++__i1)\n"
             "      __h0[__i0].names[__i1] = __havoc_cstring_fill(__h0_0[__i0][__i1], __HAVOC_STR_MAX);\n");
 }
 
-TEST(RenderPointerStorage, OpaqueSizeofFloorsTheBlock) {
-  auto p = planFirstParam("struct Big { int a[64]; };\n"
-                          "void f(struct Big *b) {}",
-                          0);
-  ASSERT_EQ(p.plan.shape, PointerShape::Opaque);
-  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct Big *");
-  EXPECT_EQ(s.arg, "(struct Big *)__h0");
-  EXPECT_EQ(s.decls, "  unsigned char __h0[sizeof(struct Big) > __HAVOC_BLOCK_MAX ? sizeof(struct Big) "
-                     ": __HAVOC_BLOCK_MAX];\n"
+TEST(RenderPointerStorage, FieldWithoutSuffixIsMemoryFilledAlone) {
+  for (const char *field : {"union { int i; float f; } u", "long double u", "const int u"}) {
+    auto p = planFirstParam(std::string("struct T { int k; ") + field + "; };\n" +
+                            "void f(struct T *t) {}");
+    PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+    EXPECT_EQ(s.decls,
+              "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+              "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+              "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
+              "    __VERIFIER_nondet_memory((void *)&__h0[__i0].u, sizeof(__h0[__i0].u));\n"
+              "  }\n")
+        << field;
+  }
+}
+
+TEST(RenderPointerStorage, UnaddressableBitfieldMemoryFillsItsRecord) {
+  auto p = planFirstParam("struct In { int a; const int b : 3; };\n"
+                          "struct T { int k; struct In in; };\n"
+                          "void f(struct T *t) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+  EXPECT_EQ(s.decls,
+            "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+            "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+            "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
+            "    __VERIFIER_nondet_memory((void *)&__h0[__i0].in, sizeof(__h0[__i0].in));\n"
+            "  }\n");
+}
+
+TEST(RenderPointerStorage, AnonymousMemberFillPrecedesItsRecordsTypedFills) {
+  for (const char *member : {"union { int i; float f; }", "struct { const int ro : 3; int rw; }"}) {
+    auto p = planFirstParam(std::string("struct T { int k; ") + member + "; short z; };\n" +
+                            "void f(struct T *t) {}");
+    PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+    EXPECT_EQ(s.decls,
+              "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+              "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+              "    __VERIFIER_nondet_memory((void *)&__h0[__i0], sizeof(__h0[__i0]));\n"
+              "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
+              "    __h0[__i0].z = __VERIFIER_nondet_short();\n"
+              "  }\n")
+        << member;
+  }
+}
+
+TEST(RenderPointerStorage, AnonymousMemberFillStaysInsideANestedRecord) {
+  auto p = planFirstParam("struct In { int a; union { int i; float f; }; union { char c; short s; }; };\n"
+                          "struct T { int k; struct In in; };\n"
+                          "void f(struct T *t) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+  EXPECT_EQ(s.decls,
+            "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+            "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0) {\n"
+            "    __h0[__i0].k = __VERIFIER_nondet_int();\n"
+            "    __VERIFIER_nondet_memory((void *)&__h0[__i0].in, sizeof(__h0[__i0].in));\n"
+            "    __h0[__i0].in.a = __VERIFIER_nondet_int();\n"
+            "  }\n");
+}
+
+TEST(RenderPointerStorage, EnumFieldNamedThroughAForwardDeclarationIsTyped) {
+  auto p = planFirstParam("enum E;\ntypedef enum E ET;\nenum E { A, B };\n"
+                          "struct T { ET e; };\n"
+                          "void f(struct T *t) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+  EXPECT_EQ(s.decls, "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  for (int __i0 = 0; __i0 < __HAVOC_ARRAY_ELEMS; ++__i0)\n"
+                     "    __h0[__i0].e = __VERIFIER_nondet_uint();\n");
+}
+
+TEST(RenderPointerStorage, NoTypedFieldIsBulkFilled) {
+  auto p = planFirstParam("struct T { long double x; const int k; };\n"
+                          "void f(struct T *t) {}");
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "struct T *");
+  EXPECT_EQ(s.decls, "  struct T __h0[__HAVOC_ARRAY_ELEMS];\n"
                      "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }
 
@@ -411,10 +512,13 @@ TEST(PlanPointer, UnionWithPointerMemberIsNeverViable) {
   EXPECT_FALSE(p.plan.viable);
 }
 
-TEST(PlanPointer, UnionWithoutPointersIsViable) {
+TEST(PlanPointer, UnionWithoutPointersIsBulkFilled) {
   auto p = planFirstParam("union Num { int i; float f; };\n"
                           "void f(union Num *n) {}");
   EXPECT_TRUE(p.plan.viable);
+  PointerStorage s = renderPointerStorage(p.plan, "__h0", "union Num *");
+  EXPECT_EQ(s.decls, "  union Num __h0[__HAVOC_ARRAY_ELEMS];\n"
+                     "  __VERIFIER_nondet_memory(__h0, sizeof(__h0));\n");
 }
 
 TEST(PlanPointer, FlexibleArrayIsNeverViable) {

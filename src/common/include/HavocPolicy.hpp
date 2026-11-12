@@ -4,9 +4,12 @@
 
 #pragma once
 
+#include "HavocBounds.hpp"
+
 #include <clang/AST/Decl.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/SourceManager.h>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,23 +31,34 @@ enum class PointerShape {
   CString,  ///< @c char* havocked bytes with a nondet-positioned terminator.
   Block,    ///< Pointer to a sized type, no known bound.
   Array,    ///< Constant Array parameter @c T[N], using the declared bound N.
-  Record,   ///< Struct/union with a definition.
-  Opaque,   ///< @c void* or incomplete.
+  Record,   ///< Struct/union defined in the main file.
+  Opaque,   ///< @c void*, incomplete, or a record defined outside the main file.
   Function, ///< Never viable: no value can be synthesized.
 };
 
 /**
- * @brief A decision about one pointer type: what shape, and any declaration its
- * spelling needs.
+ * @brief A non-pointer part of each element of a plan's storage, filled on its
+ * own under a fieldwise fill.
+ */
+struct FieldFill {
+  std::vector<const clang::FieldDecl *> path; ///< Members from the element; empty for the element itself.
+  /// Assigned @c __VERIFIER_nondet_<suffix>(); nullopt to fill with @c __VERIFIER_nondet_memory.
+  std::optional<std::string> suffix;
+};
+
+/**
+ * @brief A decision about one pointer type: its storage shape, how that
+ * storage is filled, and the pointers inside it.
  */
 struct PointerPlan {
   clang::QualType type; ///< The pointer or constant-array type planned.
-  std::vector<const clang::FieldDecl *> path; ///< path of members from to this element from root
+  std::vector<const clang::FieldDecl *> path; ///< Members from the parent's element to this pointer.
   PointerShape shape = PointerShape::Opaque;
   bool viable = false;
   std::string fwdDecl; ///< For an opaque pointee.
-  bool opaqueSized = false; ///< An opaque block is floored at the planned type's sizeof.
   std::vector<PointerPlan> fields; ///< Pointers inside each element, assigned after the nondet fill.
+  /// Fills that, with @c fields, cover every element; nullopt to fill in bulk with @c __VERIFIER_nondet_memory.
+  std::optional<std::vector<FieldFill>> fieldwiseFill;
 };
 
 /**
@@ -53,7 +67,8 @@ struct PointerPlan {
  * @param QT Pass @c ParmVarDecl::getOriginalType(), not @c getType(), to avoid array decay.
  * @return The plan; check @c viable before using it.
  */
-PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr, unsigned depth = 1);
+PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr,
+                        const HavocBounds &havoc = {});
 
 /**
  * @brief A pointer havocked in statement position: setup plus the argument.

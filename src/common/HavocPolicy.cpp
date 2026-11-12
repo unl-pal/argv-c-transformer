@@ -3,12 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "HavocPolicy.hpp"
+#include "VerifierNames.hpp"
 
 #include <algorithm>
 #include <clang/AST/Decl.h>
 #include <clang/AST/PrettyPrinter.h>
 #include <clang/Basic/SourceManager.h>
 #include <llvm/Support/Casting.h>
+#include <optional>
 
 /**
  * @file HavocPolicy.cpp
@@ -19,9 +21,9 @@
  * level deeper. Any rejection (past the depth bound, unspellable, unassignable)
  * propagates up and makes the whole plan non-viable.
  *
- * Rendering: @c renderStorage declares a plan's storage, fills it with
- * @c __VERIFIER_nondet_memory, then recursively declares each field's storage and
- * assigns the field to it, one row per parent element.
+ * Rendering: @c renderStorage declares a plan's storage, fills it (field by field
+ * when the plan is fieldwise, else one @c __VERIFIER_nondet_memory), then
+ * recursively declares each field's storage and assigns the field to it.
  */
 
 namespace {
@@ -110,14 +112,52 @@ bool holdsPointer(clang::QualType type, unsigned depth = 0) {
   if (type->isAnyPointerType()) return true;
   const clang::RecordDecl *record = type->getAsRecordDecl();
   const clang::RecordDecl *def = record ? record->getDefinition() : nullptr;
-  if (!def || depth > 8) return false;
+  if (!def) return false;
+  if (depth > 8) return true; // too deep to rule a pointer out
   for (const clang::FieldDecl *field : def->fields())
     if (holdsPointer(field->getType(), depth + 1)) return true;
   return false;
 }
 
 /**
- * @brief Appends a field for every pointer reachable by value inside @p record.
+ * @brief The nondet suffix a storage element or record field of @p type is
+ * assigned from, or nullopt if it must be filled with @c __VERIFIER_nondet_memory.
+ */
+std::optional<std::string> scalarFieldSuffix(clang::QualType type, bool readOnly) {
+  if (readOnly) return std::nullopt; // only nondet_memory can write a const member
+  if (const auto *enumDecl = llvm::dyn_cast_or_null<clang::EnumDecl>(type->getAsTagDecl()))
+    if (const clang::EnumDecl *def = enumDecl->getDefinition()) // the type may name a forward declaration
+      return verifierSuffixForType(def->getIntegerType());
+  return verifierSuffixForType(type);
+}
+
+/**
+ * @brief Adds a @c __VERIFIER_nondet_memory fill of the member at @p path to
+ * @c plan.fieldwiseFill.
+ *
+ * An anonymous member has no name to address, so its fill covers the record
+ * enclosing it and goes ahead of that record's other fills, which overwrite it.
+ */
+void addMemoryFill(PointerPlan &plan, std::vector<const clang::FieldDecl *> path) {
+  std::vector<FieldFill> &fills = *plan.fieldwiseFill;
+  if (path.empty() || !path.back()->isAnonymousStructOrUnion()) {
+    fills.push_back({std::move(path), std::nullopt});
+    return;
+  }
+  while (!path.empty() && path.back()->isAnonymousStructOrUnion())
+    path.pop_back();
+  // The enclosing record is still being walked, so its fills run from here to the end.
+  auto first = std::find_if(fills.begin(), fills.end(), [&](const FieldFill &fill) {
+    return fill.path.size() >= path.size() && std::equal(path.begin(), path.end(), fill.path.begin());
+  });
+  if (first != fills.end() && first->path == path && !first->suffix) return; // already filled whole
+  fills.insert(first, {std::move(path), std::nullopt});
+}
+
+/**
+ * @brief Appends a field for every pointer reachable by value inside @p record,
+ * and a fill for every other member to @c plan.fieldwiseFill. A member with no
+ * typed nondet gets a @c __VERIFIER_nondet_memory fill.
  *
  * @param readOnly The record is reached through a const member.
  * @param enclosing Records being walked above this one.
@@ -133,14 +173,19 @@ bool collectFields(const clang::RecordDecl *record,
     if (def)
       for (const clang::FieldDecl *field : def->fields())
         if (holdsPointer(field->getType())) return false; // a member pointer is never initialized
+    addMemoryFill(plan, path);
     return true;
   }
   if (def->hasFlexibleArrayMember()) return false; // the tail is outside sizeof, so outside every element
   // Error recovery can leave a record containing itself by value.
-  if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) return true;
+  if (std::find(enclosing.begin(), enclosing.end(), def) != enclosing.end()) {
+    addMemoryFill(plan, path);
+    return true;
+  }
   enclosing.push_back(def);
+  bool fillWhole = false;
   for (const clang::FieldDecl *field : def->fields()) {
-    if (field->isInvalidDecl()) continue;
+    if (field->isInvalidDecl() || field->isUnnamedBitField()) continue; // padding, not addressable
     std::vector<const clang::FieldDecl *> fieldPath = path;
     fieldPath.push_back(field);
     clang::QualType type = field->getType();
@@ -153,7 +198,18 @@ bool collectFields(const clang::RecordDecl *record,
     } else if (const clang::RecordDecl *nested = type->getAsRecordDecl()) {
       if (!collectFields(nested, fieldPath, fieldReadOnly, mgr, depth, plan, enclosing))
         return false;
+    } else {
+      std::optional<std::string> suffix = scalarFieldSuffix(type, fieldReadOnly);
+      if (!suffix && field->isBitField()) fillWhole = true;
+      else plan.fieldwiseFill->push_back({std::move(fieldPath), std::move(suffix)});
     }
+  }
+  if (fillWhole) { // the whole-record fill covers every fill already collected inside it
+    std::erase_if(*plan.fieldwiseFill, [&](const FieldFill &fill) {
+      return fill.path.size() >= path.size() &&
+             std::equal(path.begin(), path.end(), fill.path.begin());
+    });
+    addMemoryFill(plan, path);
   }
   return true;
 }
@@ -172,8 +228,10 @@ bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
     plan.shape = PointerShape::CString;
     return true;
   }
-  if (pointee->isAnyPointerType()) // storage is unqualified, so a const element still assigns
+  if (pointee->isAnyPointerType()) { // storage is unqualified, so a const element still assigns
+    plan.fieldwiseFill.emplace();
     return addField(plan, {}, pointee, mgr, depth);
+  }
   if (!isSizedPointee(pointee, mgr)) {
     plan.shape = PointerShape::Opaque;
     plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
@@ -181,18 +239,20 @@ bool classifyPointee(clang::QualType pointee, const clang::SourceManager &mgr,
   }
   if (const clang::RecordDecl *record = pointee->getAsRecordDecl()) {
     if (plan.shape != PointerShape::Array) plan.shape = PointerShape::Record;
+    plan.fieldwiseFill.emplace();
     return collectFields(record, {}, false, mgr, depth, plan);
   }
+  plan.fieldwiseFill.emplace().push_back({{}, scalarFieldSuffix(pointee, false)});
   return true;
 }
 
 /**
- * @brief The type whose sizeof floors an opaque block, or "" for none.
+ * @brief Drops the fieldwise fill from @p plan and every plan beneath it.
  */
-std::string opaqueSizeofType(const PointerPlan &plan) {
-  if (plan.shape != PointerShape::Opaque || !plan.opaqueSized) return "";
-  clang::QualType type = plan.type->isArrayType() ? plan.type : plan.type->getPointeeType();
-  return type.getUnqualifiedType().getAsString(); // clang nests array declarators, e.g. int (*[2])(int)
+void useBulkFill(PointerPlan &plan) {
+  plan.fieldwiseFill.reset();
+  for (PointerPlan &field : plan.fields)
+    useBulkFill(field);
 }
 
 std::string elementCount(const PointerPlan &plan) {
@@ -202,11 +262,8 @@ std::string elementCount(const PointerPlan &plan) {
         llvm::cast<clang::ConstantArrayType>(plan.type->getAsArrayTypeUnsafe())->getSize().getZExtValue());
   case PointerShape::CString:
     return "__HAVOC_STR_MAX";
-  case PointerShape::Opaque: {
-    std::string sized = opaqueSizeofType(plan);
-    if (sized.empty()) return "__HAVOC_BLOCK_MAX";
-    return "sizeof(" + sized + ") > __HAVOC_BLOCK_MAX ? sizeof(" + sized + ") : __HAVOC_BLOCK_MAX";
-  }
+  case PointerShape::Opaque:
+    return "__HAVOC_BLOCK_MAX";
   default:
     return "__HAVOC_ARRAY_ELEMS";
   }
@@ -234,9 +291,71 @@ clang::QualType elementType(const PointerPlan &plan) {
 }
 
 /**
- * @brief Emits @c name[outer...][count] storage for @p plan, fills it with
- * nondet bytes, and assigns every pointer field in every element, recursing
- * into fields first.
+ * @brief Appends the access to @p path within one element to @p lhs, and a loop
+ * bound to @p dims for every array along it.
+ */
+void appendMemberAccess(const std::vector<const clang::FieldDecl *> &path, std::string &lhs,
+                        std::vector<std::string> &dims) {
+  for (const clang::FieldDecl *member : path) {
+    if (!member->isAnonymousStructOrUnion()) lhs += "." + member->getName().str();
+    clang::QualType type = member->getType();
+    while (const auto *array =
+               llvm::dyn_cast_or_null<clang::ConstantArrayType>(type->getAsArrayTypeUnsafe())) {
+      lhs += "[" + loopVar(dims.size()) + "]";
+      dims.push_back(std::to_string(array->getSize().getZExtValue()));
+      type = array->getElementType();
+    }
+  }
+}
+
+/**
+ * @brief Emits loops over @p dims then @p stmt innermost.
+ *
+ * @param looped Leading entries of @p dims the caller has already opened loops for.
+ */
+void emitLooped(const std::string &stmt, const std::vector<std::string> &dims,
+                const std::string &indent, std::string &out, size_t looped = 0) {
+  for (size_t i = looped; i < dims.size(); ++i)
+    out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
+           " < " + dims[i] + "; ++" + loopVar(i) + ")\n";
+  out += indent + std::string(2 * dims.size(), ' ') + stmt + ";\n";
+}
+
+/**
+ * @brief Fills every element of @p name per @p fills in one loop nest over
+ * @p dims, or with one bulk fill if no fill has a typed nondet.
+ */
+void fillFieldwise(const std::vector<FieldFill> &fills, const std::string &name,
+                   const std::vector<std::string> &dims, const std::string &indent,
+                   std::string &out) {
+  if (fills.empty()) return;
+  if (std::none_of(fills.begin(), fills.end(), [](const FieldFill &f) { return f.suffix; })) {
+    out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
+    return;
+  }
+  const char *open = fills.size() > 1 ? " {\n" : "\n";
+  for (size_t i = 0; i < dims.size(); ++i)
+    out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
+           " < " + dims[i] + "; ++" + loopVar(i) + ")" + open;
+  for (const FieldFill &fill : fills) {
+    std::string lhs = indexed(name, dims.size());
+    std::vector<std::string> loopDims = dims;
+    appendMemberAccess(fill.path, lhs, loopDims);
+    std::string stmt = fill.suffix
+        ? lhs + " = __VERIFIER_nondet_" + *fill.suffix + "()"
+        // the cast drops a const member's qualifier, which nondet_memory's void * can't take
+        : "__VERIFIER_nondet_memory((void *)&" + lhs + ", sizeof(" + lhs + "))";
+    emitLooped(stmt, loopDims, indent, out, dims.size());
+  }
+  if (fills.size() == 1) return;
+  for (size_t i = dims.size(); i-- > 0;)
+    out += indent + std::string(2 * i, ' ') + "}\n";
+}
+
+/**
+ * @brief Emits @c name[outer...][count] storage for @p plan, fills it (field by
+ * field when @c plan.fieldwiseFill is set, else in bulk), and assigns every
+ * pointer field in every element, recursing into fields first.
  */
 void renderStorage(const PointerPlan &plan, const std::string &name,
                    const std::vector<std::string> &outer, const std::string &indent,
@@ -254,21 +373,15 @@ void renderStorage(const PointerPlan &plan, const std::string &name,
 
   std::vector<std::string> dims = outer;
   dims.push_back(count);
-  out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
+  if (plan.fieldwiseFill)
+    fillFieldwise(*plan.fieldwiseFill, name, dims, indent, out);
+  else
+    out += indent + "__VERIFIER_nondet_memory(" + name + ", sizeof(" + name + "));\n";
   for (size_t f = 0; f < plan.fields.size(); ++f) {
     const PointerPlan &field = plan.fields[f];
     std::vector<std::string> loopDims = dims;
     std::string lhs = indexed(name, dims.size());
-    for (const clang::FieldDecl *member : field.path) {
-      if (!member->isAnonymousStructOrUnion()) lhs += "." + member->getName().str();
-      clang::QualType type = member->getType();
-      while (const auto *array =
-                 llvm::dyn_cast_or_null<clang::ConstantArrayType>(type->getAsArrayTypeUnsafe())) {
-        lhs += "[" + loopVar(loopDims.size()) + "]";
-        loopDims.push_back(std::to_string(array->getSize().getZExtValue()));
-        type = array->getElementType();
-      }
-    }
+    appendMemberAccess(field.path, lhs, loopDims);
 
     std::string storage = name + "_" + std::to_string(f);
     renderStorage(field, storage, loopDims, indent, out);
@@ -277,16 +390,14 @@ void renderStorage(const PointerPlan &plan, const std::string &name,
       value = "__havoc_cstring_fill(" + value + ", __HAVOC_STR_MAX)";
     else if (field.shape == PointerShape::Opaque)
       value = "(" + field.type.getAsString() + ")" + value;
-    for (size_t i = 0; i < loopDims.size(); ++i)
-      out += indent + std::string(2 * i, ' ') + "for (int " + loopVar(i) + " = 0; " + loopVar(i) +
-             " < " + loopDims[i] + "; ++" + loopVar(i) + ")\n";
-    out += indent + std::string(2 * loopDims.size(), ' ') + lhs + " = " + value + ";\n";
+    emitLooped(lhs + " = " + value, loopDims, indent, out);
   }
 }
 
 } // namespace
 
-PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr, unsigned depth) {
+PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr,
+                        const HavocBounds &havoc) {
   PointerPlan plan;
   if (QT.isNull() || QT.getTypePtrOrNull() == nullptr) return plan;
   plan.type = QT;
@@ -309,19 +420,22 @@ PointerPlan planPointer(clang::QualType QT, const clang::SourceManager &mgr, uns
   }
   if (!isSpellable(QT)) return plan; // no name for the storage or the cast
 
-  if (depth == 0) {
+  if (havoc.pointerDepth == 0) { // typed storage, bulk-filled: pointers inside stay nondet bytes
     if (pointee->isAnyCharacterType()) {
       plan.shape = PointerShape::CString;
-    } else {
+    } else if (!isSizedPointee(pointee, mgr)) {
       plan.shape = PointerShape::Opaque;
       plan.fwdDecl = pointeeFwdDecl(pointee, mgr);
-      plan.opaqueSized = isSizedPointee(pointee, mgr);
+    } else if (const clang::RecordDecl *record = pointee->getAsRecordDecl()) {
+      if (record->getDefinition()->hasFlexibleArrayMember()) return plan; // the tail is outside every element
+      if (plan.shape != PointerShape::Array) plan.shape = PointerShape::Record;
     }
     plan.viable = true;
     return plan;
   }
 
-  plan.viable = classifyPointee(pointee, mgr, depth, plan);
+  plan.viable = classifyPointee(pointee, mgr, havoc.pointerDepth, plan);
+  if (!havoc.fieldwise) useBulkFill(plan); // viability is unaffected; only the fill changes
   return plan;
 }
 
